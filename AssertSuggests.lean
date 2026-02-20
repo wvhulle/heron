@@ -16,14 +16,12 @@ private partial def foldInfoTreeIncludingContextFree (f : Info → α → α) (i
     ts.foldl (init := a) (foldInfoTreeIncludingContextFree f)
   | .hole _ => init
 
-private def tryThisEditFromInfo? : Info → Option Lsp.TextEdit
-  | .ofCustomInfo { value, .. } => (value.get? TryThisInfo).map (·.edit)
-  | _ => none
-
 private def collectTryThisEdits (trees : Array InfoTree) : Array Lsp.TextEdit :=
-  trees.foldl (init := #[]) fun edits tree =>
-    foldInfoTreeIncludingContextFree (init := edits) (fun info acc =>
-      (tryThisEditFromInfo? info).elim acc acc.push) tree
+  trees.flatMap fun tree =>
+    foldInfoTreeIncludingContextFree (init := #[]) (fun info acc =>
+      match info with
+      | .ofCustomInfo { value, .. } => (value.get? TryThisInfo).elim acc (acc.push ·.edit)
+      | _ => acc) tree
 
 private def extractSourceText (text : FileMap) (range : Lsp.Range) : String :=
   let startPos := text.lspPosToUtf8Pos range.start
@@ -68,7 +66,7 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
   match quotStx.getQuotContent.reprint with
   | some expectedText =>
     if expectedText.trim == actual.trim then return true
-    logWarningAt quotStx
+    logErrorAt quotStx
       m!"{label} mismatch for suggestion {idx}:\n  expected: {expectedText.trim}\n  actual:   {actual.trim}"
     return false
   | none =>
@@ -113,6 +111,12 @@ private def scheduleLinterRestore : CommandElabM Unit := do
     name := `AssertSuggests.restoreLinters
   }]
 
+private def runAllLintersCollectTrees (cmd : Syntax) : CommandElabM (Array InfoTree) :=
+  withoutModifyingEnv do
+    let linters ← lintersRef.get
+    linters.foldlM (init := #[]) fun acc linter =>
+      return acc ++ (← runLinterAndCollectTrees linter cmd).toArray
+
 private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : Option Name := none)
     : CommandElabM (Array Lsp.TextEdit) := do
   let enableLinterScope := linterName?.elim id fun name (scope : Scope) =>
@@ -120,13 +124,7 @@ private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : O
   withScope enableLinterScope do
     let collectedTrees ← withInfoCollectionDisabled do
       elabCommandSilently cmd
-      let linters ← lintersRef.get
-      withoutModifyingEnv do
-        let mut collectedTrees : Array InfoTree := #[]
-        for linter in linters do
-          let trees ← runLinterAndCollectTrees linter cmd
-          collectedTrees := trees.foldl (init := collectedTrees) fun a t => a.push t
-        return collectedTrees
+      runAllLintersCollectTrees cmd
     modify fun s => { s with messages := .empty }
     scheduleLinterRestore
     return collectTryThisEdits collectedTrees
