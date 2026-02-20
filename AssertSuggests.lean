@@ -1,35 +1,9 @@
-/-
-Copyright (c) 2026. All rights reserved.
-Released under MIT license as described in the file LICENSE.
--/
 import Lean.Elab.Command
 import Lean.Elab.Quotation
 import Lean.Server.InfoUtils
 import Lean.Server.CodeActions
 import Lean.Meta.TryThis
 
-/-!
-# `#assertSuggests` / `#assertNoSuggests` Commands
-
-`#assertSuggests` elaborates an inner command, extracts `TryThisInfo` suggestions from
-the info tree, and compares the edit diffs against expected before/after pairs
-provided as syntax quotations.
-
-The optional linter name argument enables that linter for the inner command,
-removing the need for `set_option linter.xxx true in`.
-
-```lean
--- Verify that a linter transforms `before` into `after`:
-#assertSuggests simpRfl `(tactic| simp; rfl) => `(tactic| simp) in
-example (a : Nat) : a + 0 = a := by
-  simp; rfl
-
--- Assert no suggestions produced:
-#assertNoSuggests in
-example (a : Nat) : a + 0 = a := by
-  simp
-```
--/
 
 namespace AssertSuggests
 
@@ -44,19 +18,18 @@ private partial def foldInfoAll (f : Info → α → α) (init : α) : InfoTree 
     ts.foldl (init := a) (foldInfoAll f)
   | .hole _ => init
 
+/-- Try to extract a `TryThisInfo` edit from a single `Info` node. -/
+private def tryThisEdit? : Info → Option Lsp.TextEdit
+  | .ofCustomInfo { value, .. } => (value.get? TryThisInfo).map (·.edit)
+  | _ => none
+
 /-- Extract `TryThisInfo` edits from an array of info trees. -/
-private def extractEdits (trees : PersistentArray InfoTree) : Array Lsp.TextEdit := Id.run do
-  let mut edits : Array Lsp.TextEdit := #[]
-  for tree in trees do
-    let infos := foldInfoAll (init := #[]) (fun info acc =>
-      match info with
-      | .ofCustomInfo { value, .. } =>
-        match value.get? TryThisInfo with
-        | some tryThisInfo => acc.push tryThisInfo.edit
-        | none => acc
-      | _ => acc) tree
-    edits := edits ++ infos
-  return edits
+private def extractEdits (trees : PersistentArray InfoTree) : Array Lsp.TextEdit :=
+  trees.foldl (init := #[]) fun edits tree =>
+    edits ++ foldInfoAll (init := #[]) (fun info acc =>
+      match tryThisEdit? info with
+      | some edit => acc.push edit
+      | none => acc) tree
 
 /-- Extract old text from a file map given an LSP range. -/
 private def getOldText (text : FileMap) (range : Lsp.Range) : String :=
@@ -64,12 +37,35 @@ private def getOldText (text : FileMap) (range : Lsp.Range) : String :=
   let endPos := text.lspPosToUtf8Pos range.«end»
   String.Pos.Raw.extract text.source startPos endPos
 
+/-- The before/after text of a single suggestion edit. -/
+structure SuggestionEdit where
+  before : String
+  after : String
+
+/-- Extract a `SuggestionEdit` from a single LSP edit. -/
+private def editToSuggestion (text : FileMap) (edit : Lsp.TextEdit) : SuggestionEdit :=
+  { before := getOldText text edit.range, after := edit.newText }
+
 /-- Data stored in the info tree when `#assertSuggests` detects a mismatch,
 used by the code action to suggest the correct text. -/
 structure Failure where
   catName : Name
-  actual : Array (String × String)
+  actual : Array SuggestionEdit
   deriving TypeName
+
+/-- Push a `Failure` into the info tree for the code action to pick up. -/
+private def pushFailure (stx : Syntax) (catName : Name) (actual : Array SuggestionEdit)
+    : CommandElabM Unit :=
+  pushInfoLeaf (.ofCustomInfo { stx, value := Dynamic.mk (Failure.mk catName actual) })
+
+/-- Format the replacement text for an `#assertSuggests` command. -/
+private def formatAssertSuggestsText (catName : Name) (actual : Array SuggestionEdit) : String :=
+  if actual.isEmpty then
+    "#assertSuggests in "
+  else
+    let pairsText := actual.toList.map fun { before, after } =>
+      s!"`({catName}| {before.trim}) => `({catName}| {after.trim})"
+    s!"#assertSuggests {", ".intercalate pairsText} in "
 
 syntax suggestionPair := term " => " term
 syntax (name := assertSuggestsCmd)
@@ -91,16 +87,15 @@ private def checkReprint (quotStx : Syntax) (actual : String) (label : String) (
     return false
 
 /-- Compare one edit against its expected before/after quotation pair.
-Returns the actual `(before, after)` texts and whether the pair matched. -/
+Returns the actual suggestion and whether the pair matched. -/
 private def comparePair (text : FileMap) (edit : Lsp.TextEdit)
     (pairStx : TSyntax `AssertSuggests.suggestionPair) (idx : Nat)
-    : CommandElabM ((String × String) × Bool) := do
+    : CommandElabM (SuggestionEdit × Bool) := do
   let `(suggestionPair| $before => $after) := pairStx | throwError "unexpected suggestionPair syntax"
-  let actualBefore := getOldText text edit.range
-  let actualAfter := edit.newText
-  let beforeOk ← checkReprint before.raw actualBefore "before" idx
-  let afterOk ← checkReprint after.raw actualAfter "after" idx
-  return ((actualBefore, actualAfter), beforeOk && afterOk)
+  let suggestion := editToSuggestion text edit
+  let beforeOk ← checkReprint before.raw suggestion.before "before" idx
+  let afterOk ← checkReprint after.raw suggestion.after "after" idx
+  return (suggestion, beforeOk && afterOk)
 
 /-- Run the inner command and linters, collecting TryThisInfo edits.
 If `linterName?` is provided, the corresponding `linter.NAME` option is enabled. -/
@@ -152,18 +147,13 @@ private def runAndCollectEdits (cmd : Syntax) (linterName? : Option Name := none
         | _ => pure `tactic
       else pure `tactic
     if edits.size != pairStxs.size then
-      let actualPairs := edits.map fun edit =>
-        (getOldText text edit.range, edit.newText)
       logErrorAt stx m!"expected {pairStxs.size} suggestion(s) but got {edits.size}"
-      pushInfoLeaf (.ofCustomInfo {
-        stx := stx, value := Dynamic.mk (Failure.mk catName actualPairs) })
+      pushFailure stx catName (edits.map (editToSuggestion text))
       return
     let results ← (edits.zip pairStxs).mapIdxM fun idx (edit, pairStx) =>
       comparePair text edit pairStx (idx + 1)
-    let actualPairs := results.map (·.1)
     unless results.all (·.2) do
-      pushInfoLeaf (.ofCustomInfo {
-        stx := stx, value := Dynamic.mk (Failure.mk catName actualPairs) })
+      pushFailure stx catName (results.map (·.1))
   | _ => throwUnsupportedSyntax
 
 @[command_elab assertNoSuggestsCmd] def elabAssertNoSuggests : CommandElab
@@ -172,8 +162,8 @@ private def runAndCollectEdits (cmd : Syntax) (linterName? : Option Name := none
     if !edits.isEmpty then
       let text ← getFileMap
       let descriptions := edits.map fun edit =>
-        let old := getOldText text edit.range
-        s!"  `{old.trim}` => `{edit.newText.trim}`"
+        let { before, after } := editToSuggestion text edit
+        s!"  `{before.trim}` => `{after.trim}`"
       logErrorAt stx
         m!"expected no suggestions but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax
@@ -198,12 +188,7 @@ def assertSuggestsCodeAction : CommandCodeAction := fun _ _ _ node => do
     lazy? := some do
       let some start := stx.getPos? true | return eager
       let some tail := stx.getTailPos? true | return eager
-      let pairsText := actual.toList.map fun (before, after) =>
-        s!"`({catName}| {before.trim}) => `({catName}| {after.trim})"
-      let newText := if actual.isEmpty then
-        "#assertSuggests in "
-      else
-        s!"#assertSuggests {", ".intercalate pairsText} in "
+      let newText := formatAssertSuggestsText catName actual
       pure { eager with
         edit? := some <| .ofTextEdit doc.versionedIdentifier {
           range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
