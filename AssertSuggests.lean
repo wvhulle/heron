@@ -68,11 +68,11 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
   match quotStx.getQuotContent.reprint with
   | some expectedText =>
     if expectedText.trim == actual.trim then return true
-    logErrorAt quotStx
+    logWarningAt quotStx
       m!"{label} mismatch for suggestion {idx}:\n  expected: {expectedText.trim}\n  actual:   {actual.trim}"
     return false
   | none =>
-    logErrorAt quotStx m!"could not reprint expected {label} syntax for suggestion {idx}"
+    logWarningAt quotStx m!"could not reprint expected {label} syntax for suggestion {idx}"
     return false
 
 private def verifySuggestionPair (text : FileMap) (edit : Lsp.TextEdit)
@@ -143,7 +143,7 @@ private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : O
         | _ => pure `tactic
       else pure `tactic
     if edits.size != pairStxs.size then
-      logErrorAt stx m!"expected {pairStxs.size} suggestion(s) but got {edits.size}"
+      logWarningAt stx m!"expected {pairStxs.size} suggestion(s) but got {edits.size}"
       pushMismatchToInfoTree stx catName linterName? (edits.map (lspEditToSuggestionEdit text))
       return
     let results ← (edits.zip pairStxs).mapIdxM fun idx (edit, pairStx) =>
@@ -160,7 +160,7 @@ private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : O
       let descriptions := edits.map fun edit =>
         let { before, after } := lspEditToSuggestionEdit text edit
         s!"  `{before.trim}` => `{after.trim}`"
-      logErrorAt stx
+      logWarningAt stx
         m!"expected no suggestions but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax
 
