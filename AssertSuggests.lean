@@ -26,7 +26,7 @@ private def tryThisEdit? : Info → Option Lsp.TextEdit
 /-- Extract `TryThisInfo` edits from an array of info trees. -/
 private def extractEdits (trees : PersistentArray InfoTree) : Array Lsp.TextEdit :=
   trees.foldl (init := #[]) fun edits tree =>
-    edits ++ foldInfoAll (init := #[]) (fun info acc =>
+    foldInfoAll (init := edits) (fun info acc =>
       match tryThisEdit? info with
       | some edit => acc.push edit
       | none => acc) tree
