@@ -7,5 +7,8 @@ testDriver = "Test"
 name = "AssertSuggests"
 
 [[lean_lib]]
+name = "InlineCodeAction"
+
+[[lean_lib]]
 name = "Test"
 globs = ["Test.+"]

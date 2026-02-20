@@ -3,7 +3,7 @@ import Lean.Elab.Quotation
 import Lean.Server.InfoUtils
 import Lean.Server.CodeActions
 import Lean.Meta.TryThis
-
+import InlineCodeAction
 
 namespace AssertSuggests
 
@@ -23,17 +23,16 @@ private def collectTryThisEdits (trees : Array InfoTree) : Array Lsp.TextEdit :=
       | .ofCustomInfo { value, .. } => (value.get? TryThisInfo).elim acc (acc.push ·.edit)
       | _ => acc) tree
 
-private def extractSourceText (text : FileMap) (range : Lsp.Range) : String :=
-  let startPos := text.lspPosToUtf8Pos range.start
-  let endPos := text.lspPosToUtf8Pos range.«end»
-  String.Pos.Raw.extract text.source startPos endPos
+
 
 structure SuggestionEdit where
   before : String
   after : String
 
 private def lspEditToSuggestionEdit (text : FileMap) (edit : Lsp.TextEdit) : SuggestionEdit :=
-  { before := extractSourceText text edit.range, after := edit.newText }
+  { before := have startPos := text.lspPosToUtf8Pos edit.range.start;
+have endPos := text.lspPosToUtf8Pos edit.range.end;
+String.Pos.Raw.extract text.source startPos endPos, after := edit.newText }
 
 structure SuggestionMismatch where
   catName : Name
