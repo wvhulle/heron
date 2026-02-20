@@ -50,22 +50,28 @@ private def editToSuggestion (text : FileMap) (edit : Lsp.TextEdit) : Suggestion
 used by the code action to suggest the correct text. -/
 structure Failure where
   catName : Name
+  linterName? : Option Name
   actual : Array SuggestionEdit
   deriving TypeName
 
 /-- Push a `Failure` into the info tree for the code action to pick up. -/
-private def pushFailure (stx : Syntax) (catName : Name) (actual : Array SuggestionEdit)
-    : CommandElabM Unit :=
-  pushInfoLeaf (.ofCustomInfo { stx, value := Dynamic.mk (Failure.mk catName actual) })
+private def pushFailure (stx : Syntax) (catName : Name) (linterName? : Option Name)
+    (actual : Array SuggestionEdit) : CommandElabM Unit :=
+  pushInfoLeaf (.ofCustomInfo { stx, value := Dynamic.mk (Failure.mk catName linterName? actual) })
 
-/-- Format the replacement text for an `#assertSuggests` command. -/
-private def formatAssertSuggestsText (catName : Name) (actual : Array SuggestionEdit) : String :=
+/-- Format the replacement text for the prefix of an `#assertSuggests` command
+(everything before the `in` keyword). -/
+private def formatAssertSuggestsPrefix (catName : Name) (linterName? : Option Name)
+    (actual : Array SuggestionEdit) : String :=
+  let linterPart := match linterName? with
+    | some n => s!"{n} "
+    | none => ""
   if actual.isEmpty then
-    "#assertSuggests in "
+    s!"#assertSuggests {linterPart}"
   else
     let pairsText := actual.toList.map fun { before, after } =>
       s!"`({catName}| {before.trim}) => `({catName}| {after.trim})"
-    s!"#assertSuggests {", ".intercalate pairsText} in "
+    s!"#assertSuggests {linterPart}{", ".intercalate pairsText} "
 
 syntax suggestionPair := term " => " term
 syntax (name := assertSuggestsCmd)
@@ -138,7 +144,8 @@ private def runAndCollectEdits (cmd : Syntax) (linterName? : Option Name := none
 
 @[command_elab assertSuggestsCmd] def elabAssertSuggests : CommandElab
   | stx@`(command| #assertSuggests $[$linterName?:ident]? $pairs,* in $cmd) => do
-    let edits ← runAndCollectEdits cmd (linterName?.map (·.getId))
+    let linterName? := linterName?.map (·.getId)
+    let edits ← runAndCollectEdits cmd linterName?
     let text ← getFileMap
     let pairStxs := pairs.getElems
     let catName ← if h : 0 < pairStxs.size then
@@ -148,12 +155,12 @@ private def runAndCollectEdits (cmd : Syntax) (linterName? : Option Name := none
       else pure `tactic
     if edits.size != pairStxs.size then
       logErrorAt stx m!"expected {pairStxs.size} suggestion(s) but got {edits.size}"
-      pushFailure stx catName (edits.map (editToSuggestion text))
+      pushFailure stx catName linterName? (edits.map (editToSuggestion text))
       return
     let results ← (edits.zip pairStxs).mapIdxM fun idx (edit, pairStx) =>
       comparePair text edit pairStx (idx + 1)
     unless results.all (·.2) do
-      pushFailure stx catName (results.map (·.1))
+      pushFailure stx catName linterName? (results.map (·.1))
   | _ => throwUnsupportedSyntax
 
 @[command_elab assertNoSuggestsCmd] def elabAssertNoSuggests : CommandElab
@@ -174,9 +181,9 @@ def assertSuggestsCodeAction : CommandCodeAction := fun _ _ _ node => do
   let .node _ ts := node | return #[]
   let res := ts.findSome? fun
     | .node (.ofCustomInfo { stx, value }) _ => do
-      let f ← value.get? Failure; return (stx, f.catName, f.actual)
+      let f ← value.get? Failure; return (stx, f)
     | _ => none
-  let some (stx, catName, actual) := res | return #[]
+  let some (stx, failure) := res | return #[]
   let doc ← readDoc
   let eager := {
     title := "Update #assertSuggests with actual suggestions"
@@ -187,11 +194,12 @@ def assertSuggestsCodeAction : CommandCodeAction := fun _ _ _ node => do
     eager
     lazy? := some do
       let some start := stx.getPos? true | return eager
-      let some tail := stx.getTailPos? true | return eager
-      let newText := formatAssertSuggestsText catName actual
+      -- End the range at the `in` keyword (arg 3), preserving `in` and any following whitespace.
+      let some inStart := stx[3].getPos? true | return eager
+      let newText := formatAssertSuggestsPrefix failure.catName failure.linterName? failure.actual
       pure { eager with
         edit? := some <| .ofTextEdit doc.versionedIdentifier {
-          range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
+          range := doc.meta.text.utf8RangeToLspRange ⟨start, inStart⟩
           newText
         }
       }

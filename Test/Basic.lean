@@ -19,7 +19,7 @@ example (a : Nat) : a = a := by rfl
 
 -- Multiline suggestion: sequential intros → combined intro
 #assertSuggests testIntros `(tactic| intro x
-  intro y) => `(tactic| intro x y) in
+  intro y) => `(tactic| intro x) in
 example : ∀ x y : Nat, x = x := by
   intro x
   intro y
