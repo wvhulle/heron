@@ -1,0 +1,11 @@
+name = "assert-suggests"
+version = "0.1.0"
+defaultTargets = ["AssertSuggests"]
+testDriver = "Test"
+
+[[lean_lib]]
+name = "AssertSuggests"
+
+[[lean_lib]]
+name = "Test"
+globs = ["Test.+"]
