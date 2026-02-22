@@ -1,8 +1,24 @@
-# Assert-Suggests
+# Heron 
 
-A custom Lean command to write tests for linters.
+Collection of useful linting rules with auto-fixes for the Lean4 programming language.
 
-Use it like this:
+The name is based on the Heron bird that watches over lakes, a nameplay on the `lake` build tool of lean.
+
+
+## Rules
+
+Inlining:
+
+- Inline function at all call-sites and delete definition
+- Inline function at current call-site
+
+
+
+## Development
+
+It is recommended to use the `assertSuggests` command shipped with tis project for writing tests.
+
+It asserts at build time whether lints actually rewrite Lean syntax properly:
 
 ```lean
 import AssertSuggests -- This library
