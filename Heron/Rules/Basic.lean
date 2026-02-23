@@ -1,0 +1,164 @@
+import Heron.AssertSuggests
+import Heron.AssertEdits
+import Heron.AssertNoSuggests
+import Lean.Meta.Hint
+import Lean.Server.CodeActions.Basic
+
+open Lean Elab Command Meta
+
+namespace Heron.Rules
+
+class Rule (α : Type) where
+  /-- Rule name, used to derive the linter option `linter.<name>`. -/
+  name : Name
+  /-- Detect violations, returning typed fix data. -/
+  detect : Syntax → CommandElabM (Array α)
+  /-- Extract the syntax node for the diagnostic location. -/
+  diagStx : α → Syntax
+  /-- Hint message shown alongside the suggestion. -/
+  hintMsg : MessageData
+  /-- Diagnostic message shown as the linter warning. -/
+  diagMsg : MessageData
+  /-- Convert typed fix data to a suggestion for the editor. -/
+  toSuggestion : α → Hint.Suggestion
+
+def Rule.option [Rule α] : Lean.Option Bool :=
+  { name := `linter ++ Rule.name (α := α), defValue := false }
+
+def Rule.toLinter [Rule α] : Linter where
+  run :=
+    withSetOptionIn fun stx => do
+      let opt := Rule.option (α := α)
+      unless opt.get (← getOptions) do return
+      for fixData in ← Rule.detect (α := α) stx do
+        let sugg := Rule.toSuggestion (α := α) fixData
+        let diagStxNode := Rule.diagStx (α := α) fixData
+        let hint ← liftCoreM <|
+          MessageData.hint (Rule.hintMsg (α := α)) #[sugg]
+        let disable := MessageData.note m!"This linter can be disabled with `set_option {opt.name} false`"
+        let taggedMsg := MessageData.tagged opt.name
+          m!"{(Rule.diagMsg (α := α)) ++ hint}{disable}"
+        -- Replicate logAt to construct a Message with diagnosticData?
+        let ref := replaceRef diagStxNode (← MonadLog.getRef)
+        let pos := ref.getPos?.getD 0
+        let endPos := ref.getTailPos?.getD pos
+        let fileMap ← getFileMap
+        let msgData ← addMessageContext taggedMsg
+        let severity : MessageSeverity :=
+          if warningAsError.get (← getOptions) then .error else .warning
+        let msg : Message := {
+          fileName := ← getFileName
+          pos := fileMap.toPosition pos
+          endPos := fileMap.toPosition endPos
+          data := msgData
+          severity
+        }
+        -- Attach LSP TextEdit as diagnostic data
+        let refStx := sugg.span?.getD diagStxNode
+        let msg := match refStx.getRange? with
+          | some range =>
+            let lspRange := fileMap.utf8RangeToLspRange range
+            let newText := match sugg.suggestion with
+              | .string s => s
+              | .tsyntax t => t.raw.reprint.getD ""
+            let data := Lean.Json.mkObj [
+              ("title", .str s!"Apply: {Rule.name (α := α)}"),
+              ("edit", toJson ({ range := lspRange, newText : Lsp.TextEdit }))
+            ]
+            { msg with diagnosticData? := some data.compress }
+          | none => msg
+        logMessage msg
+
+def Rule.initOption [Rule α] : IO Unit :=
+  Lean.registerOption (`linter ++ Rule.name (α := α))
+    { defValue := .ofBool false
+      descr := s! "Enable the {Rule.name (α := α)} linter rule."
+      name := `linter }
+
+def Rule.addLinter [Rule α] : IO Unit :=
+  lintersRef.modify (·.push (Rule.toLinter (α := α)))
+
+/-- Re-elaborate a command collecting info trees. -/
+def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+  let savedInfoState ← getInfoState
+  let savedMessages := (← get).messages
+  let savedLinters ← lintersRef.get
+  setInfoState { enabled := true, trees := { } }
+  lintersRef.set #[]
+  try
+    withoutModifyingEnv do
+        withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
+            withReader ({ · with snap? := none }) do
+                elabCommand stx
+  catch _ =>
+    pure ()
+  let trees := (← getInfoState).trees.toArray
+  setInfoState savedInfoState
+  modify fun s => { s with messages := savedMessages }
+  lintersRef.set savedLinters
+  return trees
+
+/-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
+def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
+  tree.foldInfo (init := #[]) fun ctx info acc =>
+    match info with
+    | .ofTermInfo ti => acc.push (ctx, ti)
+    | _ => acc
+
+/-- Run `MetaM` inside a `ContextInfo` context. -/
+def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
+  match ← (ci.runMetaM lctx x).toBaseIO with
+  | .ok a =>
+    return a
+  | .error e =>
+    throwError "{e}"
+
+/-- Deduplicate term infos sharing a start position, keeping the most applied. -/
+def deduplicateByPosition (usages : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
+  usages.foldl (init := #[]) fun acc (ci, ti) =>
+    match ti.stx.getPos? true with
+    | some pos =>
+      let dominated :=
+        acc.any fun (_, old) => old.stx.getPos? true == some pos && old.expr.getAppNumArgs >= ti.expr.getAppNumArgs
+      if dominated then acc
+      else
+        let acc :=
+          acc.filter fun (_, old) =>
+            !(old.stx.getPos? true == some pos && old.expr.getAppNumArgs < ti.expr.getAppNumArgs)
+        acc.push (ci, ti)
+    | none => acc
+
+/-- Check if an expression references its own name (recursive). -/
+def isRecursive (value : Expr) (name : Name) : Bool :=
+  value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
+
+/-- Create a `Syntax` spanning two syntax nodes. -/
+def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+  let r1 ← stx1.getRange?
+  let r2 ← stx2.getRange?
+  return Syntax.ofRange ⟨r1.start, r2.stop⟩
+
+open Server RequestM Lsp in
+@[code_action_provider]
+def heronFixProvider : CodeActionProvider := fun params _snap => do
+  let doc ← readDoc
+  let mut actions : Array LazyCodeAction := #[]
+  for diag in params.context.diagnostics do
+    let some data := diag.data? | continue
+    let some title := data.getObjValAs? String "title" |>.toOption | continue
+    let some edit := (do
+      let ej ← data.getObjVal? "edit" |>.toOption
+      fromJson? (α := TextEdit) ej |>.toOption) | continue
+    let fullAction : CodeAction := {
+      title
+      kind? := "quickfix"
+      edit? := some <| .ofTextEdit doc.versionedIdentifier edit
+      diagnostics? := some #[diag]
+    }
+    actions := actions.push {
+      eager := { fullAction with edit? := none }
+      lazy? := some (pure fullAction)
+    }
+  return actions
+
+end Heron.Rules

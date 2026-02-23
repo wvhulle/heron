@@ -1,66 +1,12 @@
-import Heron.AssertEdits
+import Heron.Rules.Basic
 import Lean.Meta.Tactic.Delta
 import Lean.PrettyPrinter
-import Lean.Meta.Hint
 
-open Lean Elab Command Meta
-
-private def linterInline : Lean.Option Bool := { name := `linter.inline, defValue := false }
+open Lean Elab Command Meta Heron.Rules
 
 private structure InlineFixData where
   stx : Syntax
   newText : String
-
-private def syntaxSpan (stx : Syntax) : Option (String.Pos.Raw × String.Pos.Raw) := do
-  let s ← stx.getPos? true
-  let e ← stx.getTailPos? true
-  return (s, e)
-
-private def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
-  tree.foldInfo (init := #[]) fun ctx info acc =>
-    match info with
-    | .ofTermInfo ti => acc.push (ctx, ti)
-    | _ => acc
-
-private def deduplicateByPosition
-    (usages : Array (ContextInfo × TermInfo))
-    : Array (ContextInfo × TermInfo) :=
-  usages.foldl (init := #[]) fun acc (ci, ti) =>
-    match ti.stx.getPos? true with
-    | some pos =>
-      let dominated := acc.any fun (_, old) =>
-        old.stx.getPos? true == some pos && old.expr.getAppNumArgs >= ti.expr.getAppNumArgs
-      if dominated then acc
-      else
-        let acc := acc.filter fun (_, old) =>
-          !(old.stx.getPos? true == some pos && old.expr.getAppNumArgs < ti.expr.getAppNumArgs)
-        acc.push (ci, ti)
-    | none => acc
-
-private def isRecursive (value : Expr) (name : Name) : Bool :=
-  value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
-
-private def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
-  let savedInfoState ← getInfoState
-  let savedMessages := (← get).messages
-  let savedLinters ← lintersRef.get
-  setInfoState { enabled := true, trees := {} }
-  lintersRef.set #[]
-  try withoutModifyingEnv do
-    withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
-      withReader ({ · with snap? := none }) do
-        elabCommand stx
-  catch _ => pure ()
-  let trees := (← getInfoState).trees.toArray
-  setInfoState savedInfoState
-  modify fun s => { s with messages := savedMessages }
-  lintersRef.set savedLinters
-  return trees
-
-private def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
-  match ← (ci.runMetaM lctx x).toBaseIO with
-  | .ok a => return a
-  | .error e => throwError "{e}"
 
 private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
   let trees ← collectElabInfoTrees stx
@@ -100,18 +46,20 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
       catch _ => pure ()
   return fixes
 
-private def toSuggestion (data : InlineFixData) : Hint.Suggestion :=
-  { suggestion := data.newText, span? := some data.stx }
+instance : Rule InlineFixData where
+  name := `inline
+  detect := detectInlineOpportunities
+  diagStx := (·.stx)
+  hintMsg := m!"Can be inlined."
+  diagMsg := m!"Inline."
+  toSuggestion := fun d => { suggestion := d.newText, span? := some d.stx }
 
-private def inlineLinter : Linter where run := withSetOptionIn fun stx => do
-  unless linterInline.get (← getOptions) do return
-  for fixData in ← detectInlineOpportunities stx do
-    let hint ← liftCoreM <| MessageData.hint m!"Can be inlined." #[toSuggestion fixData]
-    Linter.logLint linterInline fixData.stx (m!"Inline." ++ hint)
+initialize Rule.initOption (α := InlineFixData)
+initialize Rule.addLinter (α := InlineFixData)
 
-#eval addLinter inlineLinter
+namespace Tests
 
-/-! ## Tests -/
+#eval Rule.addLinter (α := InlineFixData)
 
 def double (n : Nat) := n + n
 
@@ -120,5 +68,9 @@ example : Nat := double 3
 
 def myConst := 42
 
+def d := double myConst
+
 #assertEdits inline `(term| myConst) => `(term| (42)) in
 example : Nat := myConst
+
+end Tests

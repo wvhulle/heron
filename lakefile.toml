@@ -5,3 +5,7 @@ defaultTargets = ["Heron"]
 [[lean_lib]]
 name = "Heron"
 globs = ["Heron.+"]
+
+[[lean_lib]]
+name = "Demo"
+globs = ["Demo"]
