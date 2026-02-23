@@ -1,42 +1,49 @@
-# Heron 
+# Heron
 
-Collection of useful linting rules with auto-fixes for the Lean4 programming language.
+Linting rules with auto-fixes for [Lean 4](https://github.com/leanprover/lean4). Each rule detects a pattern and suggests a fix that can be applied as an editor code action.
 
-The name is based on the Heron bird that watches over lakes, a nameplay on the `lake` build tool of lean.
-
+Named after the bird that watches over lakes.
 
 ## Rules
 
-Inlining:
+| Rule | File | Detects | Suggests |
+|------|------|---------|----------|
+| `testRfl` | `Heron/Rules/Rfl.lean` | Bare `rfl` tactic | `exact rfl` |
+| `testIntros` | `Heron/Rules/Intros.lean` | Sequential `intro` tactics | Combined `intro a b` |
+| `inline` | `Heron/Rules/Inline.lean` | Inlineable const/let usage | Delta-expanded expression |
 
-- Inline function at all call-sites and delete definition
-- Inline function at current call-site
+## Usage
 
+Add as a Lake dependency:
 
+```toml
+[[require]]
+name = "heron"
+git = "..."
+rev = "main"
+```
+
+Enable a rule with `set_option`:
+
+```lean
+set_option linter.testRfl true in
+example : a = a := by rfl  -- warning: use `exact rfl`
+```
 
 ## Development
 
-It is recommended to use the `assertSuggests` command shipped with tis project for writing tests.
-
-It asserts at build time whether lints actually rewrite Lean syntax properly:
+Rules live in `Heron/Rules/`, each with typed fix data, detection, and co-located tests. Tests use compile-time assertion commands:
 
 ```lean
-import AssertSuggests -- This library
-import Test.Linters -- File with custom linter `testIntros` definition
+-- Assert a specific suggestion is produced
+#assertSuggests testRfl `(tactic| rfl) => `(tactic| exact rfl) in
+example (a : Nat) : a = a := by rfl
 
-#assertSuggests testIntros `(tactic| intro x
-  intro y) => `(tactic| intro x y) in
-example : ∀ x y : Nat, x = x := by
-  intro x
-  intro y
-  rfl
+-- Assert specific edits are produced
+#assertEdits testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
+example : Nat → Nat → True := by intro a; intro b; exact trivial
+
+-- Assert no suggestions are produced
+#assertNoSuggests testRfl in
+example (a : Nat) : a = a + 0 := by simp
 ```
-
-This asserts that the linter named `testIntros` (including whitespace)
-
-```lean
-intro x
-intro y
-```
-
-actually gets flattened into `intro x y`.

@@ -1,14 +1,7 @@
-name = "assert-suggests"
+name = "heron"
 version = "0.1.0"
-defaultTargets = ["AssertSuggests"]
-testDriver = "Test"
+defaultTargets = ["Heron"]
 
 [[lean_lib]]
-name = "AssertSuggests"
-
-[[lean_lib]]
-name = "InlineCodeAction"
-
-[[lean_lib]]
-name = "Test"
-globs = ["Test.+"]
+name = "Heron"
+globs = ["Heron.+"]

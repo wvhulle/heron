@@ -3,9 +3,8 @@ import Lean.Elab.Quotation
 import Lean.Server.InfoUtils
 import Lean.Server.CodeActions
 import Lean.Meta.TryThis
-import InlineCodeAction
 
-namespace AssertSuggests
+namespace Heron.Assert
 
 open Lean Elab Command Server Meta Tactic.TryThis Term.Quotation
 
@@ -23,13 +22,11 @@ private def collectTryThisEdits (trees : Array InfoTree) : Array Lsp.TextEdit :=
       | .ofCustomInfo { value, .. } => (value.get? TryThisInfo).elim acc (acc.push ·.edit)
       | _ => acc) tree
 
-
-
 structure SuggestionEdit where
   before : String
   after : String
 
-private def lspEditToSuggestionEdit (text : FileMap) (edit : Lsp.TextEdit) : SuggestionEdit :=
+def lspEditToSuggestionEdit (text : FileMap) (edit : Lsp.TextEdit) : SuggestionEdit :=
   { before := have startPos := text.lspPosToUtf8Pos edit.range.start;
 have endPos := text.lspPosToUtf8Pos edit.range.end;
 String.Pos.Raw.extract text.source startPos endPos, after := edit.newText }
@@ -40,11 +37,11 @@ structure SuggestionMismatch where
   actualEdits : Array SuggestionEdit
   deriving TypeName
 
-private def pushMismatchToInfoTree (stx : Syntax) (catName : Name) (linterName? : Option Name)
+def pushMismatchToInfoTree (stx : Syntax) (catName : Name) (linterName? : Option Name)
     (actualEdits : Array SuggestionEdit) : CommandElabM Unit :=
   pushInfoLeaf (.ofCustomInfo { stx, value := Dynamic.mk (SuggestionMismatch.mk catName linterName? actualEdits) })
 
-private def renderAssertSuggestsPrefix (catName : Name) (linterName? : Option Name)
+def renderAssertSuggestsPrefix (catName : Name) (linterName? : Option Name)
     (actualEdits : Array SuggestionEdit) : String :=
   let linterPrefix := linterName?.elim "" (s!"{·} ")
   if actualEdits.isEmpty then
@@ -55,10 +52,6 @@ private def renderAssertSuggestsPrefix (catName : Name) (linterName? : Option Na
     s!"#assertSuggests {linterPrefix}{", ".intercalate formattedPairs.toList} "
 
 syntax suggestionPair := term " => " term
-syntax (name := assertSuggestsCmd)
-  "#assertSuggests " (ident)? sepBy1(suggestionPair, ", ") " in " command : command
-syntax (name := assertNoSuggestsCmd)
-  "#assertNoSuggests " (ident)? "in " command : command
 
 private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label : String) (idx : Nat)
     : CommandElabM Bool := do
@@ -72,8 +65,8 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
     logWarningAt quotStx m!"could not reprint expected {label} syntax for suggestion {idx}"
     return false
 
-private def verifySuggestionPair (text : FileMap) (edit : Lsp.TextEdit)
-    (pairStx : TSyntax `AssertSuggests.suggestionPair) (idx : Nat)
+def verifySuggestionPair (text : FileMap) (edit : Lsp.TextEdit)
+    (pairStx : TSyntax `Heron.Assert.suggestionPair) (idx : Nat)
     : CommandElabM (SuggestionEdit × Bool) := do
   let `(suggestionPair| $before => $after) := pairStx | throwError "unexpected suggestionPair syntax"
   let suggestion := lspEditToSuggestionEdit text edit
@@ -107,7 +100,7 @@ private def scheduleLinterRestore : CommandElabM Unit := do
   let previousLinters ← lintersRef.get
   lintersRef.set #[{
     run := fun _ => do lintersRef.set previousLinters
-    name := `AssertSuggests.restoreLinters
+    name := `Heron.Assert.restoreLinters
   }]
 
 private def runAllLintersCollectTrees (cmd : Syntax) : CommandElabM (Array InfoTree) :=
@@ -116,7 +109,7 @@ private def runAllLintersCollectTrees (cmd : Syntax) : CommandElabM (Array InfoT
     linters.foldlM (init := #[]) fun acc linter =>
       return acc ++ (← runLinterAndCollectTrees linter cmd).toArray
 
-private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : Option Name := none)
+def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : Option Name := none)
     : CommandElabM (Array Lsp.TextEdit) := do
   let enableLinterScope := linterName?.elim id fun name (scope : Scope) =>
     { scope with opts := scope.opts.insert (`linter ++ name) (.ofBool true) }
@@ -128,66 +121,4 @@ private def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : O
     scheduleLinterRestore
     return collectTryThisEdits collectedTrees
 
-@[command_elab assertSuggestsCmd] def elabAssertSuggests : CommandElab
-  | stx@`(command| #assertSuggests $[$linterName?:ident]? $pairs,* in $cmd) => do
-    let linterName? := linterName?.map (·.getId)
-    let edits ← elabCommandAndCollectSuggestionEdits cmd linterName?
-    let text ← getFileMap
-    let pairStxs := pairs.getElems
-    let catName ← if h : 0 < pairStxs.size then
-        match pairStxs[0] with
-        | `(suggestionPair| $before => $_) => liftTermElabM (getQuotKind before)
-        | _ => pure `tactic
-      else pure `tactic
-    if edits.size != pairStxs.size then
-      logWarningAt stx m!"expected {pairStxs.size} suggestion(s) but got {edits.size}"
-      pushMismatchToInfoTree stx catName linterName? (edits.map (lspEditToSuggestionEdit text))
-      return
-    let results ← (edits.zip pairStxs).mapIdxM fun idx (edit, pairStx) =>
-      verifySuggestionPair text edit pairStx (idx + 1)
-    unless results.all (·.2) do
-      pushMismatchToInfoTree stx catName linterName? (results.map (·.1))
-  | _ => throwUnsupportedSyntax
-
-@[command_elab assertNoSuggestsCmd] def elabAssertNoSuggests : CommandElab
-  | stx@`(command| #assertNoSuggests $[$linterName?:ident]? in $cmd) => do
-    let edits ← elabCommandAndCollectSuggestionEdits cmd (linterName?.map (·.getId))
-    unless edits.isEmpty do
-      let text ← getFileMap
-      let descriptions := edits.map fun edit =>
-        let { before, after } := lspEditToSuggestionEdit text edit
-        s!"  `{before.trim}` => `{after.trim}`"
-      logWarningAt stx
-        m!"expected no suggestions but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
-  | _ => throwUnsupportedSyntax
-
-open CodeAction Server RequestM in
-@[command_code_action assertSuggestsCmd]
-def updateAssertSuggestsCodeAction : CommandCodeAction := fun _ _ _ node => do
-  let .node _ ts := node | return #[]
-  let mismatch? := ts.findSome? fun
-    | .node (.ofCustomInfo { stx, value }) _ => do
-      let m ← value.get? SuggestionMismatch; return (stx, m)
-    | _ => none
-  let some (stx, mismatch) := mismatch? | return #[]
-  let doc ← readDoc
-  let baseCodeAction := {
-    title := "Update #assertSuggests with actual suggestions"
-    kind? := "quickfix"
-    isPreferred? := true
-  }
-  pure #[{
-    eager := baseCodeAction
-    lazy? := some do
-      let some start := stx.getPos? true | return baseCodeAction
-      let some inKeywordPos := stx[3].getPos? true | return baseCodeAction
-      let newText := renderAssertSuggestsPrefix mismatch.catName mismatch.linterName? mismatch.actualEdits
-      pure { baseCodeAction with
-        edit? := some <| .ofTextEdit doc.versionedIdentifier {
-          range := doc.meta.text.utf8RangeToLspRange ⟨start, inKeywordPos⟩
-          newText
-        }
-      }
-  }]
-
-end AssertSuggests
+end Heron.Assert
