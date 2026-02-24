@@ -8,13 +8,28 @@ private structure InlineFixData where
   stx : Syntax
   newText : String
 
+/-- Find the `declId` node in a command syntax tree. -/
+private partial def findDeclId? : Syntax → Option Syntax
+  | stx@(.node _ kind args) =>
+    if kind == ``Lean.Parser.Command.declId then some stx
+    else args.findSome? findDeclId?
+  | _ => none
+
+/-- Get the source range of the `declId` in a command, if any. -/
+private def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
+  (findDeclId? stx).bind (·.getRange?)
+
 private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
   let trees ← collectElabInfoTrees stx
   let env ← getEnv
   let infos := trees.flatMap collectTermInfos
   let mut fixes : Array InlineFixData := #[]
-  -- Inline const applications
+  let declRange? := getDeclIdRange? stx
+  -- Inline const applications (skip TermInfos at the definition site)
   let constUsages := infos.filter fun (_, ti) =>
+    (match declRange?, ti.stx.getPos? with
+     | some range, some pos => pos < range.start || pos >= range.stop
+     | _, _ => true) &&
     ti.expr.getAppFn.isConst &&
     match ti.expr.getAppFn.constName? with
     | some name =>
@@ -68,7 +83,9 @@ example : Nat := double 3
 
 def myConst := 42
 
-def d := double myConst
+-- The definition site of `d` should not flag `d` itself for inlining.
+#assertNoSuggests inline in
+def d := 0
 
 #assertEdits inline `(term| myConst) => `(term| (42)) in
 example : Nat := myConst

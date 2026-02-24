@@ -2,15 +2,17 @@
 
 Linting rules with auto-fixes for [Lean 4](https://github.com/leanprover/lean4). Each rule detects a pattern and suggests a fix that can be applied as an editor code action.
 
-Named after the bird that watches over lakes.
+Named after the [Heron](https://en.wikipedia.org/wiki/Heron) bird that watches over lakes.
+
+![Heron](./heron.jpg)
 
 ## Rules
 
-| Rule | File | Detects | Suggests |
-|------|------|---------|----------|
-| `testRfl` | `Heron/Rules/Rfl.lean` | Bare `rfl` tactic | `exact rfl` |
-| `testIntros` | `Heron/Rules/Intros.lean` | Sequential `intro` tactics | Combined `intro a b` |
-| `inline` | `Heron/Rules/Inline.lean` | Inlineable const/let usage | Delta-expanded expression |
+| Rule         | File                      | Detects                     | Suggests                  |
+| ------------ | ------------------------- | --------------------------- | ------------------------- |
+| `testRfl`    | `Heron/Rules/Rfl.lean`    | Bare `rfl` tactic           | `exact rfl`               |
+| `testIntros` | `Heron/Rules/Intros.lean` | Sequential `intro` tactics  | Combined `intro a b`      |
+| `inline`     | `Heron/Rules/Inline.lean` | Inline-able const/let usage | Delta-expanded expression |
 
 ## Usage
 
@@ -19,8 +21,16 @@ Add as a Lake dependency:
 ```toml
 [[require]]
 name = "heron"
-git = "..."
+git = "https://codeberg.org/wvhulle/heron"
 rev = "main"
+```
+
+Import in your Lean project:
+
+```lean
+import Heron.Rules.Rfl
+import Heron.Rules.Intros
+import Heron.Rules.Inline
 ```
 
 Enable a rule with `set_option`:
@@ -32,7 +42,15 @@ example : a = a := by rfl  -- warning: use `exact rfl`
 
 ## Development
 
-Rules live in `Heron/Rules/`, each with typed fix data, detection, and co-located tests. Tests use compile-time assertion commands:
+This project was inspired by the approach I took in [nu-lint](https://codeberg.org/wvhulle/nu-lint)
+
+### Structure
+
+Rules live in `Heron/Rules/`, each with typed fix data, detection, and co-located tests.
+
+### Testing
+
+Tests use compile-time assertion commands:
 
 ```lean
 -- Assert a specific suggestion is produced

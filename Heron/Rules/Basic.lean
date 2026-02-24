@@ -8,6 +8,17 @@ open Lean Elab Command Meta
 
 namespace Heron.Rules
 
+/-- Internal option to prevent recursive linter invocation during re-elaboration. -/
+private def heronReelaborating : Lean.Option Bool :=
+  { name := `heron.reelaborating, defValue := false }
+
+initialize
+  Lean.registerOption `heron.reelaborating {
+    defValue := .ofBool false
+    descr := "Internal: set during re-elaboration to prevent recursive linter invocation."
+    name := `heron
+  }
+
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   name : Name
@@ -30,6 +41,7 @@ def Rule.toLinter [Rule α] : Linter where
     withSetOptionIn fun stx => do
       let opt := Rule.option (α := α)
       unless opt.get (← getOptions) do return
+      if heronReelaborating.get (← getOptions) then return
       for fixData in ← Rule.detect (α := α) stx do
         let sugg := Rule.toSuggestion (α := α) fixData
         let diagStxNode := Rule.diagStx (α := α) fixData
@@ -78,16 +90,21 @@ def Rule.initOption [Rule α] : IO Unit :=
 def Rule.addLinter [Rule α] : IO Unit :=
   lintersRef.modify (·.push (Rule.toLinter (α := α)))
 
-/-- Re-elaborate a command collecting info trees. -/
+/-- Re-elaborate a command collecting info trees.
+
+Uses the scoped `heron.reelaborating` option instead of clearing the global
+`lintersRef` to prevent recursive linter invocation. This is safe under
+concurrent (async) elaboration — `withScope` modifies only the current
+command's options, so other commands' linters are unaffected. -/
 def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let savedInfoState ← getInfoState
   let savedMessages := (← get).messages
-  let savedLinters ← lintersRef.get
   setInfoState { enabled := true, trees := { } }
-  lintersRef.set #[]
   try
     withoutModifyingEnv do
-        withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
+        withScope (fun scope =>
+          let opts := heronReelaborating.set (Elab.async.set scope.opts false) true
+          { scope with opts }) do
             withReader ({ · with snap? := none }) do
                 elabCommand stx
   catch _ =>
@@ -95,7 +112,6 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let trees := (← getInfoState).trees.toArray
   setInfoState savedInfoState
   modify fun s => { s with messages := savedMessages }
-  lintersRef.set savedLinters
   return trees
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
