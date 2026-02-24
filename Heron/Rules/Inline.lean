@@ -36,13 +36,14 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
   return fixes
 
 instance : Rule InlineFixData where
-  name := `inline
+  ruleName := `inline
   severity := .warning
   detect := detectInlineOpportunities
-  diagStx := (·.stx)
-  hintMsg := m!"Can be inlined."
-  diagMsg := m!"Inline."
-  toSuggestion := fun d => { suggestion := d.newText, span? := some d.stx }
+  diagnosticNode := (·.stx)
+  hintMessage := m!"Can be inlined."
+  diagnosticMessage := m!"Inline."
+  replacementText := (·.newText)
+  replacementNode := (·.stx)
 
 initialize Rule.initOption (α := InlineFixData)
 initialize Rule.addLinter (α := InlineFixData)

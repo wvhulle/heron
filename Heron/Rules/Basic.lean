@@ -22,22 +22,24 @@ initialize
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
-  name : Name
+  ruleName : Name
   /-- Detect violations, returning typed fix data. -/
   detect : Syntax → CommandElabM (Array α)
-  /-- Extract the syntax node for the diagnostic location. -/
-  diagStx : α → Syntax
-  /-- Hint message shown alongside the suggestion. -/
-  hintMsg : MessageData
-  /-- Diagnostic message shown as the linter warning. -/
-  diagMsg : MessageData
-  /-- Convert typed fix data to a suggestion for the editor. -/
-  toSuggestion : α → Hint.Suggestion
+  /-- Syntax node to underline in the diagnostic. -/
+  diagnosticNode : α → Syntax
+  /-- Hint message shown alongside the suggestion widget. -/
+  hintMessage : MessageData
+  /-- Main diagnostic message shown as the linter warning. -/
+  diagnosticMessage : MessageData
+  /-- Replacement text for the fix. -/
+  replacementText : α → String
+  /-- Syntax node whose range is replaced by `replacementText`. -/
+  replacementNode : α → Syntax
   /-- Diagnostic severity. -/
   severity : MessageSeverity
 
 def Rule.option [Rule α] : Lean.Option Bool :=
-  { name := `linter ++ Rule.name (α := α), defValue := false }
+  { name := `linter ++ Rule.ruleName (α := α), defValue := false }
 
 def Rule.toLinter [Rule α] : Linter where
   run :=
@@ -46,14 +48,16 @@ def Rule.toLinter [Rule α] : Linter where
       unless opt.get (← getOptions) do return
       if heronReelaborating.get (← getOptions) then return
       for fixData in ← Rule.detect (α := α) stx do
-        let sugg := Rule.toSuggestion (α := α) fixData
-        let diagStxNode := Rule.diagStx (α := α) fixData
+        let sugg : Hint.Suggestion :=
+          { suggestion := Rule.replacementText (α := α) fixData
+            span? := some (Rule.replacementNode (α := α) fixData) }
+        let diagNode := Rule.diagnosticNode (α := α) fixData
         let hint ← liftCoreM <|
-          MessageData.hint (Rule.hintMsg (α := α)) #[sugg]
+          MessageData.hint (Rule.hintMessage (α := α)) #[sugg]
         let disable := MessageData.note m!"This linter can be disabled with `set_option {opt.name} false`"
         let taggedMsg := MessageData.tagged opt.name
-          m!"{(Rule.diagMsg (α := α)) ++ hint}{disable}"
-        let ref := replaceRef diagStxNode (← MonadLog.getRef)
+          m!"{(Rule.diagnosticMessage (α := α)) ++ hint}{disable}"
+        let ref := replaceRef diagNode (← MonadLog.getRef)
         let pos := ref.getPos?.getD 0
         let endPos := ref.getTailPos?.getD pos
         let fileMap ← getFileMap
@@ -68,7 +72,7 @@ def Rule.toLinter [Rule α] : Linter where
           data := msgData
           severity
         }
-        let refStx := sugg.span?.getD diagStxNode
+        let refStx := sugg.span?.getD diagNode
         let msg := match refStx.getRange? with
           | some range =>
             let lspRange := fileMap.utf8RangeToLspRange range
@@ -76,7 +80,7 @@ def Rule.toLinter [Rule α] : Linter where
               | .string s => s
               | .tsyntax t => t.raw.reprint.getD ""
             let data := Lean.Json.mkObj [
-              ("title", .str s!"Apply: {Rule.name (α := α)}"),
+              ("title", .str s!"Apply: {Rule.ruleName (α := α)}"),
               ("edit", toJson ({ range := lspRange, newText : Lsp.TextEdit }))
             ]
             { msg with diagnosticData? := some data.compress }
@@ -84,9 +88,9 @@ def Rule.toLinter [Rule α] : Linter where
         logMessage msg
 
 def Rule.initOption [Rule α] : IO Unit :=
-  Lean.registerOption (`linter ++ Rule.name (α := α))
+  Lean.registerOption (`linter ++ Rule.ruleName (α := α))
     { defValue := .ofBool false
-      descr := s! "Enable the {Rule.name (α := α)} linter rule."
+      descr := s! "Enable the {Rule.ruleName (α := α)} linter rule."
       name := `linter }
 
 def Rule.addLinter [Rule α] : IO Unit :=

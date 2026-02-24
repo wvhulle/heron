@@ -9,13 +9,14 @@ private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   if let `(tactic| rfl) := stx then #[stx] else stx.getArgs.foldl (fun acc child => acc ++ findRflTactics child) #[]
 
 instance : Rule RflFixData where
-  name := `testRfl
+  ruleName := `testRfl
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
-  diagStx := (·.rflStx)
-  hintMsg := m!"Use `exact rfl`."
-  diagMsg := m!"Bare `rfl` detected."
-  toSuggestion := fun d => { suggestion := "exact rfl", span? := some d.rflStx }
+  diagnosticNode := (·.rflStx)
+  hintMessage := m!"Use `exact rfl`."
+  diagnosticMessage := m!"Bare `rfl` detected."
+  replacementText := fun _ => "exact rfl"
+  replacementNode := (·.rflStx)
 
 initialize
   Rule.initOption (α := RflFixData)
