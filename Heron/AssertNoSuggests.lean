@@ -14,7 +14,7 @@ syntax (name := assertNoSuggestsCmd)
       let text ← getFileMap
       let descriptions := edits.map fun edit =>
         let { before, after } := lspEditToSuggestionEdit text edit
-        s!"  `{before.trim}` => `{after.trim}`"
+        s!"  `{before.trimAscii}` => `{after.trimAscii}`"
       logWarningAt stx
         m!"expected no suggestions but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax

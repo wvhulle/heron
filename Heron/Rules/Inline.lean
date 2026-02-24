@@ -1,23 +1,11 @@
 import Heron.Rules.Basic
 import Lean.Meta.Tactic.Delta
-import Lean.PrettyPrinter
 
 open Lean Elab Command Meta Heron.Rules
 
 private structure InlineFixData where
   stx : Syntax
   newText : String
-
-/-- Find the `declId` node in a command syntax tree. -/
-private partial def findDeclId? : Syntax → Option Syntax
-  | stx@(.node _ kind args) =>
-    if kind == ``Lean.Parser.Command.declId then some stx
-    else args.findSome? findDeclId?
-  | _ => none
-
-/-- Get the source range of the `declId` in a command, if any. -/
-private def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
-  (findDeclId? stx).bind (·.getRange?)
 
 private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   match e.getAppFn.constName? with
@@ -29,18 +17,6 @@ private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
     | none => false
   | none => false
 
-private def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
-  match declRange?, ti.stx.getPos? with
-  | some r, some p => !r.contains p
-  | _, _ => true
-
-private def tryPpFix (ci : ContextInfo) (ti : TermInfo) (expanded : Expr)
-    : CommandElabM (Option InlineFixData) := do
-  try
-    let fmt ← runInfoMetaM ci ti.lctx (ppExpr expanded)
-    return some { stx := ti.stx, newText := s!"({fmt})" }
-  catch _ => return none
-
 private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
   let trees ← collectElabInfoTrees stx
   let env ← getEnv
@@ -51,12 +27,12 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
     outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   for (ci, ti) in deduplicateByPosition constCandidates do
     if let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) then
-      if let some fix ← tryPpFix ci ti expanded then
-        fixes := fixes.push fix
+      if let some text ← ppExprFix? ci ti.lctx expanded then
+        fixes := fixes.push { stx := ti.stx, newText := text }
   for (ci, ti) in infos do
     if let .letE _ _ value body _ := ti.expr then
-      if let some fix ← tryPpFix ci ti (body.instantiate1 value) then
-        fixes := fixes.push fix
+      if let some text ← ppExprFix? ci ti.lctx (body.instantiate1 value) then
+        fixes := fixes.push { stx := ti.stx, newText := text }
   return fixes
 
 instance : Rule InlineFixData where

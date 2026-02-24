@@ -2,6 +2,7 @@ import Heron.AssertSuggests
 import Heron.AssertEdits
 import Heron.AssertNoSuggests
 import Lean.Meta.Hint
+import Lean.PrettyPrinter
 import Lean.Server.CodeActions.Basic
 
 open Lean Elab Command Meta
@@ -52,7 +53,6 @@ def Rule.toLinter [Rule α] : Linter where
         let disable := MessageData.note m!"This linter can be disabled with `set_option {opt.name} false`"
         let taggedMsg := MessageData.tagged opt.name
           m!"{(Rule.diagMsg (α := α)) ++ hint}{disable}"
-        -- Replicate logAt to construct a Message with diagnosticData?
         let ref := replaceRef diagStxNode (← MonadLog.getRef)
         let pos := ref.getPos?.getD 0
         let endPos := ref.getTailPos?.getD pos
@@ -68,7 +68,6 @@ def Rule.toLinter [Rule α] : Linter where
           data := msgData
           severity
         }
-        -- Attach LSP TextEdit as diagnostic data
         let refStx := sugg.span?.getD diagStxNode
         let msg := match refStx.getRange? with
           | some range =>
@@ -156,6 +155,31 @@ def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r1 ← stx1.getRange?
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
+
+/-- Find the `declId` node in a command syntax tree. -/
+partial def findDeclId? : Syntax → Option Syntax
+  | stx@(.node _ kind args) =>
+    if kind == ``Lean.Parser.Command.declId then some stx
+    else args.findSome? findDeclId?
+  | _ => none
+
+/-- Get the source range of the `declId` in a command, if any. -/
+def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
+  (findDeclId? stx).bind (·.getRange?)
+
+/-- Check whether a `TermInfo` lies outside the declaration-id range. -/
+def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
+  match declRange?, ti.stx.getPos? with
+  | some r, some p => !r.contains p
+  | _, _ => true
+
+/-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
+def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
+    : CommandElabM (Option String) := do
+  try
+    let fmt ← runInfoMetaM ci lctx (ppExpr e)
+    return some s!"({fmt})"
+  catch _ => return none
 
 open Server RequestM Lsp in
 @[code_action_provider]

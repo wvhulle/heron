@@ -48,7 +48,7 @@ def renderAssertSuggestsPrefix (catName : Name) (linterName? : Option Name)
     s!"#assertSuggests {linterPrefix}"
   else
     let formattedPairs := actualEdits.map fun { before, after } =>
-      s!"`({catName}| {before.trim}) => `({catName}| {after.trim})"
+      s!"`({catName}| {before.trimAscii}) => `({catName}| {after.trimAscii})"
     s!"#assertSuggests {linterPrefix}{", ".intercalate formattedPairs.toList} "
 
 syntax suggestionPair := term " => " term
@@ -57,9 +57,9 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
     : CommandElabM Bool := do
   match quotStx.getQuotContent.reprint with
   | some expectedText =>
-    if expectedText.trim == actual.trim then return true
+    if expectedText.trimAscii == actual.trimAscii then return true
     logErrorAt quotStx
-      m!"{label} mismatch for suggestion {idx}:\n  expected: {expectedText.trim}\n  actual:   {actual.trim}"
+      m!"{label} mismatch for suggestion {idx}:\n  expected: {expectedText.trimAscii}\n  actual:   {actual.trimAscii}"
     return false
   | none =>
     logWarningAt quotStx m!"could not reprint expected {label} syntax for suggestion {idx}"
