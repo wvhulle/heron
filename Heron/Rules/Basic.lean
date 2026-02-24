@@ -32,6 +32,8 @@ class Rule (α : Type) where
   diagMsg : MessageData
   /-- Convert typed fix data to a suggestion for the editor. -/
   toSuggestion : α → Hint.Suggestion
+  /-- Diagnostic severity. -/
+  severity : MessageSeverity
 
 def Rule.option [Rule α] : Lean.Option Bool :=
   { name := `linter ++ Rule.name (α := α), defValue := false }
@@ -57,7 +59,8 @@ def Rule.toLinter [Rule α] : Linter where
         let fileMap ← getFileMap
         let msgData ← addMessageContext taggedMsg
         let severity : MessageSeverity :=
-          if warningAsError.get (← getOptions) then .error else .warning
+          if warningAsError.get (← getOptions) && Rule.severity (α := α) == .warning
+          then .error else Rule.severity (α := α)
         let msg : Message := {
           fileName := ← getFileName
           pos := fileMap.toPosition pos

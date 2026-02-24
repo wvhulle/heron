@@ -49,6 +49,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
 
 instance : Rule IntrosFixData where
   name := `testIntros
+  severity := .warning
   detect := fun stx => return (detectIntros stx)
   diagStx := (·.diagStx)
   hintMsg := m!"Combine intros."
