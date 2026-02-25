@@ -14,14 +14,14 @@ class Refactor (α : Type) extends Transform α where
 
 Calls `MessageData.hint` which pushes `TryThisInfo` as used by test macros
 like `#assertEdits`. -/
-def emitSuggestion (sourceNode replacementNode : Syntax)
-    (hintMsg : MessageData) (replacementText : String)
+def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
-  let sugg : Hint.Suggestion :=
-    { suggestion := replacementText
-      span? := some replacementNode }
+  let some anchor := repls[0]?.map (·.sourceNode) | return
+  let suggs := repls.map fun r =>
+    { suggestion := r.replacementText
+      span? := some r.replacementNode : Hint.Suggestion }
   let _ ← liftCoreM <|
-    MessageData.hint hintMsg #[sugg] (ref? := some sourceNode)
+    MessageData.hint hintMsg suggs (ref? := some anchor)
 
 def Refactor.toLinter [Refactor α] : Linter where
   run :=
@@ -31,10 +31,8 @@ def Refactor.toLinter [Refactor α] : Linter where
       if isReelaborating (← getOptions) then return
       for fixData in ← Transform.detect (α := α) stx do
         emitSuggestion
-          (Transform.sourceNode (α := α) fixData)
-          (Transform.replacementNode (α := α) fixData)
           (Transform.hintMessage (α := α) fixData)
-          (Transform.replacementText (α := α) fixData)
+          (Transform.replacements (α := α) fixData)
 
 def Refactor.addLinter [Refactor α] : IO Unit :=
   lintersRef.modify (·.push (Refactor.toLinter (α := α)))
@@ -61,20 +59,20 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
         return FixWithTitle.mk fd fmt.pretty
     let mut actions : Array LazyCodeAction := #[]
     for { fixData, title } in fixes do
-      let srcStx := Transform.sourceNode (α := α) fixData
-      let some range := srcStx.getRange? | continue
-      unless range.start ≤ endPos && startPos ≤ range.stop do continue
-      let replStx := Transform.replacementNode (α := α) fixData
-      let newText := Transform.replacementText (α := α) fixData
+      let repls := Transform.replacements (α := α) fixData
+      unless repls.any (fun r => match r.sourceNode.getRange? with
+        | some range => range.start ≤ endPos && startPos ≤ range.stop
+        | none => false) do continue
       let kind := Refactor.codeActionKind (α := α)
-      let replRange := (replStx.getRange?).getD range
-      let lspRange := text.utf8RangeToLspRange replRange
+      let textEdits := repls.filterMap fun r => do
+        let range ← r.replacementNode.getRange?
+        return { range := text.utf8RangeToLspRange range, newText := r.replacementText : Lsp.TextEdit }
       actions := actions.push {
         eager := { title, kind? := kind }
         lazy? := some (pure {
           title, kind? := kind
-          edit? := some <| .ofTextEdit doc.versionedIdentifier
-            { range := lspRange, newText }
+          edit? := some <| .ofTextDocumentEdit
+            { textDocument := doc.versionedIdentifier, edits := textEdits }
         })
       }
     return actions

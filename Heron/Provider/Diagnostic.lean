@@ -15,16 +15,16 @@ class Diagnostic (α : Type) extends Transform α where
   diagnosticTags : Array Lsp.DiagnosticTag := #[]
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
-def emitDiagnostic (sourceNode replacementNode : Syntax)
+def emitDiagnostic (sourceNode : Syntax)
     (severity : MessageSeverity) (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
-    (diagnosticMsg hintMsg : MessageData) (replacementText : String)
+    (diagnosticMsg hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
-  let sugg : Hint.Suggestion :=
-    { suggestion := replacementText
-      span? := some replacementNode }
+  let suggs := repls.map fun r =>
+    { suggestion := r.replacementText
+      span? := some r.replacementNode : Hint.Suggestion }
   let hint ← liftCoreM <|
-    MessageData.hint hintMsg #[sugg]
+    MessageData.hint hintMsg suggs
   let disable := MessageData.note m!"This linter can be disabled with `set_option {optName} false`"
   let taggedMsg := MessageData.tagged optName
     m!"{diagnosticMsg ++ hint}{disable}"
@@ -44,20 +44,16 @@ def emitDiagnostic (sourceNode replacementNode : Syntax)
     severity
     diagnosticTags
   }
-  let refStx := sugg.span?.getD sourceNode
   let hintFmt ← liftCoreM hintMsg.format
-  let msg := match refStx.getRange? with
-    | some range =>
-      let lspRange := fileMap.utf8RangeToLspRange range
-      let newText := match sugg.suggestion with
-        | .string s => s
-        | .tsyntax t => t.raw.reprint.getD ""
-      let data := Lean.Json.mkObj [
-        ("title", .str hintFmt.pretty),
-        ("edit", toJson ({ range := lspRange, newText : Lsp.TextEdit }))
-      ]
-      { msg with diagnosticData? := some data.compress }
-    | none => msg
+  let edits := repls.filterMap fun r => do
+    let range ← r.replacementNode.getRange?
+    let lspRange := fileMap.utf8RangeToLspRange range
+    return toJson ({ range := lspRange, newText := r.replacementText : Lsp.TextEdit })
+  let data := Lean.Json.mkObj [
+    ("title", .str hintFmt.pretty),
+    ("edits", Json.arr edits)
+  ]
+  let msg := { msg with diagnosticData? := some data.compress }
   logMessage msg
 
 def Diagnostic.toLinter [Diagnostic α] : Linter where
@@ -67,15 +63,15 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
       unless opt.get (← getOptions) do return
       if isReelaborating (← getOptions) then return
       for fixData in ← Transform.detect (α := α) stx do
-        emitDiagnostic
-          (Transform.sourceNode (α := α) fixData)
-          (Transform.replacementNode (α := α) fixData)
+        let repls := Transform.replacements (α := α) fixData
+        let some first := repls[0]? | continue
+        emitDiagnostic first.sourceNode
           (Diagnostic.severity (α := α))
           (Diagnostic.diagnosticTags (α := α))
           opt.name
           (Diagnostic.diagnosticMessage (α := α))
           (Transform.hintMessage (α := α) fixData)
-          (Transform.replacementText (α := α) fixData)
+          repls
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=
   lintersRef.modify (·.push (Diagnostic.toLinter (α := α)))
@@ -129,13 +125,12 @@ def heronFixProvider : CodeActionProvider := fun params _snap => do
   for diag in params.context.diagnostics do
     let some data := diag.data? | continue
     let some title := data.getObjValAs? String "title" |>.toOption | continue
-    let some edit := (do
-      let ej ← data.getObjVal? "edit" |>.toOption
-      fromJson? (α := TextEdit) ej |>.toOption) | continue
+    let some edits := data.getObjValAs? (Array TextEdit) "edits" |>.toOption | continue
     let fullAction : CodeAction := {
       title
       kind? := "quickfix"
-      edit? := some <| .ofTextEdit doc.versionedIdentifier edit
+      edit? := some <| .ofTextDocumentEdit
+        { textDocument := doc.versionedIdentifier, edits }
       diagnostics? := some #[diag]
     }
     actions := actions.push {

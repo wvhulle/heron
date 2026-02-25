@@ -46,15 +46,20 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
         fixes := fixes.push { stx := ti.stx, newText := text, kind := .letBinding }
   return fixes
 
+private def inlineLabel : InlineKind → MessageData
+  | .const name => m!"Inline '{name}'"
+  | .letBinding => m!"Inline let binding"
+
 @[refactor_rule] instance : Refactor InlineFixData where
   ruleName := `inline
   detect := detectInlineOpportunities
-  sourceNode := (·.stx)
-  hintMessage := fun fd => match fd.kind with
-    | .const name => m!"Inline '{name}'"
-    | .letBinding => m!"Inline let binding"
-  replacementText := (·.newText)
-  replacementNode := (·.stx)
+  hintMessage := fun fd => inlineLabel fd.kind
+  replacements := fun fd => #[{
+    sourceNode := fd.stx
+    replacementNode := fd.stx
+    replacementText := fd.newText
+    sourceLabel := inlineLabel fd.kind
+  }]
   codeActionKind := "refactor.inline"
 
 namespace Tests

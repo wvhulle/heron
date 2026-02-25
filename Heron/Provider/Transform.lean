@@ -6,19 +6,26 @@ open Lean Elab Command Meta
 
 namespace Heron.Provider
 
+/-- A single text replacement with associated source annotation. -/
+structure Replacement where
+  /-- Syntax node to underline in the diagnostic or anchor the code action. -/
+  sourceNode : Syntax
+  /-- Syntax node whose range is replaced by `replacementText`. -/
+  replacementNode : Syntax
+  /-- Replacement text for the fix. -/
+  replacementText : String
+  /-- Inline label shown below the span in editors. -/
+  sourceLabel : MessageData
+
 class Transform (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   ruleName : Name
   /-- Detect violations, returning typed fix data. -/
   detect : Syntax → CommandElabM (Array α)
-  /-- Syntax node to underline in the diagnostic or anchor the code action. -/
-  sourceNode : α → Syntax
   /-- Hint message shown alongside the suggestion widget. -/
   hintMessage : α → MessageData
-  /-- Replacement text for the fix. -/
-  replacementText : α → String
-  /-- Syntax node whose range is replaced by `replacementText`. -/
-  replacementNode : α → Syntax
+  /-- Per-edit replacement data. -/
+  replacements : α → Array Replacement
 
 def Transform.option [Transform α] : Lean.Option Bool :=
   { name := `linter ++ Transform.ruleName (α := α), defValue := false }
