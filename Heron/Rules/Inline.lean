@@ -7,13 +7,6 @@ import Lean.Server.CodeActions.Basic
 
 open Lean Elab Command Meta Heron.Provider
 
-/-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
-private def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
-  tree.foldInfo (init := #[]) fun ctx info acc =>
-    match info with
-    | .ofTermInfo ti => acc.push (ctx, ti)
-    | _ => acc
-
 /-- Run `MetaM` inside a `ContextInfo` context. -/
 private def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
   match ← (ci.runMetaM lctx x).toBaseIO with
@@ -21,21 +14,6 @@ private def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α)
     return a
   | .error e =>
     throwError "{e}"
-
-/-- Deduplicate term infos sharing a start position, keeping the most applied. -/
-private def deduplicateByPosition (usages : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
-  usages.foldl (init := #[]) fun acc (ci, ti) =>
-    match ti.stx.getPos? true with
-    | some pos =>
-      let dominated :=
-        acc.any fun (_, old) => old.stx.getPos? true == some pos && old.expr.getAppNumArgs >= ti.expr.getAppNumArgs
-      if dominated then acc
-      else
-        let acc :=
-          acc.filter fun (_, old) =>
-            !(old.stx.getPos? true == some pos && old.expr.getAppNumArgs < ti.expr.getAppNumArgs)
-        acc.push (ci, ti)
-    | none => acc
 
 /-- Check if an expression references its own name (recursive). -/
 private def isRecursive (value : Expr) (name : Name) : Bool :=
@@ -86,7 +64,7 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
   let declRange? := getDeclIdRange? stx
   let mut fixes : Array InlineFixData := #[]
   let constCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
-  for (ci, ti) in deduplicateByPosition constCandidates do
+  for (ci, ti) in deduplicateTermInfos constCandidates do
     if let some expanded← runInfoMetaM ci ti.lctx (delta? ti.expr) then
       if let some text← ppExprFix? ci ti.lctx expanded then
         fixes := fixes.push { stx := ti.stx, newText := text }
@@ -114,19 +92,15 @@ def inlineRefactorProvider : CodeActionProvider := fun params snap => do
   let startPos := text.lspPosToUtf8Pos params.range.start
   let endPos := text.lspPosToUtf8Pos params.range.end
   let env := snap.env
-  let termInfos := snap.infoTree.foldInfo (init := #[]) fun ctx info acc =>
-    match info with
-    | .ofTermInfo ti =>
-      match ti.stx.getPos? true, ti.stx.getTailPos? true with
-      | some head, some tail =>
-        if head ≤ endPos && startPos ≤ tail then acc.push (ctx, ti) else acc
-      | _, _ => acc
-    | _ => acc
+  let termInfos := (collectTermInfos snap.infoTree).filter fun (_, ti) =>
+    match ti.stx.getPos? true, ti.stx.getTailPos? true with
+    | some head, some tail => head ≤ endPos && startPos ≤ tail
+    | _, _ => false
   let declRange? := getDeclIdRange? snap.stx
   let constCandidates := termInfos.filter fun (_, ti) =>
     outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   let mut actions : Array LazyCodeAction := #[]
-  for (ctx, ti) in deduplicateByPosition constCandidates do
+  for (ctx, ti) in deduplicateTermInfos constCandidates do
     let name := ti.expr.getAppFn.constName?.getD `unknown
     actions := actions.push {
       eager := {

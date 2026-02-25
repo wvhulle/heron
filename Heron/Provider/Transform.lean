@@ -1,5 +1,6 @@
 import Lean.Elab.Command
 import Lean.Meta.Hint
+import Lean.Server.InfoUtils
 
 open Lean Elab Command Meta
 
@@ -66,5 +67,32 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   setInfoState savedInfoState
   modify fun s => { s with messages := savedMessages }
   return trees
+
+/-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
+def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
+  tree.foldInfo (init := #[]) fun ctx info acc =>
+    match info with
+    | .ofTermInfo ti => acc.push (ctx, ti)
+    | _ => acc
+
+/-- Deduplicate term infos sharing a start position, keeping the most applied.
+
+Lean's elaborator produces multiple `TermInfo` nodes for the same source
+position at different application depths (e.g. `f`, `f x`, `f x y`).
+This keeps only the most-applied version per position. -/
+def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
+  infos.foldl (init := #[]) fun acc (ci, ti) =>
+    match ti.stx.getPos? true with
+    | some pos =>
+      match acc.findIdx? fun (_, old) => old.stx.getPos? true == some pos with
+      | some idx =>
+        match acc[idx]? with
+        | some (_, old) =>
+          if ti.expr.getAppNumArgs > old.expr.getAppNumArgs
+          then acc.modify idx (fun _ => (ci, ti))
+          else acc
+        | none => acc
+      | none => acc.push (ci, ti)
+    | none => acc
 
 end Heron.Provider
