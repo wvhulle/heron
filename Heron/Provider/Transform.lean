@@ -36,8 +36,28 @@ class Transform (α : Type) where
   /-- Per-edit replacement data. -/
   replacements : α → Array Replacement
 
+/-- Master option that enables all Heron linter rules at once. -/
+def heronAllOption : Lean.Option Bool :=
+  { name := `linter.heron, defValue := false }
+
+initialize
+  Lean.registerOption `linter.heron {
+    defValue := .ofBool false
+    descr := "Enable all Heron linter rules."
+    name := `linter
+  }
+
 def Transform.option [Transform α] : Lean.Option Bool :=
   { name := `linter ++ Transform.ruleName (α := α), defValue := false }
+
+/-- Check whether this rule is enabled, either individually or via `linter.heron`.
+An explicit `set_option linter.<rule> false` overrides `linter.heron true`. -/
+def Transform.isEnabled [Transform α] (opts : Options) : Bool :=
+  let ruleOpt := `linter ++ Transform.ruleName (α := α)
+  if opts.contains ruleOpt then
+    (Transform.option (α := α)).get opts
+  else
+    heronAllOption.get opts
 
 def Transform.initOption [Transform α] : IO Unit :=
   Lean.registerOption (`linter ++ Transform.ruleName (α := α))
@@ -85,7 +105,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   return trees
 
 /-- Get existing info trees when available (LSP code action requests),
-falling back to re-elaboration when empty (e.g. `#assertEdits` test flow). -/
+falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
 def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let existing := (← getInfoState).trees
   if existing.isEmpty then

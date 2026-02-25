@@ -1,6 +1,6 @@
 import Heron.Provider.Refactor
-import Heron.AssertEdits
-import Heron.AssertNoSuggests
+import Heron.AssertRefactor
+import Heron.AssertIgnore
 import Lean.Meta.Tactic.Delta
 import Lean.PrettyPrinter
 
@@ -67,18 +67,18 @@ namespace Tests
 def double (n : Nat) :=
   n + n
 
-#assertEdits inline `(term| double 3) => `(term| (3 + 3)) in
+#assertRefactor inline `(term| double 3) => `(term| (3 + 3)) in
 example : Nat := double 3
 
 def myConst :=
   42
 
 -- The definition site of `d` should not flag `d` itself for inlining.
-#assertNoSuggests inline in
+#assertIgnore inline in
   def d :=
     0
 
-#assertEdits inline `(term| myConst) => `(term| (42)) in
+#assertRefactor inline `(term| myConst) => `(term| (42)) in
 example : Nat := myConst
 
 end Tests

@@ -51,24 +51,27 @@ def emitDiagnostic (sourceNode : Syntax)
   logMessage msg
 
 def Diagnostic.toLinter [Diagnostic α] : Linter where
+  name := Transform.ruleName (α := α)
   run :=
     withSetOptionIn fun stx => do
-      let opt := Transform.option (α := α)
-      unless opt.get (← getOptions) do return
+      unless Transform.isEnabled (α := α) (← getOptions) do return
       if isReelaborating (← getOptions) then return
+      let optName := (Transform.option (α := α)).name
       for fixData in ← Transform.detect (α := α) stx do
         let repls := Transform.replacements (α := α) fixData
         let some first := repls[0]? | continue
         emitDiagnostic first.sourceNode
           (Diagnostic.severity (α := α))
           (Diagnostic.diagnosticTags (α := α))
-          opt.name
+          optName
           (Diagnostic.diagnosticMessage (α := α))
           (Transform.hintMessage (α := α) fixData)
           repls
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=
-  lintersRef.modify (·.push (Diagnostic.toLinter (α := α)))
+  let name := Transform.ruleName (α := α)
+  lintersRef.modify fun linters =>
+    (linters.filter (·.name != name)).push (Diagnostic.toLinter (α := α))
 
 def Diagnostic.register [Diagnostic α] : IO Unit := do
   Transform.initOption (α := α)

@@ -1,7 +1,6 @@
 import Heron.Provider.Diagnostic
-import Heron.AssertSuggests
-import Heron.AssertEdits
-import Heron.AssertNoSuggests
+import Heron.AssertFix
+import Heron.AssertIgnore
 
 open Lean Elab Command Heron.Provider
 
@@ -27,18 +26,8 @@ private partial def findRflTactics (stx : Syntax) : Array Syntax :=
 
 namespace Tests
 
-#assertNoSuggests testRfl in example (a : Nat) : a = a + 0 := by simp
+#assertIgnore testRfl in example (a : Nat) : a = a + 0 := by simp
 
-#assertNoSuggests in
-  example (a : Nat) : a = a :=
-    rfl
-
-#assertNoSuggests in
-  example : True :=
-    trivial
-
-#assertSuggests testRfl`(tactic| rfl) => `(tactic| exact rfl) in example (a : Nat) : a = a := by rfl
-
-#assertEdits testRfl`(tactic| rfl) => `(tactic| exact rfl) in example (a : Nat) : a = a := by rfl
+#assertFix testRfl `(tactic| rfl) => `(tactic| exact rfl) in example (a : Nat) : a = a := by rfl
 
 end Tests

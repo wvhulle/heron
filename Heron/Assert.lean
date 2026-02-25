@@ -1,7 +1,6 @@
 import Lean.Elab.Command
 import Lean.Elab.Quotation
 import Lean.Server.InfoUtils
-import Lean.Server.CodeActions
 import Lean.Meta.TryThis
 
 namespace Heron.Assert
@@ -31,27 +30,7 @@ def lspEditToSuggestionEdit (text : FileMap) (edit : Lsp.TextEdit) : SuggestionE
 have endPos := text.lspPosToUtf8Pos edit.range.end;
 String.Pos.Raw.extract text.source startPos endPos, after := edit.newText }
 
-structure SuggestionMismatch where
-  catName : Name
-  linterName? : Option Name
-  actualEdits : Array SuggestionEdit
-  deriving TypeName
-
-def pushMismatchToInfoTree (stx : Syntax) (catName : Name) (linterName? : Option Name)
-    (actualEdits : Array SuggestionEdit) : CommandElabM Unit :=
-  pushInfoLeaf (.ofCustomInfo { stx, value := Dynamic.mk (SuggestionMismatch.mk catName linterName? actualEdits) })
-
-def renderAssertSuggestsPrefix (catName : Name) (linterName? : Option Name)
-    (actualEdits : Array SuggestionEdit) : String :=
-  let linterPrefix := linterName?.elim "" (s!"{·} ")
-  if actualEdits.isEmpty then
-    s!"#assertSuggests {linterPrefix}"
-  else
-    let formattedPairs := actualEdits.map fun { before, after } =>
-      s!"`({catName}| {before.trimAscii}) => `({catName}| {after.trimAscii})"
-    s!"#assertSuggests {linterPrefix}{", ".intercalate formattedPairs.toList} "
-
-syntax suggestionPair := term " => " term
+syntax replacementPair := term " => " term
 
 private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label : String) (idx : Nat)
     : CommandElabM Bool := do
@@ -59,20 +38,19 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
   | some expectedText =>
     if expectedText.trimAscii == actual.trimAscii then return true
     logErrorAt quotStx
-      m!"{label} mismatch for suggestion {idx}:\n  expected: {expectedText.trimAscii}\n  actual:   {actual.trimAscii}"
+      m!"{label} mismatch for replacement {idx}:\n  expected: {expectedText.trimAscii}\n  actual:   {actual.trimAscii}"
     return false
   | none =>
-    logWarningAt quotStx m!"could not reprint expected {label} syntax for suggestion {idx}"
+    logWarningAt quotStx m!"could not reprint expected {label} syntax for replacement {idx}"
     return false
 
-def verifySuggestionPair (text : FileMap) (edit : Lsp.TextEdit)
-    (pairStx : TSyntax `Heron.Assert.suggestionPair) (idx : Nat)
-    : CommandElabM (SuggestionEdit × Bool) := do
-  let `(suggestionPair| $before => $after) := pairStx | throwError "unexpected suggestionPair syntax"
-  let suggestion := lspEditToSuggestionEdit text edit
-  let beforeOk ← verifyReprintedQuotation before.raw suggestion.before "before" idx
-  let afterOk ← verifyReprintedQuotation after.raw suggestion.after "after" idx
-  return (suggestion, beforeOk && afterOk)
+def verifyReplacementPair (text : FileMap) (edit : Lsp.TextEdit)
+    (pairStx : TSyntax `Heron.Assert.replacementPair) (idx : Nat)
+    : CommandElabM Bool := do
+  let `(replacementPair| $before => $after) := pairStx | throwError "unexpected replacementPair syntax"
+  let beforeOk ← verifyReprintedQuotation before.raw (lspEditToSuggestionEdit text edit).before "before" idx
+  let afterOk ← verifyReprintedQuotation after.raw (lspEditToSuggestionEdit text edit).after "after" idx
+  return beforeOk && afterOk
 
 private def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
   withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
@@ -109,11 +87,9 @@ private def runAllLintersCollectTrees (cmd : Syntax) : CommandElabM (Array InfoT
     linters.foldlM (init := #[]) fun acc linter =>
       return acc ++ (← runLinterAndCollectTrees linter cmd).toArray
 
-def elabCommandAndCollectSuggestionEdits (cmd : Syntax) (linterName? : Option Name := none)
+def collectReplacements (cmd : Syntax) (linterName : Name)
     : CommandElabM (Array Lsp.TextEdit) := do
-  let enableLinterScope := linterName?.elim id fun name (scope : Scope) =>
-    { scope with opts := scope.opts.insert (`linter ++ name) (.ofBool true) }
-  withScope enableLinterScope do
+  withScope (fun scope => { scope with opts := scope.opts.insert (`linter ++ linterName) (.ofBool true) }) do
     let collectedTrees ← withInfoCollectionDisabled do
       elabCommandSilently cmd
       runAllLintersCollectTrees cmd

@@ -1,7 +1,6 @@
 import Heron.Provider.Diagnostic
-import Heron.AssertSuggests
-import Heron.AssertEdits
-import Heron.AssertNoSuggests
+import Heron.AssertFix
+import Heron.AssertIgnore
 
 open Lean Elab Command Heron.Provider
 
@@ -50,13 +49,13 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
 
 namespace Tests
 
-#assertNoSuggests testIntros in
+#assertIgnore testIntros in
 example (a b : Nat) : a = a := rfl
 
-#assertNoSuggests testIntros in
+#assertIgnore testIntros in
 example : Nat → Nat → True := by intro a; exact trivial
 
-#assertEdits testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
+#assertFix testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
 
 end Tests

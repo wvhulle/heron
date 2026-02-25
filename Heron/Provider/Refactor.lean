@@ -13,7 +13,7 @@ class Refactor (α : Type) extends Transform α where
 /-- Push a suggestion to the info tree without emitting a diagnostic.
 
 Calls `MessageData.hint` which pushes `TryThisInfo` as used by test macros
-like `#assertEdits`. -/
+like `#assertRefactor`. -/
 def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let some anchor := repls[0]?.map (·.sourceNode) | return
@@ -21,10 +21,10 @@ def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     MessageData.hint hintMsg (repls.map (·.toSuggestion)) (ref? := some anchor)
 
 def Refactor.toLinter [Refactor α] : Linter where
+  name := Transform.ruleName (α := α)
   run :=
     withSetOptionIn fun stx => do
-      let opt := Transform.option (α := α)
-      unless opt.get (← getOptions) do return
+      unless Transform.isEnabled (α := α) (← getOptions) do return
       if isReelaborating (← getOptions) then return
       for fixData in ← Transform.detect (α := α) stx do
         emitSuggestion
@@ -32,7 +32,9 @@ def Refactor.toLinter [Refactor α] : Linter where
           (Transform.replacements (α := α) fixData)
 
 def Refactor.addLinter [Refactor α] : IO Unit :=
-  lintersRef.modify (·.push (Refactor.toLinter (α := α)))
+  let name := Transform.ruleName (α := α)
+  lintersRef.modify fun linters =>
+    (linters.filter (·.name != name)).push (Refactor.toLinter (α := α))
 
 def Refactor.register [Refactor α] : IO Unit := do
   Transform.initOption (α := α)
