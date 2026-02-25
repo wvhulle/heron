@@ -2,6 +2,12 @@ import Heron.Rules.Basic
 
 open Lean Elab Command Heron.Rules
 
+/-- Create a `Syntax` spanning two syntax nodes. -/
+private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+  let r1 ← stx1.getRange?
+  let r2 ← stx2.getRange?
+  return Syntax.ofRange ⟨r1.start, r2.stop⟩
+
 private structure IntrosFixData where
   secondIntro : Syntax
   fullRange : Syntax
