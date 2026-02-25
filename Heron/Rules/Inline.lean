@@ -6,42 +6,9 @@ import Lean.PrettyPrinter
 
 open Lean Elab Command Meta Heron.Provider
 
-/-- Run `MetaM` inside a `ContextInfo` context. -/
-private def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
-  match ← (ci.runMetaM lctx x).toBaseIO with
-  | .ok a =>
-    return a
-  | .error e =>
-    throwError "{e}"
-
 /-- Check if an expression references its own name (recursive). -/
 private def isRecursive (value : Expr) (name : Name) : Bool :=
   value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
-
-/-- Find the `declId` node in a command syntax tree. -/
-private partial def findDeclId? : Syntax → Option Syntax
-  | stx@(.node _ kind args) =>
-    if kind == ``Lean.Parser.Command.declId then some stx
-    else args.findSome? findDeclId?
-  | _ => none
-
-/-- Get the source range of the `declId` in a command, if any. -/
-private def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
-  (findDeclId? stx).bind (·.getRange?)
-
-/-- Check whether a `TermInfo` lies outside the declaration-id range. -/
-private def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
-  match declRange?, ti.stx.getPos? with
-  | some r, some p => !r.contains p
-  | _, _ => true
-
-/-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
-private def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
-    : CommandElabM (Option String) := do
-  try
-    let fmt ← runInfoMetaM ci lctx (ppExpr e)
-    return some s!"({fmt})"
-  catch _ => return none
 
 private inductive InlineKind where
   | const (name : Name)

@@ -104,4 +104,37 @@ def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (Cont
       | none => acc.push (ci, ti)
     | none => acc
 
+/-- Run `MetaM` inside a `ContextInfo` context. -/
+def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
+  match ← (ci.runMetaM lctx x).toBaseIO with
+  | .ok a =>
+    return a
+  | .error e =>
+    throwError "{e}"
+
+/-- Find the `declId` node in a command syntax tree. -/
+partial def findDeclId? : Syntax → Option Syntax
+  | stx@(.node _ kind args) =>
+    if kind == ``Lean.Parser.Command.declId then some stx
+    else args.findSome? findDeclId?
+  | _ => none
+
+/-- Get the source range of the `declId` in a command, if any. -/
+def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
+  (findDeclId? stx).bind (·.getRange?)
+
+/-- Check whether a `TermInfo` lies outside the declaration-id range. -/
+def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
+  match declRange?, ti.stx.getPos? with
+  | some r, some p => !r.contains p
+  | _, _ => true
+
+/-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
+def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
+    : CommandElabM (Option String) := do
+  try
+    let fmt ← runInfoMetaM ci lctx (ppExpr e)
+    return some s!"({fmt})"
+  catch _ => return none
+
 end Heron.Provider
