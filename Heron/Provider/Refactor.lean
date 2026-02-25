@@ -17,11 +17,8 @@ like `#assertEdits`. -/
 def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let some anchor := repls[0]?.map (·.sourceNode) | return
-  let suggs := repls.map fun r =>
-    { suggestion := r.insertText
-      span? := some r.targetNode : Hint.Suggestion }
   let _ ← liftCoreM <|
-    MessageData.hint hintMsg suggs (ref? := some anchor)
+    MessageData.hint hintMsg (repls.map (·.toSuggestion)) (ref? := some anchor)
 
 def Refactor.toLinter [Refactor α] : Linter where
   run :=
@@ -64,9 +61,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
         | some range => range.start ≤ endPos && startPos ≤ range.stop
         | none => false) do continue
       let kind := Refactor.codeActionKind (α := α)
-      let textEdits := repls.filterMap fun r => do
-        let range ← r.targetNode.getRange?
-        return { range := text.utf8RangeToLspRange range, newText := r.insertText : Lsp.TextEdit }
+      let textEdits := repls.filterMap (·.toTextEdit? text)
       actions := actions.push {
         eager := { title, kind? := kind }
         lazy? := some (pure {

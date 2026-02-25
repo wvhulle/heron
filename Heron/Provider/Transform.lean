@@ -17,6 +17,15 @@ structure Replacement where
   /-- Inline label shown below the span in editors. -/
   sourceLabel : MessageData
 
+/-- Convert to a `Hint.Suggestion` for the try-this widget. -/
+def Replacement.toSuggestion (r : Replacement) : Hint.Suggestion :=
+  { suggestion := r.insertText, span? := some r.targetNode }
+
+/-- Convert to an LSP `TextEdit`, if the target node has a source range. -/
+def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.TextEdit := do
+  let range ← r.targetNode.getRange?
+  return { range := fileMap.utf8RangeToLspRange range, newText := r.insertText }
+
 class Transform (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   ruleName : Name
