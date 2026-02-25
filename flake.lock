@@ -147,11 +147,11 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1771846179,
-        "narHash": "sha256-wuXmrF4tnO6LBF13eIIf8PEusloDbizFjvpovPP2Jr0=",
+        "lastModified": 1772010124,
+        "narHash": "sha256-mleoCL16drvMDW1OgJowPMQqCm0vLD9wLl3Vn3v3Zc0=",
         "owner": "wvhulle",
         "repo": "tree-sitter-lean",
-        "rev": "b97cd7ec0f170054353c237d891670d26b54e894",
+        "rev": "3051b281d54a2d576b41a344f8be622bcc9e3558",
         "type": "github"
       },
       "original": {
