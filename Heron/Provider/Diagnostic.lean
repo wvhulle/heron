@@ -17,7 +17,7 @@ class Diagnostic (α : Type) extends Transform α where
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (sourceNode replacementNode : Syntax)
     (severity : MessageSeverity) (diagnosticTags : Array Lsp.DiagnosticTag)
-    (ruleName : Name) (optName : Name)
+    (optName : Name)
     (diagnosticMsg hintMsg : MessageData) (replacementText : String)
     : CommandElabM Unit := do
   let sugg : Hint.Suggestion :=
@@ -45,6 +45,7 @@ def emitDiagnostic (sourceNode replacementNode : Syntax)
     diagnosticTags
   }
   let refStx := sugg.span?.getD sourceNode
+  let hintFmt ← liftCoreM hintMsg.format
   let msg := match refStx.getRange? with
     | some range =>
       let lspRange := fileMap.utf8RangeToLspRange range
@@ -52,7 +53,7 @@ def emitDiagnostic (sourceNode replacementNode : Syntax)
         | .string s => s
         | .tsyntax t => t.raw.reprint.getD ""
       let data := Lean.Json.mkObj [
-        ("title", .str s!"Apply: {ruleName}"),
+        ("title", .str hintFmt.pretty),
         ("edit", toJson ({ range := lspRange, newText : Lsp.TextEdit }))
       ]
       { msg with diagnosticData? := some data.compress }
@@ -71,10 +72,9 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
           (Transform.replacementNode (α := α) fixData)
           (Diagnostic.severity (α := α))
           (Diagnostic.diagnosticTags (α := α))
-          (Transform.ruleName (α := α))
           opt.name
           (Diagnostic.diagnosticMessage (α := α))
-          (Transform.hintMessage (α := α))
+          (Transform.hintMessage (α := α) fixData)
           (Transform.replacementText (α := α) fixData)
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=

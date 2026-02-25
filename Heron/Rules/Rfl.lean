@@ -16,7 +16,7 @@ private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
   sourceNode := (·.rflStx)
-  hintMessage := m!"Use `exact rfl`."
+  hintMessage := fun _ => m!"Use `exact rfl`."
   diagnosticMessage := m!"Bare `rfl` detected."
   replacementText := fun _ => "exact rfl"
   replacementNode := (·.rflStx)

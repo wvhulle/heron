@@ -3,7 +3,6 @@ import Heron.AssertEdits
 import Heron.AssertNoSuggests
 import Lean.Meta.Tactic.Delta
 import Lean.PrettyPrinter
-import Lean.Server.CodeActions.Basic
 
 open Lean Elab Command Meta Heron.Provider
 
@@ -44,9 +43,14 @@ private def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
     return some s!"({fmt})"
   catch _ => return none
 
+private inductive InlineKind where
+  | const (name : Name)
+  | letBinding
+
 private structure InlineFixData where
   stx : Syntax
   newText : String
+  kind : InlineKind
 
 private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   match e.getAppFn.constName? with
@@ -58,87 +62,33 @@ private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   | none => false
 
 private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
-  let trees ← collectElabInfoTrees stx
+  let trees ← collectInfoTrees stx
   let env ← getEnv
   let infos := trees.flatMap collectTermInfos
   let declRange? := getDeclIdRange? stx
   let mut fixes : Array InlineFixData := #[]
   let constCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   for (ci, ti) in deduplicateTermInfos constCandidates do
-    if let some expanded← runInfoMetaM ci ti.lctx (delta? ti.expr) then
-      if let some text← ppExprFix? ci ti.lctx expanded then
-        fixes := fixes.push { stx := ti.stx, newText := text }
+    if let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) then
+      if let some text ← ppExprFix? ci ti.lctx expanded then
+        let name := ti.expr.getAppFn.constName?.getD `unknown
+        fixes := fixes.push { stx := ti.stx, newText := text, kind := .const name }
   for (ci, ti) in infos do
     if let .letE _ _ value body _ := ti.expr then
-      if let some text← ppExprFix? ci ti.lctx (body.instantiate1 value) then
-        fixes := fixes.push { stx := ti.stx, newText := text }
+      if let some text ← ppExprFix? ci ti.lctx (body.instantiate1 value) then
+        fixes := fixes.push { stx := ti.stx, newText := text, kind := .letBinding }
   return fixes
-
-open Server RequestM Lsp in
-private def inlineCodeActions : CodeActionProvider := fun params snap => do
-  let doc ← readDoc
-  let text := doc.meta.text
-  let startPos := text.lspPosToUtf8Pos params.range.start
-  let endPos := text.lspPosToUtf8Pos params.range.end
-  let env := snap.env
-  let termInfos := (collectTermInfos snap.infoTree).filter fun (_, ti) =>
-    match ti.stx.getPos? true, ti.stx.getTailPos? true with
-    | some head, some tail => head ≤ endPos && startPos ≤ tail
-    | _, _ => false
-  let declRange? := getDeclIdRange? snap.stx
-  let constCandidates := termInfos.filter fun (_, ti) =>
-    outsideDeclId declRange? ti && isInlineableUsage env ti.expr
-  let mut actions : Array LazyCodeAction := #[]
-  for (ctx, ti) in deduplicateTermInfos constCandidates do
-    let name := ti.expr.getAppFn.constName?.getD `unknown
-    actions := actions.push {
-      eager := {
-        title := s!"Inline '{name}'"
-        kind? := "refactor.inline"
-      }
-      lazy? := some do
-        let some expanded ← ctx.runMetaM ti.lctx (delta? ti.expr)
-          | return { title := s!"Inline '{name}'", kind? := "refactor.inline" }
-        let fmt ← ctx.runMetaM ti.lctx (ppExpr expanded)
-        let newText := s!"({fmt})"
-        let some range := ti.stx.getRange?
-          | return { title := s!"Inline '{name}'", kind? := "refactor.inline" }
-        let lspRange := text.utf8RangeToLspRange range
-        return {
-          title := s!"Inline '{name}'"
-          kind? := "refactor.inline"
-          edit? := some <| .ofTextEdit doc.versionedIdentifier { range := lspRange, newText }
-        }
-    }
-  for (ctx, ti) in termInfos do
-    if let .letE _ _ value body _ := ti.expr then
-      actions := actions.push {
-        eager := {
-          title := "Inline let binding"
-          kind? := "refactor.inline"
-        }
-        lazy? := some do
-          let fmt ← ctx.runMetaM ti.lctx (ppExpr (body.instantiate1 value))
-          let newText := s!"({fmt})"
-          let some range := ti.stx.getRange?
-            | return { title := "Inline let binding", kind? := "refactor.inline" }
-          let lspRange := text.utf8RangeToLspRange range
-          return {
-            title := "Inline let binding"
-            kind? := "refactor.inline"
-            edit? := some <| .ofTextEdit doc.versionedIdentifier { range := lspRange, newText }
-          }
-      }
-  return actions
 
 @[refactor_rule] instance : Refactor InlineFixData where
   ruleName := `inline
   detect := detectInlineOpportunities
   sourceNode := (·.stx)
-  hintMessage := m!"Can be inlined."
+  hintMessage := fun fd => match fd.kind with
+    | .const name => m!"Inline '{name}'"
+    | .letBinding => m!"Inline let binding"
   replacementText := (·.newText)
   replacementNode := (·.stx)
-  codeActions := inlineCodeActions
+  codeActionKind := "refactor.inline"
 
 namespace Tests
 

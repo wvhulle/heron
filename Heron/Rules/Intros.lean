@@ -39,7 +39,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   severity := .warning
   detect := fun stx => return (detectIntros stx)
   sourceNode := (·.secondIntro)
-  hintMessage := m!"Combine intros."
+  hintMessage := fun _ => m!"Merge intros"
   diagnosticMessage := m!"Sequential intros."
   replacementText := (·.replacement)
   replacementNode := (·.fullRange)

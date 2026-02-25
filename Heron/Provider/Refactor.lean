@@ -8,10 +8,7 @@ namespace Heron.Provider
 
 open Server Lsp in
 class Refactor (α : Type) extends Transform α where
-  /-- Lazy code action provider that computes refactoring suggestions from the
-  elaboration snapshot. This runs at request time when the user opens the code
-  action menu, not during linting. -/
-  codeActions : CodeActionParams → Snapshots.Snapshot → RequestM (Array LazyCodeAction)
+  codeActionKind : String := "refactor"
 
 /-- Push a suggestion to the info tree without emitting a diagnostic.
 
@@ -36,7 +33,7 @@ def Refactor.toLinter [Refactor α] : Linter where
         emitSuggestion
           (Transform.sourceNode (α := α) fixData)
           (Transform.replacementNode (α := α) fixData)
-          (Transform.hintMessage (α := α))
+          (Transform.hintMessage (α := α) fixData)
           (Transform.replacementText (α := α) fixData)
 
 def Refactor.addLinter [Refactor α] : IO Unit :=
@@ -45,6 +42,42 @@ def Refactor.addLinter [Refactor α] : IO Unit :=
 def Refactor.register [Refactor α] : IO Unit := do
   Transform.initOption (α := α)
   Refactor.addLinter (α := α)
+
+private structure FixWithTitle (α : Type) where
+  fixData : α
+  title : String
+
+open Server RequestM Lsp in
+def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
+  fun params snap => do
+    let doc ← readDoc
+    let text := doc.meta.text
+    let startPos := text.lspPosToUtf8Pos params.range.start
+    let endPos := text.lspPosToUtf8Pos params.range.end
+    let fixes ← runCommandElabM snap do
+      let rawFixes ← Transform.detect (α := α) snap.stx
+      rawFixes.mapM fun fd => do
+        let fmt ← liftCoreM (Transform.hintMessage (α := α) fd).format
+        return FixWithTitle.mk fd fmt.pretty
+    let mut actions : Array LazyCodeAction := #[]
+    for { fixData, title } in fixes do
+      let srcStx := Transform.sourceNode (α := α) fixData
+      let some range := srcStx.getRange? | continue
+      unless range.start ≤ endPos && startPos ≤ range.stop do continue
+      let replStx := Transform.replacementNode (α := α) fixData
+      let newText := Transform.replacementText (α := α) fixData
+      let kind := Refactor.codeActionKind (α := α)
+      let replRange := (replStx.getRange?).getD range
+      let lspRange := text.utf8RangeToLspRange replRange
+      actions := actions.push {
+        eager := { title, kind? := kind }
+        lazy? := some (pure {
+          title, kind? := kind
+          edit? := some <| .ofTextEdit doc.versionedIdentifier
+            { range := lspRange, newText }
+        })
+      }
+    return actions
 
 /-- Attribute handler: build `@[init]` aux decls for the linter and register
 the instance's `codeActions` as a `@[code_action_provider]`. -/
@@ -84,7 +117,7 @@ private unsafe def refactorRuleHandler (declName : Name) : AttrM Unit := do
   let providerType := mkConst ``Server.CodeActionProvider
   addAndCompile <| .defnDecl {
     name := providerName, levelParams := [], type := providerType
-    value := mkApp2 (mkConst ``Refactor.codeActions levels) αExpr inst
+    value := mkApp2 (mkConst ``Refactor.toCodeActionProvider levels) αExpr inst
     hints := .opaque, safety := .unsafe
   }
   modifyEnv (Server.codeActionProviderExt.addEntry · providerName)

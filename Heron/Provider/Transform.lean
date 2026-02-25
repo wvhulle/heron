@@ -14,7 +14,7 @@ class Transform (α : Type) where
   /-- Syntax node to underline in the diagnostic or anchor the code action. -/
   sourceNode : α → Syntax
   /-- Hint message shown alongside the suggestion widget. -/
-  hintMessage : MessageData
+  hintMessage : α → MessageData
   /-- Replacement text for the fix. -/
   replacementText : α → String
   /-- Syntax node whose range is replaced by `replacementText`. -/
@@ -67,6 +67,15 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   setInfoState savedInfoState
   modify fun s => { s with messages := savedMessages }
   return trees
+
+/-- Get existing info trees when available (LSP code action requests),
+falling back to re-elaboration when empty (e.g. `#assertEdits` test flow). -/
+def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+  let existing := (← getInfoState).trees
+  if existing.isEmpty then
+    collectElabInfoTrees stx
+  else
+    return existing.toArray
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
 def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
