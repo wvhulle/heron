@@ -1,6 +1,9 @@
-import Heron.Rules.Basic
+import Heron.Provider.Diagnostic
+import Heron.AssertSuggests
+import Heron.AssertEdits
+import Heron.AssertNoSuggests
 
-open Lean Elab Command Heron.Rules
+open Lean Elab Command Heron.Provider
 
 private structure RflFixData where
   rflStx : Syntax
@@ -8,25 +11,20 @@ private structure RflFixData where
 private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   if let `(tactic| rfl) := stx then #[stx] else stx.getArgs.foldl (fun acc child => acc ++ findRflTactics child) #[]
 
-instance : Lint RflFixData where
+instance : Diagnostic RflFixData where
   ruleName := `testRfl
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
-  diagnosticNode := (·.rflStx)
+  sourceNode := (·.rflStx)
   hintMessage := m!"Use `exact rfl`."
   diagnosticMessage := m!"Bare `rfl` detected."
   replacementText := fun _ => "exact rfl"
   replacementNode := (·.rflStx)
   diagnosticTags := #[.unnecessary]
 
-initialize
-  Rule.initOption (α := RflFixData)
-initialize
-  Lint.addLinter (α := RflFixData)
+register_diagnostic RflFixData
 
 namespace Tests
-
-#eval Lint.addLinter (α := RflFixData)
 
 #assertNoSuggests testRfl in example (a : Nat) : a = a + 0 := by simp
 

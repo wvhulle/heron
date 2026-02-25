@@ -1,52 +1,20 @@
-import Lean.Elab.Command
-import Lean.Meta.Hint
+import Heron.Provider.Transform
 import Lean.Server.CodeActions.Basic
 
 open Lean Elab Command Meta
 
-namespace Heron
+namespace Heron.Provider
 
-/-- Internal option to prevent recursive linter invocation during re-elaboration. -/
-private def heronReelaborating : Lean.Option Bool :=
-  { name := `heron.reelaborating, defValue := false }
-
-initialize
-  Lean.registerOption `heron.reelaborating {
-    defValue := .ofBool false
-    descr := "Internal: set during re-elaboration to prevent recursive linter invocation."
-    name := `heron
-  }
-
-/-- Check whether the `heron.reelaborating` flag is set in the current options. -/
-def isReelaborating (opts : Options) : Bool :=
-  heronReelaborating.get opts
-
-/-- Re-elaborate a command collecting info trees.
-
-Uses the scoped `heron.reelaborating` option instead of clearing the global
-`lintersRef` to prevent recursive linter invocation. This is safe under
-concurrent (async) elaboration — `withScope` modifies only the current
-command's options, so other commands' linters are unaffected. -/
-def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
-  let savedInfoState ← getInfoState
-  let savedMessages := (← get).messages
-  setInfoState { enabled := true, trees := { } }
-  try
-    withoutModifyingEnv do
-        withScope (fun scope =>
-          let opts := heronReelaborating.set (Elab.async.set scope.opts false) true
-          { scope with opts }) do
-            withReader ({ · with snap? := none }) do
-                elabCommand stx
-  catch _ =>
-    pure ()
-  let trees := (← getInfoState).trees.toArray
-  setInfoState savedInfoState
-  modify fun s => { s with messages := savedMessages }
-  return trees
+class Diagnostic (α : Type) extends Transform α where
+  /-- Main diagnostic message shown as the linter warning. -/
+  diagnosticMessage : MessageData
+  /-- Diagnostic severity. -/
+  severity : MessageSeverity
+  /-- LSP diagnostic tags (e.g. unnecessary, deprecated). -/
+  diagnosticTags : Array Lsp.DiagnosticTag := #[]
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
-def emitDiagnostic (diagNode replacementNode : Syntax)
+def emitDiagnostic (sourceNode replacementNode : Syntax)
     (severity : MessageSeverity) (diagnosticTags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name)
     (diagnosticMsg hintMsg : MessageData) (replacementText : String)
@@ -59,7 +27,7 @@ def emitDiagnostic (diagNode replacementNode : Syntax)
   let disable := MessageData.note m!"This linter can be disabled with `set_option {optName} false`"
   let taggedMsg := MessageData.tagged optName
     m!"{diagnosticMsg ++ hint}{disable}"
-  let ref := replaceRef diagNode (← MonadLog.getRef)
+  let ref := replaceRef sourceNode (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
@@ -75,7 +43,7 @@ def emitDiagnostic (diagNode replacementNode : Syntax)
     severity
     diagnosticTags
   }
-  let refStx := sugg.span?.getD diagNode
+  let refStx := sugg.span?.getD sourceNode
   let msg := match refStx.getRange? with
     | some range =>
       let lspRange := fileMap.utf8RangeToLspRange range
@@ -89,6 +57,36 @@ def emitDiagnostic (diagNode replacementNode : Syntax)
       { msg with diagnosticData? := some data.compress }
     | none => msg
   logMessage msg
+
+def Diagnostic.toLinter [Diagnostic α] : Linter where
+  run :=
+    withSetOptionIn fun stx => do
+      let opt := Transform.option (α := α)
+      unless opt.get (← getOptions) do return
+      if isReelaborating (← getOptions) then return
+      for fixData in ← Transform.detect (α := α) stx do
+        emitDiagnostic
+          (Transform.sourceNode (α := α) fixData)
+          (Transform.replacementNode (α := α) fixData)
+          (Diagnostic.severity (α := α))
+          (Diagnostic.diagnosticTags (α := α))
+          (Transform.ruleName (α := α))
+          opt.name
+          (Diagnostic.diagnosticMessage (α := α))
+          (Transform.hintMessage (α := α))
+          (Transform.replacementText (α := α) fixData)
+
+def Diagnostic.addLinter [Diagnostic α] : IO Unit :=
+  lintersRef.modify (·.push (Diagnostic.toLinter (α := α)))
+
+def Diagnostic.register [Diagnostic α] : IO Unit := do
+  Transform.initOption (α := α)
+  Diagnostic.addLinter (α := α)
+
+macro "register_diagnostic" α:ident : command => do
+  let a ← `(command| initialize Diagnostic.register (α := $α))
+  let b ← `(command| #eval Diagnostic.addLinter (α := $α))
+  return ⟨mkNullNode #[a, b]⟩
 
 open Server RequestM Lsp in
 @[code_action_provider]
@@ -113,4 +111,4 @@ def heronFixProvider : CodeActionProvider := fun params _snap => do
     }
   return actions
 
-end Heron
+end Heron.Provider

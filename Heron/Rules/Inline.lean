@@ -1,8 +1,11 @@
-import Heron.Rules.Basic
+import Heron.Provider.Refactor
+import Heron.AssertEdits
+import Heron.AssertNoSuggests
 import Lean.Meta.Tactic.Delta
 import Lean.PrettyPrinter
+import Lean.Server.CodeActions.Basic
 
-open Lean Elab Command Meta Heron.Rules
+open Lean Elab Command Meta Heron.Provider
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
 private def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
@@ -77,7 +80,7 @@ private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   | none => false
 
 private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
-  let trees ← Heron.collectElabInfoTrees stx
+  let trees ← collectElabInfoTrees stx
   let env ← getEnv
   let infos := trees.flatMap collectTermInfos
   let declRange? := getDeclIdRange? stx
@@ -96,16 +99,12 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
 instance : Refactor InlineFixData where
   ruleName := `inline
   detect := detectInlineOpportunities
-  diagnosticNode := (·.stx)
+  sourceNode := (·.stx)
   hintMessage := m!"Can be inlined."
-  diagnosticMessage := m!"Inline."
   replacementText := (·.newText)
   replacementNode := (·.stx)
 
-initialize
-  Rule.initOption (α := InlineFixData)
-initialize
-  Refactor.addLinter (α := InlineFixData)
+register_refactor InlineFixData
 
 open Lean Server RequestM Lsp in
 @[code_action_provider]
@@ -170,8 +169,6 @@ def inlineRefactorProvider : CodeActionProvider := fun params snap => do
   return actions
 
 namespace Tests
-
-#eval Refactor.addLinter (α := InlineFixData)
 
 def double (n : Nat) :=
   n + n

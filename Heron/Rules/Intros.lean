@@ -1,6 +1,9 @@
-import Heron.Rules.Basic
+import Heron.Provider.Diagnostic
+import Heron.AssertSuggests
+import Heron.AssertEdits
+import Heron.AssertNoSuggests
 
-open Lean Elab Command Heron.Rules
+open Lean Elab Command Heron.Provider
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
 private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
@@ -31,23 +34,20 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
     | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
     | none => #[]
 
-instance : Lint IntrosFixData where
+instance : Diagnostic IntrosFixData where
   ruleName := `testIntros
   severity := .warning
   detect := fun stx => return (detectIntros stx)
-  diagnosticNode := (·.secondIntro)
+  sourceNode := (·.secondIntro)
   hintMessage := m!"Combine intros."
   diagnosticMessage := m!"Sequential intros."
   replacementText := (·.replacement)
   replacementNode := (·.fullRange)
   diagnosticTags := #[.unnecessary]
 
-initialize Rule.initOption (α := IntrosFixData)
-initialize Lint.addLinter (α := IntrosFixData)
+register_diagnostic IntrosFixData
 
 namespace Tests
-
-#eval Lint.addLinter (α := IntrosFixData)
 
 #assertNoSuggests testIntros in
 example (a b : Nat) : a = a := rfl
