@@ -42,8 +42,8 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   diagnosticMessage := m!"Sequential intros."
   replacements := fun fd => #[{
     sourceNode := fd.secondIntro
-    replacementNode := fd.fullRange
-    replacementText := fd.replacement
+    targetNode := fd.fullRange
+    insertText := fd.replacement
     sourceLabel := m!"sequential intro"
   }]
   diagnosticTags := #[.unnecessary]

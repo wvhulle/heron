@@ -21,8 +21,8 @@ def emitDiagnostic (sourceNode : Syntax)
     (diagnosticMsg hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let suggs := repls.map fun r =>
-    { suggestion := r.replacementText
-      span? := some r.replacementNode : Hint.Suggestion }
+    { suggestion := r.insertText
+      span? := some r.targetNode : Hint.Suggestion }
   let hint ← liftCoreM <|
     MessageData.hint hintMsg suggs
   let disable := MessageData.note m!"This linter can be disabled with `set_option {optName} false`"
@@ -46,9 +46,9 @@ def emitDiagnostic (sourceNode : Syntax)
   }
   let hintFmt ← liftCoreM hintMsg.format
   let edits := repls.filterMap fun r => do
-    let range ← r.replacementNode.getRange?
+    let range ← r.targetNode.getRange?
     let lspRange := fileMap.utf8RangeToLspRange range
-    return toJson ({ range := lspRange, newText := r.replacementText : Lsp.TextEdit })
+    return toJson ({ range := lspRange, newText := r.insertText : Lsp.TextEdit })
   let data := Lean.Json.mkObj [
     ("title", .str hintFmt.pretty),
     ("edits", Json.arr edits)

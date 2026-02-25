@@ -56,8 +56,8 @@ private def inlineLabel : InlineKind → MessageData
   hintMessage := fun fd => inlineLabel fd.kind
   replacements := fun fd => #[{
     sourceNode := fd.stx
-    replacementNode := fd.stx
-    replacementText := fd.newText
+    targetNode := fd.stx
+    insertText := fd.newText
     sourceLabel := inlineLabel fd.kind
   }]
   codeActionKind := "refactor.inline"

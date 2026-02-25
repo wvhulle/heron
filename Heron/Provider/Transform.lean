@@ -10,10 +10,10 @@ namespace Heron.Provider
 structure Replacement where
   /-- Syntax node to underline in the diagnostic or anchor the code action. -/
   sourceNode : Syntax
-  /-- Syntax node whose range is replaced by `replacementText`. -/
-  replacementNode : Syntax
-  /-- Replacement text for the fix. -/
-  replacementText : String
+  /-- Syntax node whose range is replaced by `insertText`. -/
+  targetNode : Syntax
+  /-- Text inserted in place of `targetNode`. -/
+  insertText : String
   /-- Inline label shown below the span in editors. -/
   sourceLabel : MessageData
 

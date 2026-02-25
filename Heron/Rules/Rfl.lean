@@ -19,8 +19,8 @@ private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   diagnosticMessage := m!"Bare `rfl` detected."
   replacements := fun fd => #[{
     sourceNode := fd.rflStx
-    replacementNode := fd.rflStx
-    replacementText := "exact rfl"
+    targetNode := fd.rflStx
+    insertText := "exact rfl"
     sourceLabel := m!"bare rfl"
   }]
   diagnosticTags := #[.unnecessary]

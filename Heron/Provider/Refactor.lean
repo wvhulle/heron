@@ -18,8 +18,8 @@ def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let some anchor := repls[0]?.map (·.sourceNode) | return
   let suggs := repls.map fun r =>
-    { suggestion := r.replacementText
-      span? := some r.replacementNode : Hint.Suggestion }
+    { suggestion := r.insertText
+      span? := some r.targetNode : Hint.Suggestion }
   let _ ← liftCoreM <|
     MessageData.hint hintMsg suggs (ref? := some anchor)
 
@@ -65,8 +65,8 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
         | none => false) do continue
       let kind := Refactor.codeActionKind (α := α)
       let textEdits := repls.filterMap fun r => do
-        let range ← r.replacementNode.getRange?
-        return { range := text.utf8RangeToLspRange range, newText := r.replacementText : Lsp.TextEdit }
+        let range ← r.targetNode.getRange?
+        return { range := text.utf8RangeToLspRange range, newText := r.insertText : Lsp.TextEdit }
       actions := actions.push {
         eager := { title, kind? := kind }
         lazy? := some (pure {
