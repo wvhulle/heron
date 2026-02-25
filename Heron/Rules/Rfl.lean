@@ -8,7 +8,7 @@ private structure RflFixData where
 private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   if let `(tactic| rfl) := stx then #[stx] else stx.getArgs.foldl (fun acc child => acc ++ findRflTactics child) #[]
 
-instance : Rule RflFixData where
+instance : Lint RflFixData where
   ruleName := `testRfl
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
@@ -22,11 +22,11 @@ instance : Rule RflFixData where
 initialize
   Rule.initOption (α := RflFixData)
 initialize
-  Rule.addLinter (α := RflFixData)
+  Lint.addLinter (α := RflFixData)
 
 namespace Tests
 
-#eval Rule.addLinter (α := RflFixData)
+#eval Lint.addLinter (α := RflFixData)
 
 #assertNoSuggests testRfl in example (a : Nat) : a = a + 0 := by simp
 

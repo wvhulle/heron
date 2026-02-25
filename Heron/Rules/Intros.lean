@@ -31,7 +31,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
     | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
     | none => #[]
 
-instance : Rule IntrosFixData where
+instance : Lint IntrosFixData where
   ruleName := `testIntros
   severity := .warning
   detect := fun stx => return (detectIntros stx)
@@ -43,11 +43,11 @@ instance : Rule IntrosFixData where
   diagnosticTags := #[.unnecessary]
 
 initialize Rule.initOption (α := IntrosFixData)
-initialize Rule.addLinter (α := IntrosFixData)
+initialize Lint.addLinter (α := IntrosFixData)
 
 namespace Tests
 
-#eval Rule.addLinter (α := IntrosFixData)
+#eval Lint.addLinter (α := IntrosFixData)
 
 #assertNoSuggests testIntros in
 example (a b : Nat) : a = a := rfl

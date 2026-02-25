@@ -93,25 +93,85 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
         fixes := fixes.push { stx := ti.stx, newText := text }
   return fixes
 
-instance : Rule InlineFixData where
+instance : Refactor InlineFixData where
   ruleName := `inline
-  severity := .warning
   detect := detectInlineOpportunities
   diagnosticNode := (·.stx)
   hintMessage := m!"Can be inlined."
   diagnosticMessage := m!"Inline."
   replacementText := (·.newText)
   replacementNode := (·.stx)
-  diagnosticTags := #[]
 
 initialize
   Rule.initOption (α := InlineFixData)
 initialize
-  Rule.addLinter (α := InlineFixData)
+  Refactor.addLinter (α := InlineFixData)
+
+open Lean Server RequestM Lsp in
+@[code_action_provider]
+def inlineRefactorProvider : CodeActionProvider := fun params snap => do
+  let doc ← readDoc
+  let text := doc.meta.text
+  let startPos := text.lspPosToUtf8Pos params.range.start
+  let endPos := text.lspPosToUtf8Pos params.range.end
+  let env := snap.env
+  let termInfos := snap.infoTree.foldInfo (init := #[]) fun ctx info acc =>
+    match info with
+    | .ofTermInfo ti =>
+      match ti.stx.getPos? true, ti.stx.getTailPos? true with
+      | some head, some tail =>
+        if head ≤ endPos && startPos ≤ tail then acc.push (ctx, ti) else acc
+      | _, _ => acc
+    | _ => acc
+  let declRange? := getDeclIdRange? snap.stx
+  let constCandidates := termInfos.filter fun (_, ti) =>
+    outsideDeclId declRange? ti && isInlineableUsage env ti.expr
+  let mut actions : Array LazyCodeAction := #[]
+  for (ctx, ti) in deduplicateByPosition constCandidates do
+    let name := ti.expr.getAppFn.constName?.getD `unknown
+    actions := actions.push {
+      eager := {
+        title := s!"Inline '{name}'"
+        kind? := "refactor.inline"
+      }
+      lazy? := some do
+        let some expanded ← ctx.runMetaM ti.lctx (delta? ti.expr)
+          | return { title := s!"Inline '{name}'", kind? := "refactor.inline" }
+        let fmt ← ctx.runMetaM ti.lctx (ppExpr expanded)
+        let newText := s!"({fmt})"
+        let some range := ti.stx.getRange?
+          | return { title := s!"Inline '{name}'", kind? := "refactor.inline" }
+        let lspRange := text.utf8RangeToLspRange range
+        return {
+          title := s!"Inline '{name}'"
+          kind? := "refactor.inline"
+          edit? := some <| .ofTextEdit doc.versionedIdentifier { range := lspRange, newText }
+        }
+    }
+  for (ctx, ti) in termInfos do
+    if let .letE _ _ value body _ := ti.expr then
+      actions := actions.push {
+        eager := {
+          title := "Inline let binding"
+          kind? := "refactor.inline"
+        }
+        lazy? := some do
+          let fmt ← ctx.runMetaM ti.lctx (ppExpr (body.instantiate1 value))
+          let newText := s!"({fmt})"
+          let some range := ti.stx.getRange?
+            | return { title := "Inline let binding", kind? := "refactor.inline" }
+          let lspRange := text.utf8RangeToLspRange range
+          return {
+            title := "Inline let binding"
+            kind? := "refactor.inline"
+            edit? := some <| .ofTextEdit doc.versionedIdentifier { range := lspRange, newText }
+          }
+      }
+  return actions
 
 namespace Tests
 
-#eval Rule.addLinter (α := InlineFixData)
+#eval Refactor.addLinter (α := InlineFixData)
 
 def double (n : Nat) :=
   n + n

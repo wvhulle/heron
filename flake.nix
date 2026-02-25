@@ -11,7 +11,8 @@
     tree-sitter-lean.url = "github:wvhulle/tree-sitter-lean";
   };
 
-  outputs =    {
+  outputs =
+    {
       self,
       nixpkgs,
       lean4,
@@ -51,30 +52,35 @@
         src = ./.;
       };
 
-      devShells.${system} = {
-        nix = pkgs.mkShell {
-          packages = [
-            lean4.packages.${system}.lake
-            pkgs.ast-grep
-          ];
+      devShells.${system} =
+        let
+          local = pkgs.mkShell {
+            packages = with pkgs; [
+              ast-grep
+              gcc
+              llvmPackages.bintools
+            ];
 
-          shellHook = "ln -sf ${sgconfigFile} sgconfig.yml";
+            shellHook = ''
+              ln -sf ${sgconfigFile} sgconfig.yml
+              export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
+            '';
+          };
+        in
+        {
+          nix = pkgs.mkShell {
+            packages = [
+              lean4.packages.${system}.lake
+              pkgs.ast-grep
+            ];
+
+            shellHook = "ln -sf ${sgconfigFile} sgconfig.yml";
+          };
+
+          # Use locally-built lean4 — no flake rebuild on source changes.
+          # Requires: make -j -C ../lean4/build/release
+          local = local;
+          default = local;
         };
-
-        # Use locally-built lean4 — no flake rebuild on source changes.
-        # Requires: make -j -C ../lean4/build/release
-        default = pkgs.mkShell {
-          packages = with pkgs; [
-            ast-grep
-            gcc
-            llvmPackages.bintools
-          ];
-
-          shellHook = ''
-            ln -sf ${sgconfigFile} sgconfig.yml
-            export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
-          '';
-        };
-      };
     };
 }

@@ -45,11 +45,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   modify fun s => { s with messages := savedMessages }
   return trees
 
-/-- Emit a diagnostic message with an associated quick-fix suggestion.
-
-Constructs the `Hint.Suggestion`, builds the tagged `MessageData` with hint
-and disable note, creates the `Message` with positions/tags/diagnosticData,
-and calls `logMessage`. -/
+/-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (diagNode replacementNode : Syntax)
     (severity : MessageSeverity) (diagnosticTags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name)
