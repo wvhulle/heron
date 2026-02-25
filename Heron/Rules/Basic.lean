@@ -37,6 +37,8 @@ class Rule (α : Type) where
   replacementNode : α → Syntax
   /-- Diagnostic severity. -/
   severity : MessageSeverity
+  /-- LSP diagnostic tags (e.g. unnecessary, deprecated). -/
+  diagnosticTags : Array Lsp.DiagnosticTag := #[]
 
 def Rule.option [Rule α] : Lean.Option Bool :=
   { name := `linter ++ Rule.ruleName (α := α), defValue := false }
@@ -71,6 +73,7 @@ def Rule.toLinter [Rule α] : Linter where
           endPos := fileMap.toPosition endPos
           data := msgData
           severity
+          diagnosticTags := Rule.diagnosticTags (α := α)
         }
         let refStx := sugg.span?.getD diagNode
         let msg := match refStx.getRange? with

@@ -17,6 +17,7 @@ instance : Rule RflFixData where
   diagnosticMessage := m!"Bare `rfl` detected."
   replacementText := fun _ => "exact rfl"
   replacementNode := (·.rflStx)
+  diagnosticTags := #[.unnecessary]
 
 initialize
   Rule.initOption (α := RflFixData)

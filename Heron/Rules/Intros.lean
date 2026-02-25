@@ -34,6 +34,7 @@ instance : Rule IntrosFixData where
   diagnosticMessage := m!"Sequential intros."
   replacementText := (·.replacement)
   replacementNode := (·.fullRange)
+  diagnosticTags := #[.unnecessary]
 
 initialize Rule.initOption (α := IntrosFixData)
 initialize Rule.addLinter (α := IntrosFixData)
