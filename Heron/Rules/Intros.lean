@@ -34,7 +34,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
     | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
     | none => #[]
 
-instance : Diagnostic IntrosFixData where
+@[diagnostic_rule] instance : Diagnostic IntrosFixData where
   ruleName := `testIntros
   severity := .warning
   detect := fun stx => return (detectIntros stx)
@@ -44,8 +44,6 @@ instance : Diagnostic IntrosFixData where
   replacementText := (·.replacement)
   replacementNode := (·.fullRange)
   diagnosticTags := #[.unnecessary]
-
-register_diagnostic IntrosFixData
 
 namespace Tests
 

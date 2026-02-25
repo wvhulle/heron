@@ -11,7 +11,7 @@ private structure RflFixData where
 private partial def findRflTactics (stx : Syntax) : Array Syntax :=
   if let `(tactic| rfl) := stx then #[stx] else stx.getArgs.foldl (fun acc child => acc ++ findRflTactics child) #[]
 
-instance : Diagnostic RflFixData where
+@[diagnostic_rule] instance : Diagnostic RflFixData where
   ruleName := `testRfl
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
@@ -21,8 +21,6 @@ instance : Diagnostic RflFixData where
   replacementText := fun _ => "exact rfl"
   replacementNode := (·.rflStx)
   diagnosticTags := #[.unnecessary]
-
-register_diagnostic RflFixData
 
 namespace Tests
 

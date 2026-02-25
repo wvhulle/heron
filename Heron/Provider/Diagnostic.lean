@@ -1,5 +1,6 @@
 import Heron.Provider.Transform
 import Lean.Server.CodeActions.Basic
+import Lean.Compiler.InitAttr
 
 open Lean Elab Command Meta
 
@@ -83,10 +84,42 @@ def Diagnostic.register [Diagnostic α] : IO Unit := do
   Transform.initOption (α := α)
   Diagnostic.addLinter (α := α)
 
-macro "register_diagnostic" α:ident : command => do
-  let a ← `(command| initialize Diagnostic.register (α := $α))
-  let b ← `(command| #eval Diagnostic.addLinter (α := $α))
-  return ⟨mkNullNode #[a, b]⟩
+/-- Attribute handler: build an `@[init]` aux decl calling `Diagnostic.register`,
+then evaluate it immediately so the linter is active in the current file. -/
+private unsafe def diagnosticRuleHandler (declName : Name) : AttrM Unit := do
+  let env ← getEnv
+  let some info := env.find? declName
+    | throwError "@[diagnostic_rule]: unknown declaration '{declName}'"
+  let some αExpr := info.type.getAppArgs[0]?
+    | throwError "@[diagnostic_rule]: expected type of the form `Diagnostic α`"
+  let inst := mkConst declName
+  let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
+  -- Aux decl 1: calls `register` (initOption + addLinter), tagged @[init] for import
+  let registerName := declName ++ `_rule_init
+  addAndCompile <| .defnDecl {
+    name := registerName, levelParams := [], type := auxType
+    value := mkApp2 (mkConst ``Diagnostic.register) αExpr inst
+    hints := .opaque, safety := .unsafe
+  }
+  modifyEnv fun env =>
+    match regularInitAttr.setParam env registerName .anonymous with
+    | .ok env' => env'
+    | .error _ => env
+  -- Aux decl 2: calls `addLinter` only, evaluated immediately for current file
+  let linterName := declName ++ `_rule_addLinter
+  addAndCompile <| .defnDecl {
+    name := linterName, levelParams := [], type := auxType
+    value := mkApp2 (mkConst ``Diagnostic.addLinter) αExpr inst
+    hints := .opaque, safety := .unsafe
+  }
+  let addFn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} linterName
+  addFn
+
+initialize _diagnosticRuleAttr : TagAttribute ←
+  registerTagAttribute `diagnostic_rule
+    "Register a Diagnostic instance as a heron linter rule."
+    (validate := unsafe diagnosticRuleHandler)
+    (applicationTime := .afterCompilation)
 
 open Server RequestM Lsp in
 @[code_action_provider]
