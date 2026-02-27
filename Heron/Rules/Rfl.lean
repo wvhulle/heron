@@ -1,14 +1,15 @@
-import Heron.Provider.Diagnostic
-import Heron.AssertFix
-import Heron.AssertIgnore
+import Heron.Diagnostic
+import Heron.Assert
 
-open Lean Elab Command Heron.Provider
+open Lean Elab Command Heron
 
 private structure RflFixData where
   rflStx : Syntax
 
-private partial def findRflTactics (stx : Syntax) : Array Syntax :=
-  if let `(tactic| rfl) := stx then #[stx] else stx.getArgs.foldl (fun acc child => acc ++ findRflTactics child) #[]
+private def findRflTactics : Syntax → Array Syntax :=
+  Syntax.collectAll fun
+    | stx@`(tactic| rfl) => #[stx]
+    | _ => #[]
 
 @[diagnostic_rule] instance : Diagnostic RflFixData where
   ruleName := `testRfl

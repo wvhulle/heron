@@ -1,8 +1,7 @@
-import Heron.Provider.Diagnostic
-import Heron.AssertFix
-import Heron.AssertIgnore
+import Heron.Diagnostic
+import Heron.Assert
 
-open Lean Elab Command Heron.Provider
+open Lean Elab Command Heron
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
 private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
@@ -15,13 +14,13 @@ private structure IntrosFixData where
   fullRange : Syntax
   replacement : String
 
-private partial def collectIntroTactics (stx : Syntax) : Array Syntax :=
-  if stx.getKind == ``Lean.Parser.Tactic.intro then #[stx]
-  else stx.getArgs.foldl (fun acc c => acc ++ collectIntroTactics c) #[]
+private def collectIntroTactics : Syntax → Array Syntax :=
+  Syntax.collectAll fun stx =>
+    if stx.getKind == ``Lean.Parser.Tactic.intro then #[stx] else #[]
 
-private partial def introIdents (stx : Syntax) : Array Syntax :=
-  if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx]
-  else stx.getArgs.foldl (fun acc c => acc ++ introIdents c) #[]
+private def introIdents : Syntax → Array Syntax :=
+  Syntax.collectAll fun stx =>
+    if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
 
 private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   let intros := collectIntroTactics stx

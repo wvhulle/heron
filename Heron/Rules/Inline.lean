@@ -1,10 +1,9 @@
-import Heron.Provider.Refactor
-import Heron.AssertRefactor
-import Heron.AssertIgnore
+import Heron.Refactor
+import Heron.Assert
 import Lean.Meta.Tactic.Delta
 import Lean.PrettyPrinter
 
-open Lean Elab Command Meta Heron.Provider
+open Lean Elab Command Meta Heron
 
 /-- Check if an expression references its own name (recursive). -/
 private def isRecursive (value : Expr) (name : Name) : Bool :=

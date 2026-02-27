@@ -1,9 +1,5 @@
 import Heron.Rules
 
-/-!# Test out fixing violations and refactors
-
--/
-
 set_option linter.heron true
 
 example (n : Nat) : n = n := by rfl

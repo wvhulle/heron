@@ -1,8 +1,7 @@
-import Heron.Provider.Refactor
-import Heron.AssertRefactor
-import Heron.AssertIgnore
+import Heron.Refactor
+import Heron.Assert
 
-open Lean Elab Command Heron.Provider
+open Lean Elab Command Heron
 
 private structure FlipIfFixData where
   negCondStx : Syntax
@@ -10,14 +9,14 @@ private structure FlipIfFixData where
   thenBranch : Syntax
   elseBranch : Syntax
 
-private partial def findFlipIfCandidates (stx : Syntax) : Array FlipIfFixData :=
-  let found := match stx with
+private def findFlipIfCandidates : Syntax → Array FlipIfFixData :=
+  Syntax.collectAll fun
     | `(if $cond then $thenBr else $elseBr) =>
       match cond with
-      | `(!$inner) => #[{ negCondStx := cond, innerCond := inner, thenBranch := thenBr, elseBranch := elseBr }]
+      | `(!$inner) => #[{ negCondStx := cond, innerCond := inner,
+                           thenBranch := thenBr, elseBranch := elseBr }]
       | _ => #[]
     | _ => #[]
-  found ++ stx.getArgs.foldl (fun acc c => acc ++ findFlipIfCandidates c) #[]
 
 private def reprintTrimmed (stx : Syntax) : String :=
   (stx.reprint.getD "").trimAscii.toString

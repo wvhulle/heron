@@ -97,4 +97,47 @@ def collectReplacements (cmd : Syntax) (linterName : Name)
     scheduleLinterRestore
     return collectTryThisEdits collectedTrees
 
+private def elabAssertReplacements (linterName : Ident)
+    (pairStxs : Array (TSyntax `Heron.Assert.replacementPair))
+    (cmd : Syntax) (stx : Syntax) : CommandElabM Unit := do
+  let edits ← collectReplacements cmd linterName.getId
+  let text ← getFileMap
+  if edits.size != pairStxs.size then
+    logWarningAt stx m!"expected {pairStxs.size} replacement(s) but got {edits.size}"
+    return
+  let results ← (edits.zip pairStxs).mapIdxM fun idx (edit, pairStx) =>
+    verifyReplacementPair text edit pairStx (idx + 1)
+  unless results.all (·) do return
+
+syntax (name := assertFixCmd)
+  "#assertFix " ident sepBy1(replacementPair, ", ") " in " command : command
+
+syntax (name := assertRefactorCmd)
+  "#assertRefactor " ident sepBy1(replacementPair, ", ") " in " command : command
+
+@[command_elab assertFixCmd] def elabAssertFix : CommandElab
+  | stx@`(command| #assertFix $linterName $pairs,* in $cmd) =>
+    elabAssertReplacements linterName pairs.getElems cmd stx
+  | _ => throwUnsupportedSyntax
+
+@[command_elab assertRefactorCmd] def elabAssertRefactor : CommandElab
+  | stx@`(command| #assertRefactor $linterName $pairs,* in $cmd) =>
+    elabAssertReplacements linterName pairs.getElems cmd stx
+  | _ => throwUnsupportedSyntax
+
+syntax (name := assertIgnoreCmd)
+  "#assertIgnore " ident " in " command : command
+
+@[command_elab assertIgnoreCmd] def elabAssertIgnore : CommandElab
+  | stx@`(command| #assertIgnore $linterName in $cmd) => do
+    let edits ← collectReplacements cmd linterName.getId
+    unless edits.isEmpty do
+      let text ← getFileMap
+      let descriptions := edits.map fun edit =>
+        let { before, after } := lspEditToSuggestionEdit text edit
+        s!"  `{before.trimAscii}` => `{after.trimAscii}`"
+      logWarningAt stx
+        m!"expected no replacements but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
+  | _ => throwUnsupportedSyntax
+
 end Heron.Assert

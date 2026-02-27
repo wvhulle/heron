@@ -1,10 +1,17 @@
 import Lean.Elab.Command
 import Lean.Meta.Hint
 import Lean.Server.InfoUtils
+import Lean.Compiler.InitAttr
 
 open Lean Elab Command Meta
 
-namespace Heron.Provider
+/-- Recursively collect results from a syntax tree.
+`f` is applied at each node; its results are concatenated
+with results from all children. -/
+partial def Lean.Syntax.collectAll (f : Syntax → Array α) (stx : Syntax) : Array α :=
+  f stx ++ stx.getArgs.flatMap (Syntax.collectAll f)
+
+namespace Heron
 
 /-- A single text replacement with associated source annotation. -/
 structure Replacement where
@@ -80,6 +87,15 @@ initialize
 def isReelaborating (opts : Options) : Bool :=
   heronReelaborating.get opts
 
+/-- Run a transform rule if enabled and not re-elaborating, calling `handle`
+for each detected violation. -/
+def Transform.runIfEnabled [Transform α] (stx : Syntax)
+    (handle : α → CommandElabM Unit) : CommandElabM Unit := do
+  unless Transform.isEnabled (α := α) (← getOptions) do return
+  if isReelaborating (← getOptions) then return
+  for fixData in ← Transform.detect (α := α) stx do
+    handle fixData
+
 /-- Re-elaborate a command collecting info trees.
 
 Uses the scoped `heron.reelaborating` option instead of clearing the global
@@ -126,19 +142,19 @@ Lean's elaborator produces multiple `TermInfo` nodes for the same source
 position at different application depths (e.g. `f`, `f x`, `f x y`).
 This keeps only the most-applied version per position. -/
 def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
-  infos.foldl (init := #[]) fun acc (ci, ti) =>
-    match ti.stx.getPos? true with
-    | some pos =>
-      match acc.findIdx? fun (_, old) => old.stx.getPos? true == some pos with
-      | some idx =>
-        match acc[idx]? with
+  let map := infos.foldl (init := ({} : Std.HashMap Nat (ContextInfo × TermInfo)))
+    fun map (ci, ti) =>
+      match ti.stx.getPos? true with
+      | some pos =>
+        let key := pos.byteIdx
+        match map[key]? with
         | some (_, old) =>
           if ti.expr.getAppNumArgs > old.expr.getAppNumArgs
-          then acc.modify idx (fun _ => (ci, ti))
-          else acc
-        | none => acc
-      | none => acc.push (ci, ti)
-    | none => acc
+          then map.insert key (ci, ti)
+          else map
+        | none => map.insert key (ci, ti)
+      | none => map
+  map.fold (init := #[]) fun acc _ v => acc.push v
 
 /-- Run `MetaM` inside a `ContextInfo` context. -/
 def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
@@ -173,4 +189,45 @@ def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
     return some s!"({fmt})"
   catch _ => return none
 
-end Heron.Provider
+/-- Shared logic for `@[diagnostic_rule]` and `@[refactor_rule]` attribute handlers.
+
+Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
+then evaluates `addLinterConst` immediately so the linter is active in the current file.
+`extraSetup` is called last for any additional registration (e.g. code action providers). -/
+unsafe def ruleHandlerCore (attrLabel : String)
+    (registerConst addLinterConst : Name)
+    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ())
+    (declName : Name) : AttrM Unit := do
+  let env ← getEnv
+  let some info := env.find? declName
+    | throwError "@[{attrLabel}]: unknown declaration '{declName}'"
+  let some αExpr := info.type.getAppArgs[0]?
+    | throwError "@[{attrLabel}]: expected type of the form `... α`"
+  let inst := mkConst declName
+  let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
+  let some regInfo := env.find? registerConst
+    | throwError "{registerConst} not found"
+  let levels := regInfo.levelParams.map fun _ => Level.zero
+  -- Aux decl 1: calls `register` (initOption + addLinter), tagged @[init] for import
+  let registerName := declName ++ `_rule_init
+  addAndCompile <| .defnDecl {
+    name := registerName, levelParams := [], type := auxType
+    value := mkApp2 (mkConst registerConst levels) αExpr inst
+    hints := .opaque, safety := .unsafe
+  }
+  modifyEnv fun env =>
+    match regularInitAttr.setParam env registerName .anonymous with
+    | .ok env' => env'
+    | .error _ => env
+  -- Aux decl 2: calls `addLinter` only, evaluated immediately for current file
+  let linterName := declName ++ `_rule_addLinter
+  addAndCompile <| .defnDecl {
+    name := linterName, levelParams := [], type := auxType
+    value := mkApp2 (mkConst addLinterConst levels) αExpr inst
+    hints := .opaque, safety := .unsafe
+  }
+  let addFn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} linterName
+  addFn
+  extraSetup declName αExpr inst
+
+end Heron
