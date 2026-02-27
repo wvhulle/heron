@@ -3,14 +3,19 @@
 **Refactoring and lint framework for [Lean 4](https://github.com/leanprover/lean4).**
 
 The intention of this project is to watch over _consistency and maintainability_ of large Lean projects.
+This project contains a crowd-sourced set of Lean anti-patterns (potential bugs).
 
-![Heron](./heron.jpg)
+Each anti-pattern is defined using a "rule". Each "rule" can suggest a fix. Each rule can be:
 
-_Named after the [Heron](https://en.wikipedia.org/wiki/Heron) bird that watches over lakes since `lake` (in turn named after "Lean make") is the name of the build tool for Lean._
+- Visible diagnostic: have info, warn or error level
+- Lazy refactor action: invisible but triggered by explicit code action menu
 
-How does it work?
+Rules can also have more meta-data:
 
-Each rule detects an anti-pattern or bug and suggests a fix that can be applied as an editor code action. Violations detected by rules may have info, warn or error level, or be lazy (invisible but triggered by explicit refactor).
+- Category
+- Additional popup documentation that explains each rule in detail:
+
+![](./screenshots/popup.png)
 
 ## Installation
 
@@ -129,3 +134,7 @@ example : Nat → Nat → True := by intro a; intro b; exact trivial
 #assertIgnore testRfl in
 example (a : Nat) : a = a + 0 := by simp
 ```
+
+![Heron](./heron.jpg)
+
+_Named after the [Heron](https://en.wikipedia.org/wiki/Heron) bird that watches over lakes since `lake` (in turn named after "Lean make") is the name of the build tool for Lean._

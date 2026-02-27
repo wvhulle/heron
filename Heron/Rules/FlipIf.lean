@@ -24,7 +24,7 @@ private def reprintTrimmed (stx : Syntax) : String :=
 @[refactor_rule] instance : Refactor FlipIfFixData where
   ruleName := `flipIf
   detect := fun stx => return findFlipIfCandidates stx
-  hintMessage := fun _ => m!"Flip `if` branches"
+  shortInstruction := fun _ => m!"Flip `if` branches"
   replacements := fun fd => #[
     { sourceNode := fd.negCondStx
       targetNode := fd.negCondStx

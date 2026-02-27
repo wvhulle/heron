@@ -95,11 +95,10 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
   severity := .warning
   category := .simplification
   detect := fun stx => return findUnusedMuts stx
-  hintMessage := fun _ => m!"Remove unnecessary `mut`"
-  diagnosticMessage := m!"Remove unused `mut`"
+  shortInstruction := fun _ => m!"Remove unnecessary `mut`"
   violationNode := fun fd => fd.mutKeyword
   diagnosticTags := #[.unnecessary]
-  explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
+  longInstruction := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
   replacements := fun fd => #[{
     sourceNode := fd.doLetStx
     targetNode := fd.doLetStx

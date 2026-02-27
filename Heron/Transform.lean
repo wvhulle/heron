@@ -38,8 +38,8 @@ class Transform (α : Type) where
   ruleName : Name
   /-- Detect violations, returning typed fix data. -/
   detect : Syntax → CommandElabM (Array α)
-  /-- Hint message shown alongside the suggestion widget. -/
-  hintMessage : α → MessageData
+  /-- Short instruction shown as the diagnostic message and suggestion widget hint. -/
+  shortInstruction : α → MessageData
   /-- Per-edit replacement data. -/
   replacements : α → Array Replacement
 

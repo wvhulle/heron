@@ -145,11 +145,10 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
   severity := .warning
   category := .simplification
   detect := fun stx => return findIdRunTrivial stx
-  hintMessage := fun _ => m!"Remove unnecessary `Id.run do`"
-  diagnosticMessage := m!"Remove trivial `Id.run do`"
+  shortInstruction := fun _ => m!"Remove unnecessary `Id.run do`"
   violationNode := fun fd => fd.idRunDoSpan
   diagnosticTags := #[.unnecessary]
-  explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
+  longInstruction := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
   replacements := fun fd => #[{
     sourceNode := fd.fullStx
     targetNode := fd.fullStx

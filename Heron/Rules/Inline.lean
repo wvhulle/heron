@@ -52,7 +52,7 @@ private def inlineLabel : InlineKind → MessageData
 @[refactor_rule] instance : Refactor InlineFixData where
   ruleName := `inline
   detect := detectInlineOpportunities
-  hintMessage := fun fd => inlineLabel fd.kind
+  shortInstruction := fun fd => inlineLabel fd.kind
   replacements := fun fd => #[{
     sourceNode := fd.stx
     targetNode := fd.stx

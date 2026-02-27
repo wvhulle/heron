@@ -21,8 +21,6 @@ instance : ToString Category where
     | .correctness => "correctness"
 
 class Diagnostic (α : Type) extends Transform α where
-  /-- Main diagnostic message shown as the linter warning. -/
-  diagnosticMessage : MessageData
   /-- Diagnostic severity. -/
   severity : MessageSeverity
   /-- What kind of violation this rule detects. -/
@@ -31,8 +29,8 @@ class Diagnostic (α : Type) extends Transform α where
   violationNode : α → Syntax
   /-- LSP diagnostic tags (e.g. unnecessary, deprecated) applied to the violation range. -/
   diagnosticTags : Array Lsp.DiagnosticTag := #[]
-  /-- Detailed explanation shown in hover popup. Receives the violation data for context-specific details. -/
-  explanation : α → MessageData := fun _ => m!""
+  /-- Detailed explanation shown in hover popup. -/
+  longInstruction : α → MessageData := fun _ => m!""
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (violationNode : Syntax)
@@ -40,11 +38,11 @@ def emitDiagnostic (violationNode : Syntax)
     (category : Category)
     (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
-    (diagnosticMsg hintMsg explanation : MessageData) (repls : Array Replacement)
+    (shortInstruction longInstruction : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let _ ← liftCoreM <|
-    MessageData.hint hintMsg (repls.map (·.toSuggestion))
-  let taggedMsg := MessageData.tagged optName diagnosticMsg
+    MessageData.hint shortInstruction (repls.map (·.toSuggestion))
+  let taggedMsg := MessageData.tagged optName shortInstruction
   let ref := replaceRef violationNode (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
@@ -61,19 +59,18 @@ def emitDiagnostic (violationNode : Syntax)
     severity
     diagnosticTags
   }
-  let hintFmt ← liftCoreM hintMsg.format
+  let shortFmt ← liftCoreM shortInstruction.format
   let edits := (repls.filterMap (·.toTextEdit? fileMap)).map toJson
   -- Structured hover data
-  let diagnosticFmt ← liftCoreM diagnosticMsg.format
-  let explanationFmt ← liftCoreM explanation.format
+  let longFmt ← liftCoreM longInstruction.format
   let mut bodyParts : Array String := #[]
-  if !explanationFmt.pretty.isEmpty then
-    bodyParts := bodyParts.push explanationFmt.pretty
+  if !longFmt.pretty.isEmpty then
+    bodyParts := bodyParts.push longFmt.pretty
   bodyParts := bodyParts.push s!"Disable with `set_option {optName} false`"
   let data := Lean.Json.mkObj [
-    ("title", .str hintFmt.pretty),
+    ("title", .str shortFmt.pretty),
     ("edits", Json.arr edits),
-    ("hoverTitle", .str diagnosticFmt.pretty),
+    ("hoverTitle", .str shortFmt.pretty),
     ("hoverTags", Json.arr #[toJson (toString category)]),
     ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))
   ]
@@ -90,9 +87,8 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
           (Diagnostic.category (α := α))
           (Diagnostic.diagnosticTags (α := α))
           (Transform.option (α := α)).name
-          (Diagnostic.diagnosticMessage (α := α))
-          (Transform.hintMessage (α := α) fixData)
-          (Diagnostic.explanation (α := α) fixData)
+          (Transform.shortInstruction (α := α) fixData)
+          (Diagnostic.longInstruction (α := α) fixData)
           (Transform.replacements (α := α) fixData)
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=

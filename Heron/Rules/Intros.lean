@@ -37,11 +37,10 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   severity := .warning
   category := .simplification
   detect := fun stx => return (detectIntros stx)
-  hintMessage := fun _ => m!"Merge intros"
-  diagnosticMessage := m!"Merge into single `intro`"
+  shortInstruction := fun _ => m!"Merge intros"
   violationNode := fun fd => fd.secondIntro
   diagnosticTags := #[.unnecessary]
-  explanation := fun fd => m!"Multiple sequential `intro` tactics can be merged into `{fd.replacement}`. This reduces tactic noise and is idiomatic Lean style."
+  longInstruction := fun fd => m!"Multiple sequential `intro` tactics can be merged into `{fd.replacement}`. This reduces tactic noise and is idiomatic Lean style."
   replacements := fun fd => #[{
     sourceNode := fd.secondIntro
     targetNode := fd.fullRange

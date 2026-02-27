@@ -25,7 +25,7 @@ def Refactor.toLinter [Refactor α] : Linter where
     withSetOptionIn fun stx =>
       Transform.runIfEnabled (α := α) stx fun fixData =>
         emitSuggestion
-          (Transform.hintMessage (α := α) fixData)
+          (Transform.shortInstruction (α := α) fixData)
           (Transform.replacements (α := α) fixData)
 
 def Refactor.addLinter [Refactor α] : IO Unit :=
@@ -51,7 +51,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let fixes ← runCommandElabM snap do
       let rawFixes ← Transform.detect (α := α) snap.stx
       rawFixes.mapM fun fd => do
-        let fmt ← liftCoreM (Transform.hintMessage (α := α) fd).format
+        let fmt ← liftCoreM (Transform.shortInstruction (α := α) fd).format
         return FixWithTitle.mk fd fmt.pretty
     let mut actions : Array LazyCodeAction := #[]
     for { fixData, title } in fixes do

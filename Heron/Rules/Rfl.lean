@@ -16,11 +16,10 @@ private def findRflTactics : Syntax → Array Syntax :=
   severity := .information
   category := .style
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
-  hintMessage := fun _ => m!"Use `exact rfl`."
-  diagnosticMessage := m!"Use `exact rfl` instead"
+  shortInstruction := fun _ => m!"Use `exact rfl`"
   violationNode := fun fd => fd.rflStx
   diagnosticTags := #[.unnecessary]
-  explanation := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."
+  longInstruction := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."
   replacements := fun fd => #[{
     sourceNode := fd.rflStx
     targetNode := fd.rflStx
