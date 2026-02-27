@@ -19,6 +19,7 @@ private def findRflTactics : Syntax → Array Syntax :=
   diagnosticMessage := m!"Use `exact rfl` instead"
   violationNode := fun fd => fd.rflStx
   diagnosticTags := #[.unnecessary]
+  explanation := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."
   replacements := fun fd => #[{
     sourceNode := fd.rflStx
     targetNode := fd.rflStx

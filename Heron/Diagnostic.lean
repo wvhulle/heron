@@ -14,13 +14,15 @@ class Diagnostic (α : Type) extends Transform α where
   violationNode : α → Syntax
   /-- LSP diagnostic tags (e.g. unnecessary, deprecated) applied to the violation range. -/
   diagnosticTags : Array Lsp.DiagnosticTag := #[]
+  /-- Detailed explanation shown in hover popup. Receives the violation data for context-specific details. -/
+  explanation : α → MessageData := fun _ => m!""
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (violationNode : Syntax)
     (severity : MessageSeverity)
     (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
-    (diagnosticMsg hintMsg : MessageData) (repls : Array Replacement)
+    (diagnosticMsg hintMsg explanation : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
   let _ ← liftCoreM <|
     MessageData.hint hintMsg (repls.map (·.toSuggestion))
@@ -43,9 +45,20 @@ def emitDiagnostic (violationNode : Syntax)
   }
   let hintFmt ← liftCoreM hintMsg.format
   let edits := (repls.filterMap (·.toTextEdit? fileMap)).map toJson
+  -- Compose hover content: severity icon + diagnostic message + explanation + disable note
+  let severityIcon := match severity with
+    | .error => "❌" | .warning => "⚠" | .information => "ℹ"
+  let diagnosticFmt ← liftCoreM diagnosticMsg.format
+  let explanationFmt ← liftCoreM explanation.format
+  let mut hoverParts := #[s!"{severityIcon} {diagnosticFmt.pretty}"]
+  if !explanationFmt.pretty.isEmpty then
+    hoverParts := hoverParts.push explanationFmt.pretty
+  hoverParts := hoverParts.push s!"Disable with `set_option {optName} false`"
+  let hover := "\n\n".intercalate hoverParts.toList
   let data := Lean.Json.mkObj [
     ("title", .str hintFmt.pretty),
-    ("edits", Json.arr edits)
+    ("edits", Json.arr edits),
+    ("hover", .str hover)
   ]
   let msg := { msg with diagnosticData? := some data.compress }
   logMessage msg
@@ -61,6 +74,7 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
           (Transform.option (α := α)).name
           (Diagnostic.diagnosticMessage (α := α))
           (Transform.hintMessage (α := α) fixData)
+          (Diagnostic.explanation (α := α) fixData)
           (Transform.replacements (α := α) fixData)
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=

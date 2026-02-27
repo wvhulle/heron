@@ -40,6 +40,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   diagnosticMessage := m!"Merge into single `intro`"
   violationNode := fun fd => fd.secondIntro
   diagnosticTags := #[.unnecessary]
+  explanation := fun fd => m!"Multiple sequential `intro` tactics can be merged into `{fd.replacement}`. This reduces tactic noise and is idiomatic Lean style."
   replacements := fun fd => #[{
     sourceNode := fd.secondIntro
     targetNode := fd.fullRange

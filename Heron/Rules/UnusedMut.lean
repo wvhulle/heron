@@ -98,6 +98,7 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
   diagnosticMessage := m!"Remove unused `mut`"
   violationNode := fun fd => fd.mutKeyword
   diagnosticTags := #[.unnecessary]
+  explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
   replacements := fun fd => #[{
     sourceNode := fd.doLetStx
     targetNode := fd.doLetStx

@@ -148,6 +148,7 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
   diagnosticMessage := m!"Remove trivial `Id.run do`"
   violationNode := fun fd => fd.idRunDoSpan
   diagnosticTags := #[.unnecessary]
+  explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
   replacements := fun fd => #[{
     sourceNode := fd.fullStx
     targetNode := fd.fullStx
