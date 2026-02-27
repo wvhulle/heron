@@ -29,3 +29,18 @@ example : Nat :=
 example : String :=
   let a := false
   if !a then "No a" else "Yes a"
+
+-- IdRunTrivial: should warn (trivial Id.run do)
+example : Nat := Id.run do return 42
+
+-- UnusedMut: should warn (x is never reassigned)
+example : Nat := Id.run do
+  let mut x := 5
+  return x + 1
+
+-- No warning: legitimate imperative code
+example : Nat := Id.run do
+  let mut x := 0
+  for _ in [1, 2, 3] do
+    x := x + 1
+  return x

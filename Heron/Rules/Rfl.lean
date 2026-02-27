@@ -16,14 +16,15 @@ private def findRflTactics : Syntax → Array Syntax :=
   severity := .information
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
   hintMessage := fun _ => m!"Use `exact rfl`."
-  diagnosticMessage := m!"Bare `rfl` detected."
+  diagnosticMessage := m!"Use `exact rfl` instead"
+  violationNode := fun fd => fd.rflStx
+  diagnosticTags := #[.unnecessary]
   replacements := fun fd => #[{
     sourceNode := fd.rflStx
     targetNode := fd.rflStx
     insertText := "exact rfl"
     sourceLabel := m!"bare rfl"
   }]
-  diagnosticTags := #[.unnecessary]
 
 namespace Tests
 

@@ -38,7 +38,7 @@ private def verifyReprintedQuotation (quotStx : Syntax) (actual : String) (label
   | some expectedText =>
     if expectedText.trimAscii == actual.trimAscii then return true
     logErrorAt quotStx
-      m!"{label} mismatch for replacement {idx}:\n  expected: {expectedText.trimAscii}\n  actual:   {actual.trimAscii}"
+      m!"{label} mismatch for replacement {idx}:\n  expected: \"{expectedText.trimAscii}\"\n  actual:   \"{actual.trimAscii}\""
     return false
   | none =>
     logWarningAt quotStx m!"could not reprint expected {label} syntax for replacement {idx}"

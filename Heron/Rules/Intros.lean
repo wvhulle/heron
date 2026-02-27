@@ -37,14 +37,15 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
   severity := .warning
   detect := fun stx => return (detectIntros stx)
   hintMessage := fun _ => m!"Merge intros"
-  diagnosticMessage := m!"Sequential intros."
+  diagnosticMessage := m!"Merge into single `intro`"
+  violationNode := fun fd => fd.secondIntro
+  diagnosticTags := #[.unnecessary]
   replacements := fun fd => #[{
     sourceNode := fd.secondIntro
     targetNode := fd.fullRange
     insertText := fd.replacement
     sourceLabel := m!"sequential intro"
   }]
-  diagnosticTags := #[.unnecessary]
 
 namespace Tests
 

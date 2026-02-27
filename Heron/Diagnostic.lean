@@ -10,21 +10,22 @@ class Diagnostic (α : Type) extends Transform α where
   diagnosticMessage : MessageData
   /-- Diagnostic severity. -/
   severity : MessageSeverity
-  /-- LSP diagnostic tags (e.g. unnecessary, deprecated). -/
+  /-- Syntax node whose range is underlined in the diagnostic. -/
+  violationNode : α → Syntax
+  /-- LSP diagnostic tags (e.g. unnecessary, deprecated) applied to the violation range. -/
   diagnosticTags : Array Lsp.DiagnosticTag := #[]
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
-def emitDiagnostic (sourceNode : Syntax)
-    (severity : MessageSeverity) (diagnosticTags : Array Lsp.DiagnosticTag)
+def emitDiagnostic (violationNode : Syntax)
+    (severity : MessageSeverity)
+    (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
     (diagnosticMsg hintMsg : MessageData) (repls : Array Replacement)
     : CommandElabM Unit := do
-  let hint ← liftCoreM <|
+  let _ ← liftCoreM <|
     MessageData.hint hintMsg (repls.map (·.toSuggestion))
-  let disable := MessageData.note m!"This linter can be disabled with `set_option {optName} false`"
-  let taggedMsg := MessageData.tagged optName
-    m!"{diagnosticMsg ++ hint}{disable}"
-  let ref := replaceRef sourceNode (← MonadLog.getRef)
+  let taggedMsg := MessageData.tagged optName diagnosticMsg
+  let ref := replaceRef violationNode (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
@@ -54,15 +55,13 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
   run :=
     withSetOptionIn fun stx =>
       Transform.runIfEnabled (α := α) stx fun fixData => do
-        let repls := Transform.replacements (α := α) fixData
-        let some first := repls[0]? | return
-        emitDiagnostic first.sourceNode
+        emitDiagnostic (Diagnostic.violationNode (α := α) fixData)
           (Diagnostic.severity (α := α))
           (Diagnostic.diagnosticTags (α := α))
           (Transform.option (α := α)).name
           (Diagnostic.diagnosticMessage (α := α))
           (Transform.hintMessage (α := α) fixData)
-          repls
+          (Transform.replacements (α := α) fixData)
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=
   let name := Transform.ruleName (α := α)
