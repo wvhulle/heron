@@ -14,6 +14,7 @@ private def findRflTactics : Syntax → Array Syntax :=
 @[diagnostic_rule] instance : Diagnostic RflFixData where
   ruleName := `testRfl
   severity := .information
+  category := .style
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
   hintMessage := fun _ => m!"Use `exact rfl`."
   diagnosticMessage := m!"Use `exact rfl` instead"

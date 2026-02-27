@@ -143,6 +143,7 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
 @[diagnostic_rule] instance : Diagnostic IdRunTrivialData where
   ruleName := `idRunTrivial
   severity := .warning
+  category := .simplification
   detect := fun stx => return findIdRunTrivial stx
   hintMessage := fun _ => m!"Remove unnecessary `Id.run do`"
   diagnosticMessage := m!"Remove trivial `Id.run do`"

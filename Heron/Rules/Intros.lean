@@ -35,6 +35,7 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
 @[diagnostic_rule] instance : Diagnostic IntrosFixData where
   ruleName := `testIntros
   severity := .warning
+  category := .simplification
   detect := fun stx => return (detectIntros stx)
   hintMessage := fun _ => m!"Merge intros"
   diagnosticMessage := m!"Merge into single `intro`"

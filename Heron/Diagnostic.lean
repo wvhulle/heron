@@ -5,11 +5,28 @@ open Lean Elab Command Meta
 
 namespace Heron
 
+/-- Category classifying the kind of violation a diagnostic reports. -/
+inductive Category where
+  | style
+  | simplification
+  | performance
+  | correctness
+  deriving Inhabited, BEq
+
+instance : ToString Category where
+  toString
+    | .style => "style"
+    | .simplification => "simplification"
+    | .performance => "performance"
+    | .correctness => "correctness"
+
 class Diagnostic (α : Type) extends Transform α where
   /-- Main diagnostic message shown as the linter warning. -/
   diagnosticMessage : MessageData
   /-- Diagnostic severity. -/
   severity : MessageSeverity
+  /-- What kind of violation this rule detects. -/
+  category : Category
   /-- Syntax node whose range is underlined in the diagnostic. -/
   violationNode : α → Syntax
   /-- LSP diagnostic tags (e.g. unnecessary, deprecated) applied to the violation range. -/
@@ -20,6 +37,7 @@ class Diagnostic (α : Type) extends Transform α where
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (violationNode : Syntax)
     (severity : MessageSeverity)
+    (category : Category)
     (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
     (diagnosticMsg hintMsg explanation : MessageData) (repls : Array Replacement)
@@ -45,20 +63,19 @@ def emitDiagnostic (violationNode : Syntax)
   }
   let hintFmt ← liftCoreM hintMsg.format
   let edits := (repls.filterMap (·.toTextEdit? fileMap)).map toJson
-  -- Compose hover content: severity icon + diagnostic message + explanation + disable note
-  let severityIcon := match severity with
-    | .error => "❌" | .warning => "⚠" | .information => "ℹ"
+  -- Structured hover data
   let diagnosticFmt ← liftCoreM diagnosticMsg.format
   let explanationFmt ← liftCoreM explanation.format
-  let mut hoverParts := #[s!"{severityIcon} {diagnosticFmt.pretty}"]
+  let mut bodyParts : Array String := #[]
   if !explanationFmt.pretty.isEmpty then
-    hoverParts := hoverParts.push explanationFmt.pretty
-  hoverParts := hoverParts.push s!"Disable with `set_option {optName} false`"
-  let hover := "\n\n".intercalate hoverParts.toList
+    bodyParts := bodyParts.push explanationFmt.pretty
+  bodyParts := bodyParts.push s!"Disable with `set_option {optName} false`"
   let data := Lean.Json.mkObj [
     ("title", .str hintFmt.pretty),
     ("edits", Json.arr edits),
-    ("hover", .str hover)
+    ("hoverTitle", .str diagnosticFmt.pretty),
+    ("hoverTags", Json.arr #[toJson (toString category)]),
+    ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))
   ]
   let msg := { msg with diagnosticData? := some data.compress }
   logMessage msg
@@ -70,6 +87,7 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
       Transform.runIfEnabled (α := α) stx fun fixData => do
         emitDiagnostic (Diagnostic.violationNode (α := α) fixData)
           (Diagnostic.severity (α := α))
+          (Diagnostic.category (α := α))
           (Diagnostic.diagnosticTags (α := α))
           (Transform.option (α := α)).name
           (Diagnostic.diagnosticMessage (α := α))

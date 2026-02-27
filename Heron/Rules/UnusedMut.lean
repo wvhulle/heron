@@ -93,6 +93,7 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
 @[diagnostic_rule] instance : Diagnostic UnusedMutData where
   ruleName := `unusedMut
   severity := .warning
+  category := .simplification
   detect := fun stx => return findUnusedMuts stx
   hintMessage := fun _ => m!"Remove unnecessary `mut`"
   diagnosticMessage := m!"Remove unused `mut`"
