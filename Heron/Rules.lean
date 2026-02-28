@@ -3,6 +3,10 @@ import Heron.Check.Rfl
 import Heron.Check.Intros
 import Heron.Check.IdRunTrivial
 import Heron.Check.UnusedMut
+import Heron.Check.BoolMatch
+import Heron.Check.OrPattern
+import Heron.Check.SharedBinder
 -- Refactors
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
+import Heron.Refactor.BindToDo

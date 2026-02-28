@@ -69,6 +69,7 @@ def emitCheck (node : Syntax)
   }
   let shortFmt ← liftCoreM message.format
   let edits := Json.arr ((repls.filterMap (·.toTextEdit? fileMap)).map toJson)
+  trace[heron] "  emitting {severity} at {fileMap.toPosition pos}: {repls.size} replacement(s)"
   -- Structured hover data
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]

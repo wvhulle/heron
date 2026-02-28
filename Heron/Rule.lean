@@ -113,6 +113,9 @@ initialize
     name := `heron
   }
 
+initialize
+  registerTraceClass `heron (inherited := true)
+
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
 def isReelaborating (opts : Options) : Bool :=
   heronReelaborating.get opts
@@ -123,7 +126,9 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax)
     (handle : α → CommandElabM Unit) : CommandElabM Unit := do
   unless Rule.isEnabled (α := α) (← getOptions) do return
   if isReelaborating (← getOptions) then return
-  for m in ← Rule.detect (α := α) stx do
+  let results ← Rule.detect (α := α) stx
+  trace[heron] "{Rule.ruleName (α := α)}: {results.size} match(es)"
+  for m in results do
     handle m
 
 /-- Re-elaborate a command collecting info trees.

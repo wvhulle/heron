@@ -44,3 +44,17 @@ example : Nat := Id.run do
   for _ in [1, 2, 3] do
     x := x + 1
   return x
+
+-- BoolMatch: should warn (match on true/false)
+def boolToNat (b : Bool) : Nat := match b with | true => 1 | false => 0
+
+-- OrPattern: should inform (duplicate RHS)
+def orPatternDemo (x : Bool) : Nat := match x with
+  | true => 42
+  | false => 42
+
+-- SharedBinder: should inform (same type)
+def addNats (x : Nat) (y : Nat) := x + y
+
+-- BindToDo: refactor available (>>= to do)
+def bindDemo := Option.some 1 >>= fun x => Option.some (x + 1)
