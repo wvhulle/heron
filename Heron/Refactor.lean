@@ -33,6 +33,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
       let kind := Refactor.codeActionKind (α := α)
       let title := (← (Rule.message (α := α) m).format).pretty
       let textEdits := repls.filterMap (·.toTextEdit? text)
+      if textEdits.isEmpty then continue
       actions := actions.push {
         eager := { title, kind? := kind }
         lazy? := some (pure {

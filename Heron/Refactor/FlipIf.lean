@@ -18,9 +18,6 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
       | _ => #[]
     | _ => #[]
 
-private def reprintTrimmed (stx : Syntax) : String :=
-  (stx.reprint.getD "").trimAscii.toString
-
 @[refactor_rule] instance : Refactor FlipIfMatch where
   ruleName := `flipIf
   detect := fun stx => return findFlipIfCandidates stx
@@ -28,15 +25,15 @@ private def reprintTrimmed (stx : Syntax) : String :=
   replacements := fun m => #[
     { sourceNode := m.negCondStx
       targetNode := m.negCondStx
-      insertText := reprintTrimmed m.innerCond
+      insertText := .ofSyntax m.innerCond
       sourceLabel := m!"remove negation" },
     { sourceNode := m.thenBranch
       targetNode := m.thenBranch
-      insertText := reprintTrimmed m.elseBranch
+      insertText := .ofSyntax m.elseBranch
       sourceLabel := m!"swap branches" },
     { sourceNode := m.elseBranch
       targetNode := m.elseBranch
-      insertText := reprintTrimmed m.thenBranch
+      insertText := .ofSyntax m.thenBranch
       sourceLabel := m!"swap branches" }
   ]
   codeActionKind := "refactor.rewrite"

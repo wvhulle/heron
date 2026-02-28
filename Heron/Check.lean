@@ -68,7 +68,7 @@ def emitCheck (node : Syntax)
     diagnosticTags := tags
   }
   let shortFmt ← liftCoreM message.format
-  let edits := Replacement.toEditsJson repls fileMap
+  let edits := Json.arr ((repls.filterMap (·.toTextEdit? fileMap)).map toJson)
   -- Structured hover data
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]

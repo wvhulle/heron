@@ -12,25 +12,41 @@ partial def Lean.Syntax.collectAll (f : Syntax → Array α) (stx : Syntax) : Ar
 
 namespace Heron
 
+/-- The text to insert for a replacement: either extracted from a syntax node's
+source range, or a literal string for computed replacements. -/
+inductive InsertText where
+  /-- Extract source text from this syntax node's range in the file. -/
+  | ofSyntax (stx : Syntax)
+  /-- Use this literal string. -/
+  | ofString (s : String)
+
+/-- Resolve the insert text against a file map. -/
+def InsertText.resolve (t : InsertText) (fileMap : FileMap) : Option String :=
+  match t with
+  | .ofSyntax stx => do
+    let range ← stx.getRange?
+    return String.Pos.Raw.extract fileMap.source range.start range.stop
+  | .ofString s => some s
+
+instance : Coe String InsertText := ⟨.ofString⟩
+instance : Coe Syntax InsertText := ⟨.ofSyntax⟩
+
 /-- A single text replacement with associated source annotation. -/
 structure Replacement where
   /-- Syntax node to underline in the diagnostic or anchor the code action. -/
   sourceNode : Syntax
-  /-- Syntax node whose range is replaced by `insertText`. -/
+  /-- Syntax node whose range is replaced. -/
   targetNode : Syntax
-  /-- Text inserted in place of `targetNode`. -/
-  insertText : String
+  /-- Text to insert in place of `targetNode`. -/
+  insertText : InsertText
   /-- Inline label shown below the span in editors. -/
   sourceLabel : MessageData
 
-/-- Convert to an LSP `TextEdit`, if the target node has a source range. -/
+/-- Convert a single replacement to an LSP `TextEdit`. -/
 def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.TextEdit := do
   let range ← r.targetNode.getRange?
-  return { range := fileMap.utf8RangeToLspRange range, newText := r.insertText }
-
-/-- Convert replacements to a JSON array of LSP `TextEdit`s. -/
-def Replacement.toEditsJson (repls : Array Replacement) (fileMap : FileMap) : Json :=
-  Json.arr ((repls.filterMap (·.toTextEdit? fileMap)).map toJson)
+  let text ← r.insertText.resolve fileMap
+  return { range := fileMap.utf8RangeToLspRange range, newText := text }
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
