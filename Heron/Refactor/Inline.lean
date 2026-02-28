@@ -13,7 +13,7 @@ private inductive InlineKind where
   | const (name : Name)
   | letBinding
 
-private structure InlineFixData where
+private structure InlineMatch where
   stx : Syntax
   newText : String
   kind : InlineKind
@@ -27,37 +27,37 @@ private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
       | none => false
   | none => false
 
-private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineFixData) := do
+private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineMatch) := do
   let trees ← collectInfoTrees stx
   let env ← getEnv
   let infos := trees.flatMap collectTermInfos
   let declRange? := getDeclIdRange? stx
-  let mut fixes : Array InlineFixData := #[]
+  let mut results : Array InlineMatch := #[]
   let constCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   for (ci, ti) in deduplicateTermInfos constCandidates do
     if let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) then
       if let some text ← ppExprFix? ci ti.lctx expanded then
         let name := ti.expr.getAppFn.constName?.getD `unknown
-        fixes := fixes.push { stx := ti.stx, newText := text, kind := .const name }
+        results := results.push { stx := ti.stx, newText := text, kind := .const name }
   for (ci, ti) in infos do
     if let .letE _ _ value body _ := ti.expr then
       if let some text ← ppExprFix? ci ti.lctx (body.instantiate1 value) then
-        fixes := fixes.push { stx := ti.stx, newText := text, kind := .letBinding }
-  return fixes
+        results := results.push { stx := ti.stx, newText := text, kind := .letBinding }
+  return results
 
 private def inlineLabel : InlineKind → MessageData
   | .const name => m!"Inline '{name}'"
   | .letBinding => m!"Inline let binding"
 
-@[refactor_rule] instance : Refactor InlineFixData where
+@[refactor_rule] instance : Refactor InlineMatch where
   ruleName := `inline
   detect := detectInlineOpportunities
-  shortInstruction := fun fd => inlineLabel fd.kind
-  replacements := fun fd => #[{
-    sourceNode := fd.stx
-    targetNode := fd.stx
-    insertText := fd.newText
-    sourceLabel := inlineLabel fd.kind
+  message := fun m => inlineLabel m.kind
+  replacements := fun m => #[{
+    sourceNode := m.stx
+    targetNode := m.stx
+    insertText := m.newText
+    sourceLabel := inlineLabel m.kind
   }]
   codeActionKind := "refactor.inline"
 

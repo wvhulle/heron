@@ -1,4 +1,4 @@
-import Heron.Diagnostic
+import Heron.Check
 import Heron.Assert
 
 open Lean Elab Command Heron
@@ -9,7 +9,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
-private structure IntrosFixData where
+private structure IntrosMatch where
   secondIntro : Syntax
   fullRange : Syntax
   replacement : String
@@ -22,7 +22,7 @@ private def introIdents : Syntax → Array Syntax :=
   Syntax.collectAll fun stx =>
     if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
 
-private def detectIntros (stx : Syntax) : Array IntrosFixData :=
+private def detectIntros (stx : Syntax) : Array IntrosMatch :=
   let intros := collectIntroTactics stx
   if intros.size ≤ 1 then #[]
   else
@@ -32,19 +32,19 @@ private def detectIntros (stx : Syntax) : Array IntrosFixData :=
     | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
     | none => #[]
 
-@[diagnostic_rule] instance : Diagnostic IntrosFixData where
+@[check_rule] instance : Check IntrosMatch where
   ruleName := `testIntros
   severity := .warning
   category := .simplification
   detect := fun stx => return (detectIntros stx)
-  shortInstruction := fun _ => m!"Merge intros"
-  violationNode := fun fd => fd.secondIntro
-  diagnosticTags := #[.unnecessary]
-  longInstruction := fun fd => m!"Multiple sequential `intro` tactics can be merged into `{fd.replacement}`. This reduces tactic noise and is idiomatic Lean style."
-  replacements := fun fd => #[{
-    sourceNode := fd.secondIntro
-    targetNode := fd.fullRange
-    insertText := fd.replacement
+  message := fun _ => m!"Merge intros"
+  node := fun m => m.secondIntro
+  tags := #[.unnecessary]
+  explanation := fun m => m!"Multiple sequential `intro` tactics can be merged into `{m.replacement}`. This reduces tactic noise and is idiomatic Lean style."
+  replacements := fun m => #[{
+    sourceNode := m.secondIntro
+    targetNode := m.fullRange
+    insertText := m.replacement
     sourceLabel := m!"sequential intro"
   }]
 
@@ -56,7 +56,7 @@ example (a b : Nat) : a = a := rfl
 #assertIgnore testIntros in
 example : Nat → Nat → True := by intro a; exact trivial
 
-#assertFix testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
+#assertCheck testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
 
 end Tests

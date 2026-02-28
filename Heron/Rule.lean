@@ -33,13 +33,13 @@ def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.T
   let range ← r.targetNode.getRange?
   return { range := fileMap.utf8RangeToLspRange range, newText := r.insertText }
 
-class Transform (α : Type) where
+class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   ruleName : Name
-  /-- Detect violations, returning typed fix data. -/
+  /-- Detect matches, returning typed match data. -/
   detect : Syntax → CommandElabM (Array α)
-  /-- Short instruction shown as the diagnostic message and suggestion widget hint. -/
-  shortInstruction : α → MessageData
+  /-- Message shown as the diagnostic message and suggestion widget hint. -/
+  message : α → MessageData
   /-- Per-edit replacement data. -/
   replacements : α → Array Replacement
 
@@ -54,22 +54,22 @@ initialize
     name := `linter
   }
 
-def Transform.option [Transform α] : Lean.Option Bool :=
-  { name := `linter ++ Transform.ruleName (α := α), defValue := false }
+def Rule.option [Rule α] : Lean.Option Bool :=
+  { name := `linter ++ Rule.ruleName (α := α), defValue := false }
 
 /-- Check whether this rule is enabled, either individually or via `linter.heron`.
 An explicit `set_option linter.<rule> false` overrides `linter.heron true`. -/
-def Transform.isEnabled [Transform α] (opts : Options) : Bool :=
-  let ruleOpt := `linter ++ Transform.ruleName (α := α)
+def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
+  let ruleOpt := `linter ++ Rule.ruleName (α := α)
   if opts.contains ruleOpt then
-    (Transform.option (α := α)).get opts
+    (Rule.option (α := α)).get opts
   else
     heronAllOption.get opts
 
-def Transform.initOption [Transform α] : IO Unit :=
-  Lean.registerOption (`linter ++ Transform.ruleName (α := α))
+def Rule.initOption [Rule α] : IO Unit :=
+  Lean.registerOption (`linter ++ Rule.ruleName (α := α))
     { defValue := .ofBool false
-      descr := s! "Enable the {Transform.ruleName (α := α)} linter rule."
+      descr := s! "Enable the {Rule.ruleName (α := α)} linter rule."
       name := `linter }
 
 /-- Internal option to prevent recursive linter invocation during re-elaboration. -/
@@ -87,14 +87,14 @@ initialize
 def isReelaborating (opts : Options) : Bool :=
   heronReelaborating.get opts
 
-/-- Run a transform rule if enabled and not re-elaborating, calling `handle`
-for each detected violation. -/
-def Transform.runIfEnabled [Transform α] (stx : Syntax)
+/-- Run a rule if enabled and not re-elaborating, calling `handle`
+for each detected match. -/
+def Rule.runIfEnabled [Rule α] (stx : Syntax)
     (handle : α → CommandElabM Unit) : CommandElabM Unit := do
-  unless Transform.isEnabled (α := α) (← getOptions) do return
+  unless Rule.isEnabled (α := α) (← getOptions) do return
   if isReelaborating (← getOptions) then return
-  for fixData in ← Transform.detect (α := α) stx do
-    handle fixData
+  for m in ← Rule.detect (α := α) stx do
+    handle m
 
 /-- Re-elaborate a command collecting info trees.
 

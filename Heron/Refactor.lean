@@ -1,4 +1,4 @@
-import Heron.Transform
+import Heron.Rule
 import Lean.Server.CodeActions.Basic
 
 open Lean Elab Command Meta
@@ -6,7 +6,7 @@ open Lean Elab Command Meta
 namespace Heron
 
 open Server Lsp in
-class Refactor (α : Type) extends Transform α where
+class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
 /-- Push a suggestion to the info tree without emitting a diagnostic.
@@ -20,25 +20,25 @@ def emitSuggestion (hintMsg : MessageData) (repls : Array Replacement)
     MessageData.hint hintMsg (repls.map (·.toSuggestion)) (ref? := some anchor)
 
 def Refactor.toLinter [Refactor α] : Linter where
-  name := Transform.ruleName (α := α)
+  name := Rule.ruleName (α := α)
   run :=
     withSetOptionIn fun stx =>
-      Transform.runIfEnabled (α := α) stx fun fixData =>
+      Rule.runIfEnabled (α := α) stx fun m =>
         emitSuggestion
-          (Transform.shortInstruction (α := α) fixData)
-          (Transform.replacements (α := α) fixData)
+          (Rule.message (α := α) m)
+          (Rule.replacements (α := α) m)
 
 def Refactor.addLinter [Refactor α] : IO Unit :=
-  let name := Transform.ruleName (α := α)
+  let name := Rule.ruleName (α := α)
   lintersRef.modify fun linters =>
     (linters.filter (·.name != name)).push (Refactor.toLinter (α := α))
 
 def Refactor.register [Refactor α] : IO Unit := do
-  Transform.initOption (α := α)
+  Rule.initOption (α := α)
   Refactor.addLinter (α := α)
 
-private structure FixWithTitle (α : Type) where
-  fixData : α
+private structure MatchWithTitle (α : Type) where
+  matchData : α
   title : String
 
 open Server RequestM Lsp in
@@ -48,14 +48,14 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let text := doc.meta.text
     let startPos := text.lspPosToUtf8Pos params.range.start
     let endPos := text.lspPosToUtf8Pos params.range.end
-    let fixes ← runCommandElabM snap do
-      let rawFixes ← Transform.detect (α := α) snap.stx
-      rawFixes.mapM fun fd => do
-        let fmt ← liftCoreM (Transform.shortInstruction (α := α) fd).format
-        return FixWithTitle.mk fd fmt.pretty
+    let results ← runCommandElabM snap do
+      let rawResults ← Rule.detect (α := α) snap.stx
+      rawResults.mapM fun m => do
+        let fmt ← liftCoreM (Rule.message (α := α) m).format
+        return MatchWithTitle.mk m fmt.pretty
     let mut actions : Array LazyCodeAction := #[]
-    for { fixData, title } in fixes do
-      let repls := Transform.replacements (α := α) fixData
+    for { matchData, title } in results do
+      let repls := Rule.replacements (α := α) matchData
       unless repls.any (fun r => match r.sourceNode.getRange? with
         | some range => range.start ≤ endPos && startPos ≤ range.stop
         | none => false) do continue

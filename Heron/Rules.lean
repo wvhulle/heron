@@ -1,6 +1,8 @@
-import Heron.Rules.Rfl
-import Heron.Rules.Intros
-import Heron.Rules.Inline
-import Heron.Rules.FlipIf
-import Heron.Rules.IdRunTrivial
-import Heron.Rules.UnusedMut
+-- Checks
+import Heron.Check.Rfl
+import Heron.Check.Intros
+import Heron.Check.IdRunTrivial
+import Heron.Check.UnusedMut
+-- Refactors
+import Heron.Refactor.FlipIf
+import Heron.Refactor.Inline

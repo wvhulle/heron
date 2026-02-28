@@ -109,14 +109,14 @@ private def elabAssertReplacements (linterName : Ident)
     verifyReplacementPair text edit pairStx (idx + 1)
   unless results.all (·) do return
 
-syntax (name := assertFixCmd)
-  "#assertFix " ident sepBy1(replacementPair, ", ") " in " command : command
+syntax (name := assertCheckCmd)
+  "#assertCheck " ident sepBy1(replacementPair, ", ") " in " command : command
 
 syntax (name := assertRefactorCmd)
   "#assertRefactor " ident sepBy1(replacementPair, ", ") " in " command : command
 
-@[command_elab assertFixCmd] def elabAssertFix : CommandElab
-  | stx@`(command| #assertFix $linterName $pairs,* in $cmd) =>
+@[command_elab assertCheckCmd] def elabAssertCheck : CommandElab
+  | stx@`(command| #assertCheck $linterName $pairs,* in $cmd) =>
     elabAssertReplacements linterName pairs.getElems cmd stx
   | _ => throwUnsupportedSyntax
 

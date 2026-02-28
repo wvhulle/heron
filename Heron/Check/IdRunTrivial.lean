@@ -1,4 +1,4 @@
-import Heron.Diagnostic
+import Heron.Check
 import Heron.Assert
 
 open Lean Elab Command Parser Term Heron
@@ -123,12 +123,12 @@ private def buildReplacement (elems : Array Syntax) : Option String :=
           let parts := (inits.map reprintTrimmed).push (reprintTrimmed finalExpr)
           some (parts.toList |> "\n".intercalate)
 
-private structure IdRunTrivialData where
+private structure IdRunTrivialMatch where
   fullStx : Syntax
   idRunDoSpan : Syntax
   replacement : String
 
-private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
+private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
   Syntax.collectAll fun stx =>
     match isIdRunDo? stx with
     | some (fullStx, idRunDoSpan, doSeq) =>
@@ -140,32 +140,32 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
       else #[]
     | none => #[]
 
-@[diagnostic_rule] instance : Diagnostic IdRunTrivialData where
+@[check_rule] instance : Check IdRunTrivialMatch where
   ruleName := `idRunTrivial
   severity := .warning
   category := .simplification
   detect := fun stx => return findIdRunTrivial stx
-  shortInstruction := fun _ => m!"Remove unnecessary `Id.run do`"
-  violationNode := fun fd => fd.idRunDoSpan
-  officialReference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
-  diagnosticTags := #[.unnecessary]
-  longInstruction := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
-  replacements := fun fd => #[{
-    sourceNode := fd.fullStx
-    targetNode := fd.fullStx
-    insertText := fd.replacement
+  message := fun _ => m!"Remove unnecessary `Id.run do`"
+  node := fun m => m.idRunDoSpan
+  reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
+  tags := #[.unnecessary]
+  explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
+  replacements := fun m => #[{
+    sourceNode := m.fullStx
+    targetNode := m.fullStx
+    insertText := m.replacement
     sourceLabel := m!"unnecessary Id.run do"
   }]
 
 namespace Tests
 
 -- Simple return
-#assertFix idRunTrivial
+#assertCheck idRunTrivial
   `(term| Id.run do return 42) => `(term| 42) in
 example : Nat := Id.run do return 42
 
 -- Let + return same variable collapses
-#assertFix idRunTrivial
+#assertCheck idRunTrivial
   `(term| Id.run do
   let x := 5
   return x) => `(term| 5) in

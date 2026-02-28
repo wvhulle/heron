@@ -1,4 +1,4 @@
-import Heron.Diagnostic
+import Heron.Check
 import Heron.Assert
 
 open Lean Elab Command Parser Heron
@@ -61,13 +61,13 @@ private partial def collectReassignedVars (elems : Array Syntax) : Std.HashSet N
         collectReassignedVars (getDoElems child) |>.fold (init := acc) fun acc n => acc.insert n
       ) acc
 
-private structure UnusedMutData where
+private structure UnusedMutMatch where
   doLetStx : Syntax
   mutKeyword : Syntax
   replacement : String
 
 /-- Find `let mut x := e` where x is never reassigned in the subsequent do-elements. -/
-private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
+private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
   -- Find all do blocks first
   let doSeqs := Syntax.collectAll (fun s =>
     if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
@@ -90,27 +90,27 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
         | none => none
       else none
 
-@[diagnostic_rule] instance : Diagnostic UnusedMutData where
+@[check_rule] instance : Check UnusedMutMatch where
   ruleName := `unusedMut
   severity := .warning
   category := .simplification
   detect := fun stx => return findUnusedMuts stx
-  shortInstruction := fun _ => m!"Remove unnecessary `mut`"
-  violationNode := fun fd => fd.mutKeyword
-  officialReference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
-  diagnosticTags := #[.unnecessary]
-  longInstruction := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
-  replacements := fun fd => #[{
-    sourceNode := fd.doLetStx
-    targetNode := fd.doLetStx
-    insertText := fd.replacement
+  message := fun _ => m!"Remove unnecessary `mut`"
+  node := fun m => m.mutKeyword
+  reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
+  tags := #[.unnecessary]
+  explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
+  replacements := fun m => #[{
+    sourceNode := m.doLetStx
+    targetNode := m.doLetStx
+    insertText := m.replacement
     sourceLabel := m!"unused mut"
   }]
 
 namespace Tests
 
 -- Unused mut: x is never reassigned
-#assertFix unusedMut
+#assertCheck unusedMut
   `(doElem| let mut x := 5) => `(doElem| let x := 5) in
 example : Nat := Id.run do
   let mut x := 5
