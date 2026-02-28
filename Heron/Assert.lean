@@ -29,7 +29,7 @@ def collectReplacements (cmd : Syntax) (linterName : Name)
       elabCommandSilently cmd
       let edits ← runner cmd
       modify fun s => { s with messages := savedMessages }
-      return edits
+      pure edits
 
 /-- Apply an array of non-overlapping LSP `TextEdit`s to a source string.
 

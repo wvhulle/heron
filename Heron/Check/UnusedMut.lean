@@ -3,19 +3,6 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-/-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
-private def reprintTrimmed (stx : Syntax) : String :=
-  (stx.updateTrailing "".toRawSubstring |>.reprint.getD "").trimAscii.toString
-
-/-- Extract doElem array from a doSeq node. -/
-private def getDoElems (doSeq : Syntax) : Array Syntax :=
-  if doSeq.getKind == ``Term.doSeqBracketed then
-    doSeq[1]!.getArgs.map (·[0]!)
-  else if doSeq.getKind == ``Term.doSeqIndent then
-    doSeq[0]!.getArgs.map (·[0]!)
-  else
-    #[]
-
 /-- Get the variable name from a doLet's letIdDecl. -/
 private def getDoLetVarName? (doLet : Syntax) : Option Name :=
   if doLet.getKind == ``Term.doLet then
@@ -94,7 +81,7 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
   ruleName := `unusedMut
   severity := .warning
   category := .simplification
-  detect := fun stx => return findUnusedMuts stx
+  pureDetect := findUnusedMuts
   message := fun _ => m!"Remove unnecessary `mut`"
   node := fun m => m.mutKeyword
   reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }

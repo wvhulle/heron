@@ -31,6 +31,19 @@ def InsertText.resolve (t : InsertText) (fileMap : FileMap) : Option String :=
 instance : Coe String InsertText := ⟨.ofString⟩
 instance : Coe Syntax InsertText := ⟨.ofSyntax⟩
 
+/-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
+def reprintTrimmed (stx : Syntax) : String :=
+  (stx.updateTrailing "".toRawSubstring |>.reprint.getD "").trimAscii.toString
+
+/-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
+def getDoElems (doSeq : Syntax) : Array Syntax :=
+  if doSeq.getKind == ``Parser.Term.doSeqBracketed then
+    doSeq[1]!.getArgs.map (·[0]!)
+  else if doSeq.getKind == ``Parser.Term.doSeqIndent then
+    doSeq[0]!.getArgs.map (·[0]!)
+  else
+    #[]
+
 /-- A single text replacement with associated source annotation. -/
 structure Replacement where
   /-- Syntax node to underline in the diagnostic or anchor the code action. -/
@@ -51,8 +64,10 @@ def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.T
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   ruleName : Name
-  /-- Detect matches, returning typed match data. -/
-  detect : Syntax → CommandElabM (Array α)
+  /-- Pure detection — set this for rules that don't need `CommandElabM`. -/
+  pureDetect : Syntax → Array α := fun _ => #[]
+  /-- Detect matches, returning typed match data. Defaults to wrapping `pureDetect`. -/
+  detect : Syntax → CommandElabM (Array α) := fun stx => pure (pureDetect stx)
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
   /-- Per-edit replacement data. -/
@@ -133,7 +148,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let trees := (← getInfoState).trees.toArray
   setInfoState savedInfoState
   modify fun s => { s with messages := savedMessages }
-  return trees
+  pure trees
 
 /-- Get existing info trees when available (LSP code action requests),
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
@@ -142,7 +157,7 @@ def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   if existing.isEmpty then
     collectElabInfoTrees stx
   else
-    return existing.toArray
+    pure existing.toArray
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
 def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
@@ -175,7 +190,7 @@ def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (Cont
 def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
   match ← (ci.runMetaM lctx x).toBaseIO with
   | .ok a =>
-    return a
+    pure a
   | .error e =>
     throwError "{e}"
 
@@ -218,8 +233,8 @@ def Rule.registerRunner [Rule α] : IO Unit :=
     map.insert (Rule.ruleName (α := α)) fun stx => do
       let fileMap ← getFileMap
       let results ← Rule.detect (α := α) stx
-      return results.flatMap fun m =>
-        (Rule.replacements (α := α) m).filterMap (·.toTextEdit? fileMap)
+      pure (results.flatMap fun m =>
+        (Rule.replacements (α := α) m).filterMap (·.toTextEdit? fileMap))
 
 /-- Shared logic for `@[check_rule]` and `@[refactor_rule]` attribute handlers.
 

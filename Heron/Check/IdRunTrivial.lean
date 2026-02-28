@@ -3,10 +3,6 @@ import Heron.Assert
 
 open Lean Elab Command Parser Term Heron
 
-/-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
-private def reprintTrimmed (stx : Syntax) : String :=
-  (stx.updateTrailing "".toRawSubstring |>.reprint.getD "").trimAscii.toString
-
 /-- Match `Id.run do <doSeq>`, returning `(fullAppStx, idRunDoSpan, doSeqNode)`. -/
 private def isIdRunDo? : Syntax → Option (Syntax × Syntax × Syntax)
   | stx@`($fn $arg) =>
@@ -22,15 +18,6 @@ private def isIdRunDo? : Syntax → Option (Syntax × Syntax × Syntax)
       else none
     else none
   | _ => none
-
-/-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
-private def getDoElems (doSeq : Syntax) : Array Syntax :=
-  if doSeq.getKind == ``doSeqBracketed then
-    doSeq[1]!.getArgs.map (·[0]!)
-  else if doSeq.getKind == ``doSeqIndent then
-    doSeq[0]!.getArgs.map (·[0]!)
-  else
-    #[]
 
 /-- Check if a doElem is an imperative construct. -/
 private def isImperative (elem : Syntax) : Bool :=
@@ -89,39 +76,24 @@ private def getReturnExpr? (elem : Syntax) : Option Syntax :=
   else none
 
 /-- Build the replacement text for a pure do sequence. -/
-private def buildReplacement (elems : Array Syntax) : Option String :=
-  if elems.isEmpty then none
-  else
-    let last := elems.back!
-    let finalExpr? :=
-      if last.getKind == ``doReturn then getReturnExpr? last
-      else if last.getKind == ``doExpr then some last[0]!
-      else none
-    match finalExpr? with
-    | none => none
-    | some finalExpr =>
-      let inits := elems.pop
-      if inits.isEmpty then
-        some (reprintTrimmed finalExpr)
-      else
-        -- Try to collapse trailing `let x := rhs; return x` → `rhs`
-        let lastInit := inits.back!
-        match getLetVarName? lastInit with
-        | some varName =>
-          if finalExpr.isIdent && finalExpr.getId == varName then
-            match getLetRhs? lastInit with
-            | some rhs =>
-              let parts := (inits.pop.map reprintTrimmed).push (reprintTrimmed rhs)
-              some (parts.toList |> "\n".intercalate)
-            | none =>
-              let parts := (inits.map reprintTrimmed).push (reprintTrimmed finalExpr)
-              some (parts.toList |> "\n".intercalate)
-          else
-            let parts := (inits.map reprintTrimmed).push (reprintTrimmed finalExpr)
-            some (parts.toList |> "\n".intercalate)
-        | none =>
-          let parts := (inits.map reprintTrimmed).push (reprintTrimmed finalExpr)
-          some (parts.toList |> "\n".intercalate)
+private def buildReplacement (elems : Array Syntax) : Option String := do
+  guard !elems.isEmpty
+  let last := elems.back!
+  let finalExpr ←
+    if last.getKind == ``doReturn then getReturnExpr? last
+    else if last.getKind == ``doExpr then some last[0]!
+    else none
+  let inits := elems.pop
+  if inits.isEmpty then
+    return reprintTrimmed finalExpr
+  let mkParts (is : Array Syntax) (final : Syntax) :=
+    "\n".intercalate ((is.map reprintTrimmed).push (reprintTrimmed final)).toList
+  match getLetVarName? inits.back!, getLetRhs? inits.back! with
+  | some varName, some rhs =>
+    if finalExpr.isIdent && finalExpr.getId == varName then
+      return mkParts inits.pop rhs
+    else return mkParts inits finalExpr
+  | _, _ => return mkParts inits finalExpr
 
 private structure IdRunTrivialMatch where
   fullStx : Syntax
@@ -144,7 +116,7 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
   ruleName := `idRunTrivial
   severity := .warning
   category := .simplification
-  detect := fun stx => return findIdRunTrivial stx
+  pureDetect := findIdRunTrivial
   message := fun _ => m!"Remove unnecessary `Id.run do`"
   node := fun m => m.idRunDoSpan
   reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }

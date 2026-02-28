@@ -15,7 +15,7 @@ private def findRflTactics : Syntax → Array Syntax :=
   ruleName := `testRfl
   severity := .information
   category := .style
-  detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
+  pureDetect := fun stx => (findRflTactics stx).map ({ rflStx := · })
   message := fun _ => m!"Use `exact rfl`"
   node := fun m => m.rflStx
   reference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }

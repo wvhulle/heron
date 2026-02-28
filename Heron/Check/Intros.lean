@@ -26,7 +26,7 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
   let intros := collectIntroTactics stx
   if intros.size ≤ 1 then #[]
   else
-    let names := (intros.foldl (fun acc s => acc ++ introIdents s) #[]).map (·.getId.toString)
+    let names := (intros.flatMap introIdents).map (·.getId.toString)
     let combined := "intro " ++ " ".intercalate names.toList
     match mkSpan intros[0]! intros[intros.size - 1]! with
     | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
@@ -36,7 +36,7 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
   ruleName := `testIntros
   severity := .warning
   category := .simplification
-  detect := fun stx => return (detectIntros stx)
+  pureDetect := detectIntros
   message := fun _ => m!"Merge intros"
   node := fun m => m.secondIntro
   tags := #[.unnecessary]
