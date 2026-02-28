@@ -18,6 +18,7 @@ private def findRflTactics : Syntax → Array Syntax :=
   detect := fun stx => return (findRflTactics stx).map ({ rflStx := · })
   shortInstruction := fun _ => m!"Use `exact rfl`"
   violationNode := fun fd => fd.rflStx
+  officialReference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }
   diagnosticTags := #[.unnecessary]
   longInstruction := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."
   replacements := fun fd => #[{

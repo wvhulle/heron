@@ -147,6 +147,7 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialData :=
   detect := fun stx => return findIdRunTrivial stx
   shortInstruction := fun _ => m!"Remove unnecessary `Id.run do`"
   violationNode := fun fd => fd.idRunDoSpan
+  officialReference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   diagnosticTags := #[.unnecessary]
   longInstruction := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
   replacements := fun fd => #[{

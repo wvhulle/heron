@@ -20,6 +20,13 @@ instance : ToString Category where
     | .performance => "performance"
     | .correctness => "correctness"
 
+/-- A reference to external documentation that justifies a diagnostic rule. -/
+structure Reference where
+  /-- Short topic description shown in parentheses, e.g. `` `rfl` tactic ``. -/
+  topic : String
+  /-- URL to the external documentation. -/
+  url : String
+
 class Diagnostic (α : Type) extends Transform α where
   /-- Diagnostic severity. -/
   severity : MessageSeverity
@@ -31,6 +38,8 @@ class Diagnostic (α : Type) extends Transform α where
   diagnosticTags : Array Lsp.DiagnosticTag := #[]
   /-- Detailed explanation shown in hover popup. -/
   longInstruction : α → MessageData := fun _ => m!""
+  /-- Optional reference rendered as a markdown link in the hover popup. -/
+  officialReference : Option Reference := none
 
 /-- Emit a diagnostic message with an associated quick-fix code action. -/
 def emitDiagnostic (violationNode : Syntax)
@@ -39,6 +48,7 @@ def emitDiagnostic (violationNode : Syntax)
     (diagnosticTags : Array Lsp.DiagnosticTag)
     (optName : Name)
     (shortInstruction longInstruction : MessageData) (repls : Array Replacement)
+    (officialReference : Option Reference := none)
     : CommandElabM Unit := do
   let _ ← liftCoreM <|
     MessageData.hint shortInstruction (repls.map (·.toSuggestion))
@@ -66,6 +76,8 @@ def emitDiagnostic (violationNode : Syntax)
   let mut bodyParts : Array String := #[]
   if !longFmt.pretty.isEmpty then
     bodyParts := bodyParts.push longFmt.pretty
+  if let some ref := officialReference then
+    bodyParts := bodyParts.push s!"Lean Reference ({ref.topic}): *{ref.url}*"
   bodyParts := bodyParts.push s!"Disable with `set_option {optName} false`"
   let data := Lean.Json.mkObj [
     ("title", .str shortFmt.pretty),
@@ -90,6 +102,7 @@ def Diagnostic.toLinter [Diagnostic α] : Linter where
           (Transform.shortInstruction (α := α) fixData)
           (Diagnostic.longInstruction (α := α) fixData)
           (Transform.replacements (α := α) fixData)
+          (Diagnostic.officialReference (α := α))
 
 def Diagnostic.addLinter [Diagnostic α] : IO Unit :=
   let name := Transform.ruleName (α := α)

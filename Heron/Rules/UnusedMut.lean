@@ -97,6 +97,7 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutData :=
   detect := fun stx => return findUnusedMuts stx
   shortInstruction := fun _ => m!"Remove unnecessary `mut`"
   violationNode := fun fd => fd.mutKeyword
+  officialReference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   diagnosticTags := #[.unnecessary]
   longInstruction := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
   replacements := fun fd => #[{
