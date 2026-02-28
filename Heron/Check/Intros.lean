@@ -56,7 +56,8 @@ example (a b : Nat) : a = a := rfl
 #assertIgnore testIntros in
 example : Nat → Nat → True := by intro a; exact trivial
 
-#assertCheck testIntros `(tactic| intro a; intro b) => `(tactic| intro a b) in
+#assertCheck testIntros in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
+becomes `(command| example : Nat → Nat → True := by intro a b; exact trivial)
 
 end Tests

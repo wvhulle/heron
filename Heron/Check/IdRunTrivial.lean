@@ -160,18 +160,16 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
 namespace Tests
 
 -- Simple return
-#assertCheck idRunTrivial
-  `(term| Id.run do return 42) => `(term| 42) in
+#assertCheck idRunTrivial in
 example : Nat := Id.run do return 42
+becomes `(command| example : Nat := 42)
 
 -- Let + return same variable collapses
-#assertCheck idRunTrivial
-  `(term| Id.run do
-  let x := 5
-  return x) => `(term| 5) in
+#assertCheck idRunTrivial in
 example : Nat := Id.run do
   let x := 5
   return x
+becomes `(command| example : Nat := 5)
 
 -- Ignore: has mut (imperative)
 #assertIgnore idRunTrivial in

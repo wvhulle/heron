@@ -110,11 +110,14 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
 namespace Tests
 
 -- Unused mut: x is never reassigned
-#assertCheck unusedMut
-  `(doElem| let mut x := 5) => `(doElem| let x := 5) in
+#assertCheck unusedMut in
 example : Nat := Id.run do
   let mut x := 5
   return x + 1
+becomes `(command|
+example : Nat := Id.run do
+  let x := 5
+  return x + 1)
 
 -- Ignore: x IS reassigned
 #assertIgnore unusedMut in

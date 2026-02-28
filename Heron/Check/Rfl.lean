@@ -32,6 +32,8 @@ namespace Tests
 
 #assertIgnore testRfl in example (a : Nat) : a = a + 0 := by simp
 
-#assertCheck testRfl `(tactic| rfl) => `(tactic| exact rfl) in example (a : Nat) : a = a := by rfl
+#assertCheck testRfl in
+example (a : Nat) : a = a := by rfl
+becomes `(command| example (a : Nat) : a = a := by exact rfl)
 
 end Tests

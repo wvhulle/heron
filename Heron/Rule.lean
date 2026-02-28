@@ -1,5 +1,4 @@
 import Lean.Elab.Command
-import Lean.Meta.Hint
 import Lean.Server.InfoUtils
 import Lean.Compiler.InitAttr
 
@@ -24,14 +23,14 @@ structure Replacement where
   /-- Inline label shown below the span in editors. -/
   sourceLabel : MessageData
 
-/-- Convert to a `Hint.Suggestion` for the try-this widget. -/
-def Replacement.toSuggestion (r : Replacement) : Hint.Suggestion :=
-  { suggestion := r.insertText, span? := some r.targetNode }
-
 /-- Convert to an LSP `TextEdit`, if the target node has a source range. -/
 def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.TextEdit := do
   let range ← r.targetNode.getRange?
   return { range := fileMap.utf8RangeToLspRange range, newText := r.insertText }
+
+/-- Convert replacements to a JSON array of LSP `TextEdit`s. -/
+def Replacement.toEditsJson (repls : Array Replacement) (fileMap : FileMap) : Json :=
+  Json.arr ((repls.filterMap (·.toTextEdit? fileMap)).map toJson)
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
@@ -189,13 +188,30 @@ def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
     return some s!"({fmt})"
   catch _ => return none
 
-/-- Shared logic for `@[diagnostic_rule]` and `@[refactor_rule]` attribute handlers.
+/-- Type-erased rule runner: given syntax, produces LSP `TextEdit`s via
+`Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?`. -/
+abbrev RuleRunner := Syntax → CommandElabM (Array Lsp.TextEdit)
+
+/-- Registry of rule runners, keyed by rule name. Used by test macros to
+invoke rules directly without going through the linter/diagnostic path. -/
+initialize ruleRunnersRef : IO.Ref (Std.HashMap Name RuleRunner) ← IO.mkRef {}
+
+/-- Register a type-erased runner for a `Rule` instance. -/
+def Rule.registerRunner [Rule α] : IO Unit :=
+  ruleRunnersRef.modify fun map =>
+    map.insert (Rule.ruleName (α := α)) fun stx => do
+      let fileMap ← getFileMap
+      let results ← Rule.detect (α := α) stx
+      return results.flatMap fun m =>
+        (Rule.replacements (α := α) m).filterMap (·.toTextEdit? fileMap)
+
+/-- Shared logic for `@[check_rule]` and `@[refactor_rule]` attribute handlers.
 
 Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
-then evaluates `addLinterConst` immediately so the linter is active in the current file.
+then evaluates `immediateFnConsts` immediately so the rule is active in the current file.
 `extraSetup` is called last for any additional registration (e.g. code action providers). -/
 unsafe def ruleHandlerCore (attrLabel : String)
-    (registerConst addLinterConst : Name)
+    (registerConst : Name) (immediateFnConsts : Array Name)
     (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ())
     (declName : Name) : AttrM Unit := do
   let env ← getEnv
@@ -208,7 +224,7 @@ unsafe def ruleHandlerCore (attrLabel : String)
   let some regInfo := env.find? registerConst
     | throwError "{registerConst} not found"
   let levels := regInfo.levelParams.map fun _ => Level.zero
-  -- Aux decl 1: calls `register` (initOption + addLinter), tagged @[init] for import
+  -- Aux decl 1: calls `register` (initOption + registerRunner + addLinter), tagged @[init]
   let registerName := declName ++ `_rule_init
   addAndCompile <| .defnDecl {
     name := registerName, levelParams := [], type := auxType
@@ -219,15 +235,19 @@ unsafe def ruleHandlerCore (attrLabel : String)
     match regularInitAttr.setParam env registerName .anonymous with
     | .ok env' => env'
     | .error _ => env
-  -- Aux decl 2: calls `addLinter` only, evaluated immediately for current file
-  let linterName := declName ++ `_rule_addLinter
-  addAndCompile <| .defnDecl {
-    name := linterName, levelParams := [], type := auxType
-    value := mkApp2 (mkConst addLinterConst levels) αExpr inst
-    hints := .opaque, safety := .unsafe
-  }
-  let addFn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} linterName
-  addFn
+  -- Evaluate immediate functions for current file (e.g. addLinter, registerRunner)
+  for fnConst in immediateFnConsts do
+    let some fnInfo := (← getEnv).find? fnConst
+      | throwError "{fnConst} not found"
+    let fnLevels := fnInfo.levelParams.map fun _ => Level.zero
+    let auxName := declName ++ (`_rule).append fnConst
+    addAndCompile <| .defnDecl {
+      name := auxName, levelParams := [], type := auxType
+      value := mkApp2 (mkConst fnConst fnLevels) αExpr inst
+      hints := .opaque, safety := .unsafe
+    }
+    let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} auxName
+    fn
   extraSetup declName αExpr inst
 
 end Heron

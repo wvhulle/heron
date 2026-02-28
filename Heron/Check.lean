@@ -50,8 +50,6 @@ def emitCheck (node : Syntax)
     (message explanation : MessageData) (repls : Array Replacement)
     (reference : Option Reference := none)
     : CommandElabM Unit := do
-  let _ ← liftCoreM <|
-    MessageData.hint message (repls.map (·.toSuggestion))
   let taggedMsg := MessageData.tagged optName message
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
@@ -70,7 +68,7 @@ def emitCheck (node : Syntax)
     diagnosticTags := tags
   }
   let shortFmt ← liftCoreM message.format
-  let edits := (repls.filterMap (·.toTextEdit? fileMap)).map toJson
+  let edits := Replacement.toEditsJson repls fileMap
   -- Structured hover data
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]
@@ -81,7 +79,7 @@ def emitCheck (node : Syntax)
   bodyParts := bodyParts.push s!"Disable with `set_option {optName} false`"
   let data := Lean.Json.mkObj [
     ("title", .str shortFmt.pretty),
-    ("edits", Json.arr edits),
+    ("edits", edits),
     ("hoverTitle", .str shortFmt.pretty),
     ("hoverTags", Json.arr #[toJson (toString category)]),
     ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))
@@ -109,12 +107,16 @@ def Check.addLinter [Check α] : IO Unit :=
   lintersRef.modify fun linters =>
     (linters.filter (·.name != name)).push (Check.toLinter (α := α))
 
+def Check.registerRunner [Check α] : IO Unit :=
+  Rule.registerRunner (α := α)
+
 def Check.register [Check α] : IO Unit := do
   Rule.initOption (α := α)
+  Check.registerRunner (α := α)
   Check.addLinter (α := α)
 
 private unsafe def checkRuleHandler :=
-  ruleHandlerCore "check_rule" ``Check.register ``Check.addLinter
+  ruleHandlerCore "check_rule" ``Check.register #[``Check.addLinter, ``Check.registerRunner]
 
 initialize _checkRuleAttr : TagAttribute ←
   registerTagAttribute `check_rule

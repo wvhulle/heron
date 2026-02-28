@@ -66,8 +66,9 @@ namespace Tests
 def double (n : Nat) :=
   n + n
 
-#assertRefactor inline `(term| double 3) => `(term| (3 + 3)) in
+#assertRefactor inline in
 example : Nat := double 3
+becomes `(command| example : Nat := (3 + 3))
 
 def myConst :=
   42
@@ -77,7 +78,8 @@ def myConst :=
   def d :=
     0
 
-#assertRefactor inline `(term| myConst) => `(term| (42)) in
+#assertRefactor inline in
 example : Nat := myConst
+becomes `(command| example : Nat := (42))
 
 end Tests
