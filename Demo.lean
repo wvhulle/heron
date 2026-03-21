@@ -1,6 +1,7 @@
 import Heron.Rules
 
 set_option linter.heron true
+set_option heron.profile true
 
 example (n : Nat) : n = n := by rfl
 
@@ -58,3 +59,5 @@ def addNats (x : Nat) (y : Nat) := x + y
 
 -- BindToDo: refactor available (>>= to do)
 def bindDemo := Option.some 1 >>= fun x => Option.some (x + 1)
+
+#heronProfile

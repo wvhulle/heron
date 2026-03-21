@@ -118,46 +118,11 @@
         "type": "github"
       }
     },
-    "nixpkgs_4": {
-      "locked": {
-        "lastModified": 1771369470,
-        "narHash": "sha256-0NBlEBKkN3lufyvFegY4TYv5mCNHbi5OmBDrzihbBMQ=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "0182a361324364ae3f436a63005877674cf45efb",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "lean4": "lean4",
         "lean4-nix": "lean4-nix",
-        "nixpkgs": "nixpkgs_3",
-        "tree-sitter-lean": "tree-sitter-lean"
-      }
-    },
-    "tree-sitter-lean": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_4"
-      },
-      "locked": {
-        "lastModified": 1772010124,
-        "narHash": "sha256-mleoCL16drvMDW1OgJowPMQqCm0vLD9wLl3Vn3v3Zc0=",
-        "owner": "wvhulle",
-        "repo": "tree-sitter-lean",
-        "rev": "3051b281d54a2d576b41a344f8be622bcc9e3558",
-        "type": "github"
-      },
-      "original": {
-        "owner": "wvhulle",
-        "repo": "tree-sitter-lean",
-        "type": "github"
+        "nixpkgs": "nixpkgs_3"
       }
     }
   },

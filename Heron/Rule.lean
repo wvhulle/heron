@@ -1,6 +1,7 @@
 import Lean.Elab.Command
 import Lean.Server.InfoUtils
 import Lean.Compiler.InitAttr
+import Heron.Summary
 
 open Lean Elab Command Meta
 
@@ -116,6 +117,27 @@ initialize
 initialize
   registerTraceClass `heron (inherited := true)
 
+/-- Accumulated per-rule profiling data. -/
+structure RuleProfile where
+  detectNs : Nat := 0
+  fixNs : Nat := 0
+  matchCount : Nat := 0
+  callCount : Nat := 0
+
+/-- Option to enable per-rule profiling accumulation (without trace output). -/
+private def heronProfileOption : Lean.Option Bool :=
+  { name := `heron.profile, defValue := false }
+
+initialize
+  Lean.registerOption `heron.profile {
+    defValue := .ofBool false
+    descr := "Accumulate per-rule profiling data for #heronProfile."
+    name := `heron
+  }
+
+/-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
+initialize heronProfileRef : IO.Ref (Std.HashMap Name RuleProfile) ← IO.mkRef {}
+
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
 def isReelaborating (opts : Options) : Bool :=
   heronReelaborating.get opts
@@ -126,10 +148,23 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax)
     (handle : α → CommandElabM Unit) : CommandElabM Unit := do
   unless Rule.isEnabled (α := α) (← getOptions) do return
   if isReelaborating (← getOptions) then return
+  let name := Rule.ruleName (α := α)
+  let profiling := heronProfileOption.get (← getOptions)
+  let t0 ← IO.monoNanosNow
   let results ← Rule.detect (α := α) stx
-  trace[heron] "{Rule.ruleName (α := α)}: {results.size} match(es)"
+  let t1 ← IO.monoNanosNow
   for m in results do
     handle m
+  let t2 ← IO.monoNanosNow
+  if profiling then
+    let map ← show IO _ from ST.Ref.get heronProfileRef
+    let prev := Std.HashMap.getD map name {}
+    let map := Std.HashMap.insert map name { prev with
+      detectNs := prev.detectNs + (t1 - t0)
+      fixNs := prev.fixNs + (t2 - t1)
+      matchCount := prev.matchCount + results.size
+      callCount := prev.callCount + 1 }
+    show IO Unit from ST.Ref.set heronProfileRef map
 
 /-- Re-elaborate a command collecting info trees.
 
@@ -285,5 +320,32 @@ unsafe def ruleHandlerCore (attrLabel : String)
     let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} auxName
     fn
   extraSetup declName αExpr inst
+
+syntax (name := heronProfileCmd) "#heronProfile" : command
+
+@[command_elab heronProfileCmd] def elabHeronProfile : CommandElab
+  | stx => do
+    let map ← show IO _ from ST.Ref.get heronProfileRef
+    if map.isEmpty then
+      logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
+      return
+    let entries := Std.HashMap.fold (init := #[]) (fun acc name profile => acc.push (name, profile)) map
+    let sorted := entries.qsort fun a b => a.2.detectNs + a.2.fixNs > b.2.detectNs + b.2.fixNs
+    let columns : Array Column :=
+      #[⟨"Rule", '─'⟩, ⟨"Detect", '─'⟩, ⟨"Fix", '─'⟩,
+        ⟨"Total", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
+    let fmtMs (ns : Nat) : String :=
+      let us := (ns + 500) / 1000  -- round to nearest microsecond
+      let ms := us / 1000
+      let frac := us % 1000
+      let fracStr := toString frac
+      let padded := String.ofList (List.replicate (3 - fracStr.length) '0') ++ fracStr
+      s!"{ms}.{padded}ms"
+    let rows := sorted.map fun (name, p) =>
+      #[toString name, fmtMs p.detectNs, fmtMs p.fixNs,
+        fmtMs (p.detectNs + p.fixNs),
+        toString p.matchCount, toString p.callCount]
+    logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable columns rows)
+    show IO Unit from ST.Ref.set heronProfileRef {}
 
 end Heron

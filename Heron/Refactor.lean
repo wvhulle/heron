@@ -23,7 +23,20 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let text := doc.meta.text
     let startPos := text.lspPosToUtf8Pos params.range.start
     let endPos := text.lspPosToUtf8Pos params.range.end
-    let results ← runCommandElabM snap (Rule.detect (α := α) snap.stx)
+    let name := Rule.ruleName (α := α)
+    let detect : CommandElabM (Array α) :=
+      withTraceNode `heron.profile
+          (fun res => return match res with
+            | .ok _ => m!"{name}: done"
+            | .error e => m!"{name}: error {e.toMessageData}")
+          (tag := toString name) do
+        withTraceNode `heron.profile.detect
+            (fun res => return match res with
+              | .ok r => m!"{name} detect: {r.size} match(es)"
+              | .error e => m!"{name} detect: error {e.toMessageData}")
+            (tag := s!"{name}.detect") do
+          Rule.detect (α := α) snap.stx
+    let results ← runCommandElabM snap detect
     let mut actions : Array LazyCodeAction := #[]
     for m in results do
       let repls := Rule.replacements (α := α) m
