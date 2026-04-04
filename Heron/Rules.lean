@@ -6,6 +6,8 @@ import Heron.Check.UnusedMut
 import Heron.Check.BoolMatch
 import Heron.Check.OrPattern
 import Heron.Check.SharedBinder
+import Heron.Check.NestedMonadJoin
+import Heron.Check.MonadTransformerAlias
 -- Refactors
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
