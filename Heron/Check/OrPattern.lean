@@ -50,7 +50,7 @@ private def findOrPatterns : Syntax → Array OrPatternMatch :=
   category := .simplification
   detect := fun stx => return findOrPatterns stx
   message := fun _ => m!"Merge match arms with identical right-hand sides"
-  node := fun m => m.secondArm
+  node := fun m => m.fullRange
   tags := #[.unnecessary]
   reference := some { topic := "Or-patterns", url := "https://lean-lang.org/functional_programming_in_lean/monads/conveniences.html" }
   explanation := fun _ => m!"Consecutive match arms with the same body can be merged using `|` patterns."

@@ -8,6 +8,11 @@ import Heron.Check.OrPattern
 import Heron.Check.SharedBinder
 import Heron.Check.NestedMonadJoin
 import Heron.Check.MonadTransformerAlias
+import Heron.Check.LetWildcard
+import Heron.Check.TupleMatch
+import Heron.Check.MatchToIfLet
+import Heron.Check.GetSet
+import Heron.Check.ElsePureUnit
 -- Refactors
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline

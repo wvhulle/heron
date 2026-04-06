@@ -63,6 +63,7 @@ def emitCheck (node : Syntax)
     fileName := ← getFileName
     pos := fileMap.toPosition pos
     endPos := fileMap.toPosition endPos
+    keepFullRange := true
     data := msgData
     severity
     diagnosticTags := tags

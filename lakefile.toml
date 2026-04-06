@@ -9,3 +9,7 @@ globs = ["Heron.+"]
 [[lean_lib]]
 name = "Demo"
 globs = ["Demo"]
+
+[[lean_exe]]
+name = "dump-ast"
+root = "DumpAst"

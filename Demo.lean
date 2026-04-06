@@ -29,35 +29,83 @@ example : Nat :=
 
 example : String :=
   let a := false
-  if !a then "No a" else "Yes a"
+  if !a then "No a"
+  else
+    "Yes a"
 
 -- IdRunTrivial: should warn (trivial Id.run do)
-example : Nat := Id.run do return 42
+example : Nat :=
+  Id.run
+    (do
+      return 42)
 
 -- UnusedMut: should warn (x is never reassigned)
-example : Nat := Id.run do
-  let mut x := 5
-  return x + 1
+example : Nat :=
+  Id.run
+    (do
+      let mut x := 5
+      return x + 1)
 
 -- No warning: legitimate imperative code
-example : Nat := Id.run do
-  let mut x := 0
-  for _ in [1, 2, 3] do
-    x := x + 1
-  return x
+example : Nat :=
+  Id.run
+    (do
+      let mut x := 0
+      for _ in [1, 2, 3]do
+        x := x + 1
+      return x)
 
 -- BoolMatch: should warn (match on true/false)
-def boolToNat (b : Bool) : Nat := match b with | true => 1 | false => 0
+def boolToNat (b : Bool) : Nat :=
+  match b with
+  | true => 1
+  | false =>
+    0
 
 -- OrPattern: should inform (duplicate RHS)
-def orPatternDemo (x : Bool) : Nat := match x with
+def orPatternDemo (x : Bool) : Nat :=
+  match x with
   | true => 42
-  | false => 42
+  | false =>
+    42
 
 -- SharedBinder: should inform (same type)
-def addNats (x : Nat) (y : Nat) := x + y
+def addNats (x : Nat) (y : Nat) :=
+  x + y
 
 -- BindToDo: refactor available (>>= to do)
-def bindDemo := Option.some 1 >>= fun x => Option.some (x + 1)
+def bindDemo :=
+  Option.some 1 >>= fun x => Option.some (x + 1)
+
+-- LetWildcard: should inform (redundant let _ ←)
+example : IO Unit := do
+  let _ ← IO.println "hello"
+  pure ()
+
+-- TupleMatch: should warn (match on tuple discriminant)
+def addPair (x y : Nat) : Nat :=
+  match (x, y) with
+  | (a, b) => a + b
+
+-- MatchToIfLet: should inform (two-arm match with wildcard)
+def fromOption (x : Option Nat) : Nat :=
+  match x with
+  | some v => v
+  | _ => 0
+
+-- GetSet: should warn (get/set → modify)
+private structure DemoState where
+  count : Nat
+
+def increment : StateM DemoState Unit := do
+  let s ← get
+  set { s with count := s.count + 1 }
+
+-- ElsePureUnit: should inform (redundant else pure ())
+example : IO Unit := do
+  if true then
+    IO.println "done"
+  else
+    pure ()
 
 #heronProfile
