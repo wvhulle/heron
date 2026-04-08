@@ -51,7 +51,8 @@ private partial def collectReassignedVars (elems : Array Syntax) : Std.HashSet N
 private structure UnusedMutMatch where
   doLetStx : Syntax
   mutKeyword : Syntax
-  replacement : String
+  ident : TSyntax `ident
+  valStx : TSyntax `term
 
 /-- Find `let mut x := e` where x is never reassigned in the subsequent do-elements. -/
 private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
@@ -67,12 +68,12 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
         match getDoLetVarName? elem with
         | some name =>
           if !reassigned.contains name then
-            -- Build replacement: reprint the doLet without `mut`
-            -- doLet = "let" + optional-mut + letDecl
-            -- We want "let" + letDecl (skip the mut)
-            let letDecl := elem[2]!
             let mutKw := elem[1]![0]!
-            some { doLetStx := elem, mutKeyword := mutKw, replacement := s!"let {reprintTrimmed letDecl}" }
+            -- Extract ident and value from letIdDecl
+            let letDecl := elem[2]![0]!  -- letIdDecl
+            let ident : TSyntax `ident := ⟨letDecl[0]![0]!⟩
+            let valStx : TSyntax `term := ⟨letDecl[4]!⟩
+            some { doLetStx := elem, mutKeyword := mutKw, ident, valStx }
           else none
         | none => none
       else none
@@ -87,12 +88,15 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
   reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
-  replacements := fun m => #[{
-    sourceNode := m.doLetStx
-    targetNode := m.doLetStx
-    insertText := m.replacement
-    sourceLabel := m!"unused mut"
-  }]
+  replacements := fun m => do
+    let repl ← `(doElem| let $m.ident := $m.valStx)
+    return #[{
+      sourceNode := m.doLetStx
+      targetNode := m.doLetStx
+      insertText := repl
+      category := `doElem
+      sourceLabel := m!"unused mut"
+    }]
 
 namespace Tests
 
@@ -101,7 +105,7 @@ namespace Tests
 example : Nat := Id.run do
   let mut x := 5
   return x + 1
-becomes `(command|
+becomes `(
 example : Nat := Id.run do
   let x := 5
   return x + 1)

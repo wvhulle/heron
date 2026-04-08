@@ -1,6 +1,7 @@
 import Lean.Elab.Command
 import Lean.Server.InfoUtils
 import Lean.Compiler.InitAttr
+import Lean.PrettyPrinter
 import Heron.Summary
 
 open Lean Elab Command Meta
@@ -12,25 +13,6 @@ partial def Lean.Syntax.collectAll (f : Syntax → Array α) (stx : Syntax) : Ar
   f stx ++ stx.getArgs.flatMap (Syntax.collectAll f)
 
 namespace Heron
-
-/-- The text to insert for a replacement: either extracted from a syntax node's
-source range, or a literal string for computed replacements. -/
-inductive InsertText where
-  /-- Extract source text from this syntax node's range in the file. -/
-  | ofSyntax (stx : Syntax)
-  /-- Use this literal string. -/
-  | ofString (s : String)
-
-/-- Resolve the insert text against a file map. -/
-def InsertText.resolve (t : InsertText) (fileMap : FileMap) : Option String :=
-  match t with
-  | .ofSyntax stx => do
-    let range ← stx.getRange?
-    return String.Pos.Raw.extract fileMap.source range.start range.stop
-  | .ofString s => some s
-
-instance : Coe String InsertText := ⟨.ofString⟩
-instance : Coe Syntax InsertText := ⟨.ofSyntax⟩
 
 /-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
 def reprintTrimmed (stx : Syntax) : String :=
@@ -51,16 +33,26 @@ structure Replacement where
   sourceNode : Syntax
   /-- Syntax node whose range is replaced. -/
   targetNode : Syntax
-  /-- Text to insert in place of `targetNode`. -/
-  insertText : InsertText
+  /-- Syntax to insert in place of `targetNode`. -/
+  insertText : Syntax
   /-- Inline label shown below the span in editors. -/
   sourceLabel : MessageData
+  /-- Syntax category for pretty-printing (e.g. `term`, `tactic`, `doElem`). -/
+  category : Name := `term
 
-/-- Convert a single replacement to an LSP `TextEdit`. -/
-def Replacement.toTextEdit? (r : Replacement) (fileMap : FileMap) : Option Lsp.TextEdit := do
-  let range ← r.targetNode.getRange?
-  let text ← r.insertText.resolve fileMap
-  return { range := fileMap.utf8RangeToLspRange range, newText := text }
+/-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
+to format the replacement text. Falls back to `reprint` if formatting fails. -/
+def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
+  let some range := r.targetNode.getRange? | return none
+  if r.insertText.isMissing then
+    return some { range := fileMap.utf8RangeToLspRange range, newText := "" }
+  let text ← try
+    let fmt ← PrettyPrinter.ppCategory r.category r.insertText
+    pure fmt.pretty
+  catch _ =>
+    let some text := r.insertText.reprint | return none
+    pure text.trimAscii.toString
+  return some { range := fileMap.utf8RangeToLspRange range, newText := text }
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
@@ -72,7 +64,7 @@ class Rule (α : Type) where
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
   /-- Per-edit replacement data. -/
-  replacements : α → Array Replacement
+  replacements : α → CommandElabM (Array Replacement)
 
 /-- Master option that enables all Heron linter rules at once. -/
 def heronAllOption : Lean.Option Bool :=
@@ -273,8 +265,13 @@ def Rule.registerRunner [Rule α] : IO Unit :=
     map.insert (Rule.ruleName (α := α)) fun stx => do
       let fileMap ← getFileMap
       let results ← Rule.detect (α := α) stx
-      pure (results.flatMap fun m =>
-        (Rule.replacements (α := α) m).filterMap (·.toTextEdit? fileMap))
+      let mut edits : Array Lsp.TextEdit := #[]
+      for m in results do
+        let repls ← Rule.replacements (α := α) m
+        for r in repls do
+          if let some edit ← liftCoreM <| r.toTextEdit fileMap then
+            edits := edits.push edit
+      pure edits
 
 /-- Shared logic for `@[check_rule]` and `@[refactor_rule]` attribute handlers.
 

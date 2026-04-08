@@ -12,7 +12,8 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
 private structure OrPatternMatch where
   secondArm : Syntax
   fullRange : Syntax
-  replacement : String
+  firstAlt : Syntax
+  secondAlt : Syntax
 
 /-- Reprint a matchAlt's pattern portion (everything between | and =>). -/
 private def altPatsText (alt : Syntax) : String :=
@@ -31,8 +32,7 @@ private def findOrPatternsInAlts (alts : Array Syntax) : Array OrPatternMatch :=
       if altRhsText a1 == altRhsText a2 then
         match mkSpan a1 a2 with
         | some fullRange =>
-          let merged := s!"| {altPatsText a1} | {altPatsText a2} => {altRhsText a1}"
-          acc.push { secondArm := a2, fullRange, replacement := merged }
+          acc.push { secondArm := a2, fullRange, firstAlt := a1, secondAlt := a2 }
         | none => acc
       else acc
 
@@ -54,12 +54,18 @@ private def findOrPatterns : Syntax → Array OrPatternMatch :=
   tags := #[.unnecessary]
   reference := some { topic := "Or-patterns", url := "https://lean-lang.org/functional_programming_in_lean/monads/conveniences.html" }
   explanation := fun _ => m!"Consecutive match arms with the same body can be merged using `|` patterns."
-  replacements := fun m => #[{
-    sourceNode := m.secondArm
-    targetNode := m.fullRange
-    insertText := m.replacement
-    sourceLabel := m!"duplicate arm"
-  }]
+  replacements := fun m => do
+    let pat1 : TSyntax `term := ⟨m.firstAlt[1]!⟩
+    let pat2 : TSyntax `term := ⟨m.secondAlt[1]!⟩
+    let rhs : TSyntax `term := ⟨m.firstAlt[3]!⟩
+    let repl ← `(Term.matchAltExpr| | $pat1 | $pat2 => $rhs)
+    return #[{
+      sourceNode := m.secondArm
+      targetNode := m.fullRange
+      insertText := repl
+      sourceLabel := m!"duplicate arm"
+      category := `matchAlt
+    }]
 
 namespace Tests
 
@@ -67,7 +73,7 @@ namespace Tests
 def f (x : Bool) : Nat := match x with
   | true => 1
   | false => 1
-becomes `(command| def f (x : Bool) : Nat := match x with
+becomes `(def f (x : Bool) : Nat := match x with
   | true | false => 1)
 
 #assertIgnore orPattern in

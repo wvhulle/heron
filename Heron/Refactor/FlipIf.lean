@@ -22,18 +22,18 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
   ruleName := `flipIf
   pureDetect := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
-  replacements := fun m => #[
+  replacements := fun m => return #[
     { sourceNode := m.negCondStx
       targetNode := m.negCondStx
-      insertText := .ofSyntax m.innerCond
+      insertText := m.innerCond
       sourceLabel := m!"remove negation" },
     { sourceNode := m.thenBranch
       targetNode := m.thenBranch
-      insertText := .ofSyntax m.elseBranch
+      insertText := m.elseBranch
       sourceLabel := m!"swap branches" },
     { sourceNode := m.elseBranch
       targetNode := m.elseBranch
-      insertText := .ofSyntax m.thenBranch
+      insertText := m.thenBranch
       sourceLabel := m!"swap branches" }
   ]
   codeActionKind := "refactor.rewrite"
@@ -42,7 +42,7 @@ namespace Tests
 
 #assertRefactor flipIf in
 def flipMe (p : Bool) (a b : Nat) : Nat := if !p then a else b
-becomes `(command| def flipMe (p : Bool) (a b : Nat) : Nat := if p then b else a)
+becomes `(def flipMe (p : Bool) (a b : Nat) : Nat := if p then b else a)
 
 #assertIgnore flipIf in
 def noFlip (p : Bool) (a b : Nat) : Nat := if p then a else b

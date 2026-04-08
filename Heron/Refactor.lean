@@ -24,7 +24,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let startPos := text.lspPosToUtf8Pos params.range.start
     let endPos := text.lspPosToUtf8Pos params.range.end
     let name := Rule.ruleName (α := α)
-    let detect : CommandElabM (Array α) :=
+    let detectAndReplace : CommandElabM (Array (MessageData × Array Replacement × Array Lsp.TextEdit)) :=
       withTraceNode `heron.profile
           (fun res => return match res with
             | .ok _ => m!"{name}: done"
@@ -35,17 +35,20 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
               | .ok r => m!"{name} detect: {r.size} match(es)"
               | .error e => m!"{name} detect: error {e.toMessageData}")
             (tag := s!"{name}.detect") do
-          Rule.detect (α := α) snap.stx
-    let results ← runCommandElabM snap detect
+          let detected ← Rule.detect (α := α) snap.stx
+          detected.mapM fun m => do
+            let repls ← Rule.replacements (α := α) m
+            let fileMap ← getFileMap
+            let textEdits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+            return (Rule.message (α := α) m, repls, textEdits)
+    let results ← runCommandElabM snap detectAndReplace
     let mut actions : Array LazyCodeAction := #[]
-    for m in results do
-      let repls := Rule.replacements (α := α) m
+    for (msg, repls, textEdits) in results do
       unless repls.any (fun r => match r.sourceNode.getRange? with
         | some range => range.start ≤ endPos && startPos ≤ range.stop
         | none => false) do continue
       let kind := Refactor.codeActionKind (α := α)
-      let title := (← (Rule.message (α := α) m).format).pretty
-      let textEdits := repls.filterMap (·.toTextEdit? text)
+      let title := (← msg.format).pretty
       if textEdits.isEmpty then continue
       actions := actions.push {
         eager := { title, kind? := kind }

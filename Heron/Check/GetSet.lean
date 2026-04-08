@@ -13,11 +13,12 @@ private structure GetSetMatch where
   getStx : Syntax
   setStx : Syntax
   fullRange : Syntax
-  replacement : String
+  varName : Syntax
+  structInst : Syntax
 
 /-- Check if a do-element is `let <name> ← get`. -/
-private def isGetBinding? : Syntax → Option (Syntax × Name)
-  | elem@`(doElem| let $x ← get) => some (elem, x.getId)
+private def isGetBinding? : Syntax → Option (Syntax × Syntax)
+  | elem@`(doElem| let $x ← get) => some (elem, x)
   | _ => none
 
 /-- Check if a do-element is `set { <name> with ... }`. -/
@@ -41,8 +42,9 @@ private partial def containsName (varName : Name) (stx : Syntax) : Bool :=
     stx.getArgs.any (containsName varName)
 
 /-- For a given get-binding at index `i`, find the matching set call. -/
-private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varName : Name)
+private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varNameStx : Syntax)
     : Option GetSetMatch :=
+  let varName := varNameStx.getId
   let rec go (j : Nat) : Option GetSetMatch :=
     if h : j < elems.size then
       match isSetWithStructUpdate? elems[j] varName with
@@ -55,7 +57,8 @@ private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (v
             getStx := getElem
             setStx := setElem
             fullRange := mkSpan getElem setElem |>.getD getElem
-            replacement := s!"modify fun {varName} => {reprintTrimmed structInst}"
+            varName := varNameStx
+            structInst
           }
         else none
       | none =>
@@ -85,16 +88,23 @@ private def findGetSet (stx : Syntax) : Array GetSetMatch :=
   node := fun m => m.fullRange
   reference := some { topic := "modify", url := "https://lean-lang.org/functional_programming_in_lean/monad-transformers/do.html" }
   explanation := fun _ => m!"`let s ← get; set \{s with ...}` can be simplified to `modify fun s => \{s with ...}`."
-  replacements := fun m => #[
-    { sourceNode := m.getStx
-      targetNode := m.getStx
-      insertText := m.replacement
-      sourceLabel := m!"get/set → modify" },
-    { sourceNode := m.setStx
-      targetNode := m.setStx
-      insertText := ""
-      sourceLabel := m!"remove set" }
-  ]
+  replacements := fun m => do
+    let varId : TSyntax `ident := ⟨m.varName⟩
+    let structInst : TSyntax `term := ⟨m.structInst⟩
+    let modifyId := mkIdent `modify
+    let repl ← `(doElem| $modifyId:ident fun $varId => $structInst)
+    return #[
+      { sourceNode := m.getStx
+        targetNode := m.getStx
+        insertText := repl
+        category := `doElem
+        sourceLabel := m!"get/set → modify" },
+      { sourceNode := m.setStx
+        targetNode := m.setStx
+        insertText := Syntax.missing
+        category := `doElem
+        sourceLabel := m!"remove set" }
+    ]
 
 namespace Tests
 

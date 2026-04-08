@@ -6,7 +6,8 @@ open Lean Elab Command Parser Heron
 private structure ElsePureUnitMatch where
   ifStx : Syntax
   elseBranch : Syntax
-  replacement : String
+  cond : Syntax
+  thenBody : Syntax
 
 /-- Check if a syntax node is `pure ()` or `pure Unit.unit`. -/
 private def isPureUnit : Syntax → Bool
@@ -16,7 +17,7 @@ private def isPureUnit : Syntax → Bool
 
 /-- Find `if cond then ... else pure ()` in do-blocks. -/
 private def detectElsePureUnit : Syntax → Array ElsePureUnitMatch
-  | s@`(doElem| if $_ then $_ else $elseBody) =>
+  | s@`(doElem| if $cond then $thenBody else $elseBody) =>
     let elseElems := getDoElems elseBody
     if elseElems.size != 1 then #[]
     else
@@ -24,11 +25,7 @@ private def detectElsePureUnit : Syntax → Array ElsePureUnitMatch
     let body := if elem.getKind == ``Term.doExpr then elem[0]! else elem
     if !isPureUnit body then #[]
     else
-      let args := s.getArgs
-      let withoutElse := args.pop
-      let repl := String.join (withoutElse.map fun arg =>
-        arg.reprint.getD "").toList
-      #[{ ifStx := s, elseBranch := args.back!, replacement := repl.trimAsciiEnd.toString }]
+      #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
   | _ => #[]
 
 private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
@@ -44,12 +41,17 @@ private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
   tags := #[.unnecessary]
   reference := some { topic := "Single-branched if", url := "https://lean-lang.org/functional_programming_in_lean/monad-transformers/do.html" }
   explanation := fun _ => m!"In a do-block, `if cond then action else pure ()` can be simplified to `if cond then action`."
-  replacements := fun m => #[{
-    sourceNode := m.ifStx
-    targetNode := m.ifStx
-    insertText := m.replacement
-    sourceLabel := m!"else pure ()"
-  }]
+  replacements := fun m => do
+    let cond : TSyntax `term := ⟨m.cond⟩
+    let thenBody : TSyntax ``Term.doSeq := ⟨m.thenBody⟩
+    let repl ← `(doElem| if $cond then $thenBody)
+    return #[{
+      sourceNode := m.ifStx
+      targetNode := m.ifStx
+      insertText := repl
+      category := `doElem
+      sourceLabel := m!"else pure ()"
+    }]
 
 namespace Tests
 

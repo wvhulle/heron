@@ -6,11 +6,11 @@ open Lean Elab Command Parser Heron
 private structure LetWildcardMatch where
   doLetStx : Syntax
   letKeyword : Syntax
-  replacement : String
+  rhs : Syntax
 
 /-- Check if a doLetArrow binds a wildcard `_` pattern. -/
-private def isWildcardLetArrow? : Syntax → Option (Syntax × String)
-  | elem@`(doElem| let _ ← $rhs) => some (elem[0]!, reprintTrimmed rhs)
+private def isWildcardLetArrow? : Syntax → Option (Syntax × Syntax)
+  | elem@`(doElem| let _ ← $rhs) => some (elem[0]!, rhs)
   | _ => none
 
 /-- Find `let _ ← action` in do-blocks. -/
@@ -23,7 +23,7 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
     elems.filterMap fun elem =>
       match isWildcardLetArrow? elem with
       | some (letKw, rhs) =>
-        some { doLetStx := elem, letKeyword := letKw, replacement := rhs }
+        some { doLetStx := elem, letKeyword := letKw, rhs }
       | none => none
 
 @[check_rule] instance : Check LetWildcardMatch where
@@ -36,10 +36,10 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
   tags := #[.unnecessary]
   reference := some { topic := "do-notation", url := "https://lean-lang.org/functional_programming_in_lean/hello-world/conveniences.html" }
   explanation := fun _ => m!"`let _ ← action` can be simplified to just `action` in a do-block."
-  replacements := fun m => #[{
+  replacements := fun m => return #[{
     sourceNode := m.doLetStx
     targetNode := m.doLetStx
-    insertText := m.replacement
+    insertText := m.rhs
     sourceLabel := m!"let _ ←"
   }]
 

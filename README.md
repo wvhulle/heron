@@ -73,7 +73,7 @@ Tests use compile-time assertion commands that verify rules at build time. Failu
 ```lean
 #assertCheck testIntros in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
-becomes `(command| example : Nat → Nat → True := by intro a b; exact trivial)
+becomes `(example : Nat → Nat → True := by intro a b; exact trivial)
 ```
 
 `#assertRefactor` does the same for refactor rules:
@@ -81,7 +81,7 @@ becomes `(command| example : Nat → Nat → True := by intro a b; exact trivial
 ```lean
 #assertRefactor inline in
 example : Nat := myConst
-becomes `(command| example : Nat := (42))
+becomes `(example : Nat := (42))
 ```
 
 `#assertIgnore` verifies that a rule produces no edits for the given command:

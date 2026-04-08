@@ -75,8 +75,10 @@ private def getReturnExpr? (elem : Syntax) : Option Syntax :=
     else none
   else none
 
-/-- Build the replacement text for a pure do sequence. -/
-private def buildReplacement (elems : Array Syntax) : Option String := do
+/-- Build the replacement syntax for a pure do sequence.
+Extracts the final expression and any let bindings, converting
+`do let x := e; return x` → `e` and `do let x := e; body` → `let x := e\nbody`. -/
+private def buildReplacement? (elems : Array Syntax) : Option (Array Syntax × Syntax) := do
   guard !elems.isEmpty
   let last := elems.back!
   let finalExpr ←
@@ -85,20 +87,18 @@ private def buildReplacement (elems : Array Syntax) : Option String := do
     else none
   let inits := elems.pop
   if inits.isEmpty then
-    return reprintTrimmed finalExpr
-  let mkParts (is : Array Syntax) (final : Syntax) :=
-    "\n".intercalate ((is.map reprintTrimmed).push (reprintTrimmed final)).toList
+    return (#[], finalExpr)
   match getLetVarName? inits.back!, getLetRhs? inits.back! with
   | some varName, some rhs =>
     if finalExpr.isIdent && finalExpr.getId == varName then
-      return mkParts inits.pop rhs
-    else return mkParts inits finalExpr
-  | _, _ => return mkParts inits finalExpr
+      return (inits.pop, rhs)
+    else return (inits, finalExpr)
+  | _, _ => return (inits, finalExpr)
 
 private structure IdRunTrivialMatch where
   fullStx : Syntax
   idRunDoSpan : Syntax
-  replacement : String
+  elems : Array Syntax
 
 private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
   Syntax.collectAll fun stx =>
@@ -106,9 +106,7 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
     | some (fullStx, idRunDoSpan, doSeq) =>
       let elems := getDoElems doSeq
       if isPureDoSeq elems then
-        match buildReplacement elems with
-        | some repl => #[{ fullStx, idRunDoSpan, replacement := repl }]
-        | none => #[]
+        #[{ fullStx, idRunDoSpan, elems }]
       else #[]
     | none => #[]
 
@@ -122,26 +120,38 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
   reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
-  replacements := fun m => #[{
-    sourceNode := m.fullStx
-    targetNode := m.fullStx
-    insertText := m.replacement
-    sourceLabel := m!"unnecessary Id.run do"
-  }]
+  replacements := fun m => do
+    let some (letBindings, finalExpr) := buildReplacement? m.elems | return #[]
+    -- Reconstruct: let bindings followed by final expression
+    -- For single expression: just the expression
+    -- For let + expr: use let-in chain
+    let mut result : TSyntax `term := ⟨finalExpr⟩
+    for binding in letBindings.reverse do
+      -- Extract ident and RHS from the doLet's letIdDecl
+      let inner := binding[2]![0]!  -- letIdDecl
+      let ident : TSyntax `ident := ⟨inner[0]![0]!⟩
+      let val : TSyntax `term := ⟨inner[4]!⟩
+      result ← `(let $ident := $val; $result)
+    return #[{
+      sourceNode := m.fullStx
+      targetNode := m.fullStx
+      insertText := result
+      sourceLabel := m!"unnecessary Id.run do"
+    }]
 
 namespace Tests
 
 -- Simple return
 #assertCheck idRunTrivial in
 example : Nat := Id.run do return 42
-becomes `(command| example : Nat := 42)
+becomes `(example : Nat := 42)
 
 -- Let + return same variable collapses
 #assertCheck idRunTrivial in
 example : Nat := Id.run do
   let x := 5
   return x
-becomes `(command| example : Nat := 5)
+becomes `(example : Nat := 5)
 
 -- Ignore: has mut (imperative)
 #assertIgnore idRunTrivial in

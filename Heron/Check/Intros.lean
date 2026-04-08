@@ -12,7 +12,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
 private structure IntrosMatch where
   secondIntro : Syntax
   fullRange : Syntax
-  replacement : String
+  allIntros : Array Syntax
 
 private def collectIntroTactics : Syntax → Array Syntax :=
   Syntax.collectAll fun stx =>
@@ -26,10 +26,8 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
   let intros := collectIntroTactics stx
   if intros.size ≤ 1 then #[]
   else
-    let names := (intros.flatMap introIdents).map (·.getId.toString)
-    let combined := "intro " ++ " ".intercalate names.toList
     match mkSpan intros[0]! intros[intros.size - 1]! with
-    | some fullRange => #[{ secondIntro := intros[1]!, fullRange, replacement := combined }]
+    | some fullRange => #[{ secondIntro := intros[1]!, fullRange, allIntros := intros }]
     | none => #[]
 
 @[check_rule] instance : Check IntrosMatch where
@@ -40,13 +38,17 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
   message := fun _ => m!"Merge intros"
   node := fun m => m.secondIntro
   tags := #[.unnecessary]
-  explanation := fun m => m!"Multiple sequential `intro` tactics can be merged into `{m.replacement}`. This reduces tactic noise and is idiomatic Lean style."
-  replacements := fun m => #[{
-    sourceNode := m.secondIntro
-    targetNode := m.fullRange
-    insertText := m.replacement
-    sourceLabel := m!"sequential intro"
-  }]
+  explanation := fun _ => m!"Multiple sequential `intro` tactics can be merged into one. This reduces tactic noise and is idiomatic Lean style."
+  replacements := fun m => do
+    let names : TSyntaxArray `ident := (m.allIntros.flatMap introIdents).map (⟨·⟩)
+    let repl ← `(tactic| intro $names*)
+    return #[{
+      sourceNode := m.secondIntro
+      targetNode := m.fullRange
+      insertText := repl
+      category := `tactic
+      sourceLabel := m!"sequential intro"
+    }]
 
 namespace Tests
 
@@ -58,6 +60,6 @@ example : Nat → Nat → True := by intro a; exact trivial
 
 #assertCheck testIntros in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
-becomes `(command| example : Nat → Nat → True := by intro a b; exact trivial)
+becomes `(example : Nat → Nat → True := by intro a b; exact trivial)
 
 end Tests

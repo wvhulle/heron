@@ -52,7 +52,7 @@
             '';
           };
         in
-        {
+        rec {
           nix = pkgs.mkShell {
             packages = [
               lean4.packages.${system}.lake
@@ -63,7 +63,7 @@
           # Use locally-built lean4 — no flake rebuild on source changes.
           # Requires: make -j -C ../lean4/build/release
           local = local;
-          default = local;
+          default = nix;
         };
     };
 }

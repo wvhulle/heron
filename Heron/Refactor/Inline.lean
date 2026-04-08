@@ -15,7 +15,7 @@ private inductive InlineKind where
 
 private structure InlineMatch where
   stx : Syntax
-  newText : String
+  newSyntax : Syntax
   kind : InlineKind
 
 private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
@@ -36,13 +36,19 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
   let constCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   for (ci, ti) in deduplicateTermInfos constCandidates do
     if let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) then
-      if let some text ← ppExprFix? ci ti.lctx expanded then
+      try
+        let delabbed ← runInfoMetaM ci ti.lctx (PrettyPrinter.delab expanded)
         let name := ti.expr.getAppFn.constName?.getD `unknown
-        results := results.push { stx := ti.stx, newText := text, kind := .const name }
+        let parensed ← `(($delabbed))
+        results := results.push { stx := ti.stx, newSyntax := parensed, kind := .const name }
+      catch _ => pure ()
   for (ci, ti) in infos do
     if let .letE _ _ value body _ := ti.expr then
-      if let some text ← ppExprFix? ci ti.lctx (body.instantiate1 value) then
-        results := results.push { stx := ti.stx, newText := text, kind := .letBinding }
+      try
+        let delabbed ← runInfoMetaM ci ti.lctx (PrettyPrinter.delab (body.instantiate1 value))
+        let parensed ← `(($delabbed))
+        results := results.push { stx := ti.stx, newSyntax := parensed, kind := .letBinding }
+      catch _ => pure ()
   return results
 
 private def inlineLabel : InlineKind → MessageData
@@ -53,10 +59,10 @@ private def inlineLabel : InlineKind → MessageData
   ruleName := `inline
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
-  replacements := fun m => #[{
+  replacements := fun m => return #[{
     sourceNode := m.stx
     targetNode := m.stx
-    insertText := m.newText
+    insertText := m.newSyntax
     sourceLabel := inlineLabel m.kind
   }]
   codeActionKind := "refactor.inline"
@@ -68,7 +74,7 @@ def double (n : Nat) :=
 
 #assertRefactor inline in
 example : Nat := double 3
-becomes `(command| example : Nat := (3 + 3))
+becomes `(example : Nat := (3 + 3))
 
 def myConst :=
   42
@@ -80,6 +86,6 @@ def myConst :=
 
 #assertRefactor inline in
 example : Nat := myConst
-becomes `(command| example : Nat := (42))
+becomes `(example : Nat := (42))
 
 end Tests

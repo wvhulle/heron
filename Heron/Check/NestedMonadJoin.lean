@@ -5,7 +5,7 @@ open Lean Elab Command Parser Heron
 
 private structure NestedMonadJoinMatch where
   outerStx : Syntax
-  replacement : String
+  inner : Syntax
   monadName : String
 
 /-- Extract the function name from a syntax node if it's a simple identifier application. -/
@@ -55,8 +55,7 @@ private def findNestedMonadJoin : Syntax → Array NestedMonadJoinMatch :=
                 -- The replacement is just the inner application (removing one nesting layer)
                 -- e.g. Option (Option Nat) → the inner is `Option Nat`
                 -- e.g. Except String (Except String Nat) → the inner is `Except String Nat`
-                let replacement := reprintTrimmed inner
-                #[{ outerStx := stx, replacement, monadName := outerName }]
+                #[{ outerStx := stx, inner, monadName := outerName }]
 
 @[check_rule]
 instance : Check NestedMonadJoinMatch where
@@ -70,10 +69,10 @@ instance : Check NestedMonadJoinMatch where
   reference := some { topic := "Monad join", url := "https://lean-lang.org/lean4/doc/monads/transformers.html" }
   explanation := fun m => m! "`{m.monadName } ({m.monadName } α)` is equivalent to `{m.monadName} α` via `join`. \
        The extra nesting layer is redundant and can be flattened."
-  replacements := fun m =>
+  replacements := fun m => pure
     #[{ sourceNode := m.outerStx
         targetNode := m.outerStx
-        insertText := m.replacement
+        insertText := m.inner
         sourceLabel := m!"nested monad" }]
 
 namespace Tests
@@ -81,17 +80,17 @@ namespace Tests
 -- Nested Option in a function with multiple parameters
 #assertCheck nestedMonadJoin in
 def flatten (xs : List Nat) (default : Nat) : Option (Option Nat) := sorry
-becomes `(command| def flatten (xs : List Nat) (default : Nat) : Option Nat := sorry)
+becomes `(def flatten (xs : List Nat) (default : Nat) : Option Nat := sorry)
 
 -- Nested Except with compound error type, buried in a signature with binders
 #assertCheck nestedMonadJoin in
 def tryParse {α : Type} (input : String) : Except (List String) (Except (List String) α) := sorry
-becomes `(command| def tryParse {α : Type} (input : String) : Except (List String) α := sorry)
+becomes `(def tryParse {α : Type} (input : String) : Except (List String) α := sorry)
 
 -- Nested Option appearing in a let body type annotation
 #assertCheck nestedMonadJoin in
 def g := let x : Option (Option (List Nat)) := none; x
-becomes `(command| def g := let x : Option (List Nat) := none; x)
+becomes `(def g := let x : Option (List Nat) := none; x)
 
 #assertIgnore nestedMonadJoin in
   def h : Option Nat :=

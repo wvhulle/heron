@@ -5,10 +5,11 @@ open Lean Elab Command Parser Heron
 
 private structure BindToDoMatch where
   fullStx : Syntax
-  replacement : String
+  bindings : Array (Syntax × Syntax)
+  finalBody : Syntax
 
 /-- Try to decompose `lhs >>= fun x => body` into `(lhs, varName, body)`. -/
-private def decomposeBind? (stx : Syntax) : Option (Syntax × String × Syntax) :=
+private def decomposeBind? (stx : Syntax) : Option (Syntax × Syntax × Syntax) :=
   if stx.getKind != `«term_>>=_» then none
   else
     let lhs := stx[0]!
@@ -21,12 +22,12 @@ private def decomposeBind? (stx : Syntax) : Option (Syntax × String × Syntax) 
         let params := basicFun[0]!
         if params.getNumArgs != 1 then none
         else
-          let varName := reprintTrimmed params[0]!
+          let varName := params[0]!
           let body := basicFun[3]!
           some (lhs, varName, body)
 
 /-- Collect a chain of `>>= fun x => ...` bindings. -/
-private partial def collectBindChain (stx : Syntax) : Array (Syntax × String) × Syntax :=
+private partial def collectBindChain (stx : Syntax) : Array (Syntax × Syntax) × Syntax :=
   match decomposeBind? stx with
   | none => (#[], stx)
   | some (lhs, varName, body) =>
@@ -41,40 +42,47 @@ private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
     let (bindings, finalBody) := collectBindChain stx
     if bindings.isEmpty then stx.getArgs.flatMap findBindToDoAux
     else
-      let letLines := bindings.map fun (lhs, varName) =>
-        s!"  let {varName} ← {reprintTrimmed lhs}"
-      let bodyLine := s!"  {reprintTrimmed finalBody}"
-      let lines := #["do"] ++ letLines ++ #[bodyLine]
-      let repl := "\n".intercalate lines.toList
       -- Only recurse into the LHS expressions, not the consumed chain body
       let lhsResults := bindings.flatMap fun (lhs, _) => findBindToDoAux lhs
       let bodyResults := findBindToDoAux finalBody
-      #[{ fullStx := stx, replacement := repl }] ++ lhsResults ++ bodyResults
+      #[{ fullStx := stx, bindings, finalBody }] ++ lhsResults ++ bodyResults
   | none => stx.getArgs.flatMap findBindToDoAux
 
 @[refactor_rule] instance : Refactor BindToDoMatch where
   ruleName := `bindToDo
   detect := fun stx => return findBindToDoAux stx
   message := fun _ => m!"Convert `>>=` to do-notation"
-  replacements := fun m => #[{
-    sourceNode := m.fullStx
-    targetNode := m.fullStx
-    insertText := m.replacement
-    sourceLabel := m!"bind to do"
-  }]
+  replacements := fun m => do
+    -- Build doSeqItems: one `let v ← lhs` per binding, then final body
+    let mut items : Array (TSyntax ``Parser.Term.doSeqItem) := #[]
+    for (lhs, varName) in m.bindings do
+      let v : TSyntax `ident := ⟨varName⟩
+      let l : TSyntax `term := ⟨lhs⟩
+      let item ← `(Parser.Term.doSeqItem| let $v ← $l:term)
+      items := items.push item
+    let bodyItem ← `(Parser.Term.doSeqItem| $( (⟨m.finalBody⟩ : TSyntax `term) ):term)
+    items := items.push bodyItem
+    let seq ← `(Parser.Term.doSeq| $items*)
+    let repl ← `(do $seq)
+    return #[{
+      sourceNode := m.fullStx
+      targetNode := m.fullStx
+      insertText := repl
+      sourceLabel := m!"bind to do"
+    }]
   codeActionKind := "refactor.rewrite"
 
 namespace Tests
 
 #assertRefactor bindToDo in
 def f := IO.getLine >>= fun s => IO.println s
-becomes `(command| def f := do
+becomes `(def f := do
   let s ← IO.getLine
   IO.println s)
 
 #assertRefactor bindToDo in
 def g := IO.getLine >>= fun s => IO.getLine >>= fun t => IO.println (s ++ t)
-becomes `(command| def g := do
+becomes `(def g := do
   let s ← IO.getLine
   let t ← IO.getLine
   IO.println (s ++ t))

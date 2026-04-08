@@ -21,12 +21,16 @@ private def findRflTactics : Syntax → Array Syntax :=
   reference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."
-  replacements := fun m => #[{
-    sourceNode := m.rflStx
-    targetNode := m.rflStx
-    insertText := "exact rfl"
-    sourceLabel := m!"bare rfl"
-  }]
+  replacements := fun m => do
+    let rflId := mkIdent `rfl
+    let repl ← `(tactic| exact $rflId)
+    return #[{
+      sourceNode := m.rflStx
+      targetNode := m.rflStx
+      insertText := repl
+      category := `tactic
+      sourceLabel := m!"bare rfl"
+    }]
 
 namespace Tests
 
@@ -34,6 +38,6 @@ namespace Tests
 
 #assertCheck testRfl in
 example (a : Nat) : a = a := by rfl
-becomes `(command| example (a : Nat) : a = a := by exact rfl)
+becomes `(example (a : Nat) : a = a := by exact rfl)
 
 end Tests

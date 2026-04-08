@@ -6,7 +6,10 @@ open Lean Elab Command Meta Parser Heron
 private structure MonadTransformerAliasMatch where
   stx : Syntax
   transformerName : String
-  replacement : String
+  outerFn : Syntax
+  outerArgs : Array Syntax
+  innerFn : Syntax
+  innerArgs : Array Syntax
 
 /-- Map inner type constructor to its transformer name. -/
 private def transformerFor? : String → Option String
@@ -18,7 +21,10 @@ private def transformerFor? : String → Option String
 private structure Candidate where
   fullStx : Syntax
   transformerName : String
-  replacement : String
+  outerFn : Syntax
+  outerArgs : Array Syntax
+  innerFn : Syntax
+  innerArgs : Array Syntax
 
 /-- Build the replacement text for a transformer alias. -/
 private def buildReplacement (outerFn : String) (outerArgs : Array Syntax)
@@ -60,7 +66,10 @@ private def detectCandidate? : Syntax → Option Candidate
     return {
       fullStx := stx
       transformerName := tName
-      replacement := buildReplacement outerName outerRawArgs innerName innerRawArgs tName
+      outerFn := outerFn
+      outerArgs := outerRawArgs
+      innerFn := innerFn
+      innerArgs := innerRawArgs
     }
   | _ => none
 
@@ -109,7 +118,10 @@ private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array M
             results.push
               { stx := cand.fullStx
                 transformerName := cand.transformerName
-                replacement := cand.replacement }
+                outerFn := cand.outerFn
+                outerArgs := cand.outerArgs
+                innerFn := cand.innerFn
+                innerArgs := cand.innerArgs }
       | none =>
         pure ()
     | none =>
@@ -132,28 +144,46 @@ instance : Check MonadTransformerAliasMatch
         url := "https://lean-lang.org/functional_programming_in_lean/monads/transformers.html" }
   explanation := fun m => m! "This nested monad type is definitionally equal to its `{m.transformerName}` form. \
        Using the transformer alias enables do-notation with automatic effect handling."
-  replacements := fun m =>
-    #[{ sourceNode := m.stx
-        targetNode := m.stx
-        insertText := m.replacement
-        sourceLabel := m!"transformer alias" }]
+  replacements := fun m => do
+    let tName := mkIdent (Name.mkSimple m.transformerName)
+    -- Build outer monad: if no leading args, just outerFn; else (outerFn args...)
+    let outerLeading := m.outerArgs.pop.filter (!·.isAtom)
+    let outerMonad : TSyntax `term ←
+      if outerLeading.isEmpty then pure ⟨m.outerFn⟩
+      else
+        let outerFn : TSyntax `term := ⟨m.outerFn⟩
+        let leading : TSyntaxArray `term := outerLeading.map (⟨·⟩)
+        `(($outerFn $leading*))
+    -- Build replacement: tName [innerLeadingArgs...] outerMonad [innerTrailingArgs...]
+    let innerArgsSyn := m.innerArgs.filter (!·.isAtom)
+    let allArgs : Array (TSyntax `term) :=
+      if reprintTrimmed m.innerFn == "Except" && innerArgsSyn.size >= 2 then
+        #[⟨innerArgsSyn[0]!⟩, outerMonad] ++ (innerArgsSyn.extract 1 innerArgsSyn.size).map (⟨·⟩)
+      else
+        #[outerMonad] ++ innerArgsSyn.map (⟨·⟩)
+    let allArgs : TSyntaxArray `term := allArgs
+    let repl ← `($tName $allArgs*)
+    return #[{ sourceNode := m.stx
+               targetNode := m.stx
+               insertText := repl
+               sourceLabel := m!"transformer alias" }]
 
 namespace Tests
 
 -- IO wrapping Option with polymorphic return type and multiple parameters
 #assertCheck monadTransformerAlias in
 def tryLookup {α : Type} (table : List (String × α)) (key : String) : IO (Option α) := sorry
-becomes `(command| def tryLookup {α : Type} (table : List (String × α)) (key : String) : OptionT IO α := sorry)
+becomes `(def tryLookup {α : Type} (table : List (String × α)) (key : String) : OptionT IO α := sorry)
 
 -- IO wrapping Except with compound error type
 #assertCheck monadTransformerAlias in
 def parseConfig (path : String) (strict : Bool) : IO (Except (List String) Nat) := sorry
-becomes `(command| def parseConfig (path : String) (strict : Bool) : ExceptT (List String) IO Nat := sorry)
+becomes `(def parseConfig (path : String) (strict : Bool) : ExceptT (List String) IO Nat := sorry)
 
 -- Outer monad with args (Except as outer wrapping Option) — outer needs parens
 #assertCheck monadTransformerAlias in
 def validate (input : String) : Except String (Option Nat) := sorry
-becomes `(command| def validate (input : String) : OptionT (Except String) Nat := sorry)
+becomes `(def validate (input : String) : OptionT (Except String) Nat := sorry)
 
 -- No outer monad wrapping — plain Option
 #assertIgnore monadTransformerAlias in
