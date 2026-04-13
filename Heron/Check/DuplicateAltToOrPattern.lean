@@ -31,18 +31,17 @@ private def findDuplicateAltToOrPatternInAlts (alts : Array Syntax) : Array Dupl
       let a2 := alts[i + 1]!
       if altRhsText a1 == altRhsText a2 then
         match mkSpan a1 a2 with
-        | some fullRange =>
-          acc.push { secondArm := a2, fullRange, firstAlt := a1, secondAlt := a2 }
+        | some fullRange => acc.push { secondArm := a2, fullRange, firstAlt := a1, secondAlt := a2 }
         | none => acc
       else acc
 
 private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatternMatch :=
-  Syntax.collectAll fun stx =>
-    if stx.getKind != ``Term.match then #[]
-    else
-      let matchAlts := stx[5]!
-      let alts := matchAlts[0]!.getArgs
-      findDuplicateAltToOrPatternInAlts alts
+  Syntax.collectAll fun
+    |
+    `(match $_:term with
+        $alts:matchAlt*) =>
+      findDuplicateAltToOrPatternInAlts (alts.map (·.raw))
+    | _ => #[]
 
 @[check_rule] instance : Check DuplicateAltToOrPatternMatch where
   name := `duplicateAltToOrPattern
@@ -70,15 +69,18 @@ private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatte
 namespace Tests
 
 #assertCheck duplicateAltToOrPattern in
-def f (x : Bool) : Nat := match x with
-  | true => 1
-  | false => 1
-becomes `(def f (x : Bool) : Nat := match x with
-  | true | false => 1)
+  def f (x : Bool) : Nat :=
+    match x with
+    | true => 1
+    | false => 1 becomes
+  `(def f (x : Bool) : Nat :=
+      match x with
+      | true | false => 1)
 
 #assertIgnore duplicateAltToOrPattern in
-def g (x : Bool) : Nat := match x with
-  | true => 1
-  | false => 0
+  def g (x : Bool) : Nat :=
+    match x with
+    | true => 1
+    | false => 0
 
 end Tests

@@ -8,54 +8,28 @@ private structure NestedMonadToJoinMatch where
   inner : Syntax
   monadName : String
 
-/-- Extract the function name from a syntax node if it's a simple identifier application. -/
-private def appFnName? (stx : Syntax) : Option String :=
-  if stx.getKind == ``Term.app then
-    let fn := stx[0]!
-    if fn.isIdent then some (reprintTrimmed fn) else none
-  else none
-
-/-- Extract arguments from an application syntax node. -/
-private def appArgs (stx : Syntax) : Array Syntax :=
-  if stx.getKind == ``Term.app then stx[1]!.getArgs else #[]
-
-/-- Unwrap parentheses from a syntax node, returning the inner node. -/
-private def unwrapParen? (stx : Syntax) : Option Syntax :=
-  if stx.getKind == ``Term.paren then some stx[1]! else none
-
-/-- Check whether leading args (before the last) match textually between outer and inner. -/
-private def leadingArgsMatch (outerArgs innerArgs : Array Syntax) : Bool :=
-  let outerLeading := outerArgs.pop
-  let innerLeading := innerArgs.pop
-  outerLeading.size == innerLeading.size &&
-    (outerLeading.zip innerLeading |>.all fun (a, b) => reprintTrimmed a == reprintTrimmed b)
-
 /-- Detect `m (m α …)` patterns where the outer and inner constructor match.
 For multi-arg constructors like `Except ε`, also verifies the leading args match. -/
 private def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
-  Syntax.collectAll fun stx =>
-    match appFnName? stx with
-    | none => #[]
-    | some outerName =>
-      let outerArgs := appArgs stx
-      if outerArgs.size == 0 then #[]
+  Syntax.collectAll fun
+    | stx@`($fn $args*) =>
+      if !fn.raw.isIdent || args.size == 0 then #[]
       else
-        let lastArg := outerArgs[outerArgs.size - 1]!
-        match unwrapParen? lastArg with
-        | none => #[]
-        | some inner =>
-          match appFnName? inner with
-          | none => #[]
-          | some innerName =>
-            if outerName != innerName then #[]
+        let outerName := reprintTrimmed fn
+        match args.back! with
+        | `(($innerFn $innerArgs*)) =>
+          if reprintTrimmed innerFn != outerName then #[]
+          else
+            let outerLeading := args.pop
+            let innerLeading := innerArgs.pop
+            if outerLeading.size != innerLeading.size then #[]
+            else if !(outerLeading.zip innerLeading |>.all fun (a, b) =>
+              reprintTrimmed a.raw == reprintTrimmed b.raw) then #[]
             else
-              let innerArgs := appArgs inner
-              if !leadingArgsMatch outerArgs innerArgs then #[]
-              else
-                -- The replacement is just the inner application (removing one nesting layer)
-                -- e.g. Option (Option Nat) → the inner is `Option Nat`
-                -- e.g. Except String (Except String Nat) → the inner is `Except String Nat`
-                #[{ outerStx := stx, inner, monadName := outerName }]
+              let inner : Syntax := (args.back!.raw)[1]!
+              #[{ outerStx := stx, inner, monadName := outerName }]
+        | _ => #[]
+    | _ => #[]
 
 @[check_rule]
 instance : Check NestedMonadToJoinMatch where

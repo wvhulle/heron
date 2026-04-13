@@ -13,6 +13,11 @@ import Heron.Check.TupleMatchToSimultaneous
 import Heron.Check.MatchToIfLet
 import Heron.Check.GetSetToModify
 import Heron.Check.RedundantElsePureUnit
+import Heron.Check.IfNotToUnless
+import Heron.Check.NatLiteralPatterns
+import Heron.Check.FunMatchToMatchFun
+import Heron.Check.ExprAppChainToMkAppN
+import Heron.Check.FunToCdot
 -- Refactors
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
