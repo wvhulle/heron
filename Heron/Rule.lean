@@ -124,6 +124,12 @@ initialize
 initialize Heron.profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
   IO.mkRef { }
 
+def Heron.profilingAccumulator.get : BaseIO (Std.HashMap Name RuleProfile) :=
+  ST.Ref.get Heron.profilingAccumulator
+
+def Heron.profilingAccumulator.set (map : Std.HashMap Name RuleProfile) : BaseIO Unit :=
+  ST.Ref.set Heron.profilingAccumulator map
+
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
 def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
@@ -144,7 +150,7 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Uni
     handle m
   let t2 ← IO.monoNanosNow
   if profiling then
-    let map ← show IO _ from ST.Ref.get Heron.profilingAccumulator
+    let map ← Heron.profilingAccumulator.get
     let prev := Std.HashMap.getD map name { }
     let map :=
       Std.HashMap.insert map name
@@ -153,7 +159,7 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Uni
           fixNs := prev.fixNs + (t2 - t1)
           matchCount := prev.matchCount + results.size
           callCount := prev.callCount + 1 }
-    show IO Unit from ST.Ref.set Heron.profilingAccumulator map
+    Heron.profilingAccumulator.set map
 
 /-- Re-elaborate a command collecting info trees.
 
@@ -311,7 +317,7 @@ syntax (name := heronProfileCmd) "#heronProfile" : command
 @[command_elab heronProfileCmd]
 def elabHeronProfile : CommandElab
   | stx => do
-    let map ← show IO _ from ST.Ref.get Heron.profilingAccumulator
+    let map ← Heron.profilingAccumulator.get
     if map.isEmpty then
       logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
       return
@@ -334,6 +340,6 @@ def elabHeronProfile : CommandElab
         #[toString name, fmtMs p.detectNs, fmtMs p.fixNs, fmtMs (p.detectNs + p.fixNs), toString p.matchCount,
           toString p.callCount]
     logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable columns rows)
-    show IO Unit from ST.Ref.set Heron.profilingAccumulator { }
+    Heron.profilingAccumulator.set { }
 
 end Heron
