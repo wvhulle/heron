@@ -33,10 +33,7 @@ instance : Check BoolMatchMatch where
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
-  reference :=
-    some
-      { topic := "Bool conditionals",
-        url := "https://lean-lang.org/functional_programming_in_lean/getting-to-know/conveniences.html" }
+  reference := none
   explanation := fun _ =>
     m!"Pattern matching on `true`/`false` can be written as `if ... then ... else ...`, which is more concise and idiomatic."
   replacements := fun m => do

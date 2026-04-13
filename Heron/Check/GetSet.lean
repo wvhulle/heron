@@ -86,7 +86,7 @@ private def findGetSet (stx : Syntax) : Array GetSetMatch :=
   find := findGetSet
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
   emphasize := fun m => m.fullRange
-  reference := some { topic := "modify", url := "https://lean-lang.org/functional_programming_in_lean/monad-transformers/do.html" }
+  reference := some { topic := "modify", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
   explanation := fun _ => m!"`let s ← get; set \{s with ...}` can be simplified to `modify fun s => \{s with ...}`."
   replacements := fun m => do
     let varId : TSyntax `ident := ⟨m.varName⟩

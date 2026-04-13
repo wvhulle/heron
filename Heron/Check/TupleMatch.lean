@@ -85,7 +85,7 @@ private def findTupleMatches : Syntax → Array TupleMatchMatch :=
   find := findTupleMatches
   message := fun _ => m!"Use simultaneous matching instead of matching on a tuple"
   emphasize := fun m => m.matchStx
-  reference := some { topic := "Simultaneous matching", url := "https://lean-lang.org/functional_programming_in_lean/getting-to-know/conveniences.html" }
+  reference := some { topic := "Simultaneous matching", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
   explanation := fun _ => m!"Matching on `(x, y)` hides the connection between discriminant and pattern from the termination checker. Use `match x, y with` instead."
   replacements := fun m => do
     -- Build replacement text directly: `match x, y with | a, b => ...`

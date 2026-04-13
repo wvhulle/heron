@@ -52,7 +52,7 @@ private def findOrPatterns : Syntax → Array OrPatternMatch :=
   message := fun _ => m!"Merge match arms with identical right-hand sides"
   emphasize := fun m => m.fullRange
   tags := #[.unnecessary]
-  reference := some { topic := "Or-patterns", url := "https://lean-lang.org/functional_programming_in_lean/monads/conveniences.html" }
+  reference := some { topic := "Or-patterns", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }
   explanation := fun _ => m!"Consecutive match arms with the same body can be merged using `|` patterns."
   replacements := fun m => do
     let pat1 : TSyntax `term := ⟨m.firstAlt[1]!⟩

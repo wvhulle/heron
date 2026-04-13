@@ -141,7 +141,7 @@ instance : Check MonadTransformerAliasMatch
   reference :=
     some
       { topic := "Monad transformers"
-        url := "https://lean-lang.org/functional_programming_in_lean/monads/transformers.html" }
+        url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
   explanation := fun m => m! "This nested monad type is definitionally equal to its `{m.transformerName}` form. \
        Using the transformer alias enables do-notation with automatic effect handling."
   replacements := fun m => do

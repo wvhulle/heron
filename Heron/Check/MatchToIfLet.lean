@@ -56,7 +56,7 @@ private def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
   find := findMatchToIfLet
   message := fun _ => m!"Use `if let` instead of two-arm `match` with wildcard"
   emphasize := fun m => m.matchStx
-  reference := some { topic := "if let", url := "https://lean-lang.org/functional_programming_in_lean/getting-to-know/conveniences.html" }
+  reference := some { topic := "if let", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
   explanation := fun _ => m!"A `match` with exactly two arms where one is `_` can be written more concisely as `if let`."
   replacements := fun m => do
     let pat : TSyntax `term := ⟨m.pat⟩

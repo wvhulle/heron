@@ -34,7 +34,7 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
   message := fun _ => m!"Redundant `let _ ←`"
   emphasize := fun m => m.letKeyword
   tags := #[.unnecessary]
-  reference := some { topic := "do-notation", url := "https://lean-lang.org/functional_programming_in_lean/hello-world/conveniences.html" }
+  reference := none
   explanation := fun _ => m!"`let _ ← action` can be simplified to just `action` in a do-block."
   replacements := fun m => return #[{
     emphasizedSyntax := m.doLetStx

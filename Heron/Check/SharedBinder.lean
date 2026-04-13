@@ -65,7 +65,7 @@ private def findSharedBinders : Syntax → Array SharedBinderMatch :=
   detect := fun stx => return findSharedBinders stx
   message := fun _ => m!"Merge binders with the same type"
   emphasize := fun m => m.secondBinder
-  reference := some { topic := "Shared binders", url := "https://lean-lang.org/functional_programming_in_lean/monads/conveniences.html" }
+  reference := some { topic := "Shared binders", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }
   explanation := fun _ => m!"Consecutive explicit binders with the same type can be merged into a single binder group."
   replacements := fun m => do
     -- Merge the ident lists from both binders, keep the type from the first

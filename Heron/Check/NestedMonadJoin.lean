@@ -66,7 +66,7 @@ instance : Check NestedMonadJoinMatch where
   message := fun m => m! "Nested `{m.monadName}` can be flattened with `join`"
   emphasize := fun m => m.outerStx
   tags := #[.unnecessary]
-  reference := some { topic := "Monad join", url := "https://lean-lang.org/lean4/doc/monads/transformers.html" }
+  reference := none
   explanation := fun m => m! "`{m.monadName } ({m.monadName } α)` is equivalent to `{m.monadName} α` via `join`. \
        The extra nesting layer is redundant and can be flattened."
   replacements := fun m => pure
