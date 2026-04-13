@@ -60,10 +60,10 @@ private def inlineLabel : InlineKind → MessageData
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
   replacements := fun m => return #[{
-    sourceNode := m.stx
-    targetNode := m.stx
-    insertText := m.newSyntax
-    sourceLabel := inlineLabel m.kind
+    emphasizedSyntax := m.stx
+    oldSyntax := m.stx
+    newSyntax := m.newSyntax
+    inlineViolationLabel := inlineLabel m.kind
   }]
   codeActionKind := "refactor.inline"
 

@@ -60,10 +60,10 @@ private def findOrPatterns : Syntax → Array OrPatternMatch :=
     let rhs : TSyntax `term := ⟨m.firstAlt[3]!⟩
     let repl ← `(Term.matchAltExpr| | $pat1 | $pat2 => $rhs)
     return #[{
-      sourceNode := m.secondArm
-      targetNode := m.fullRange
-      insertText := repl
-      sourceLabel := m!"duplicate arm"
+      emphasizedSyntax := m.secondArm
+      oldSyntax := m.fullRange
+      newSyntax := repl
+      inlineViolationLabel := m!"duplicate arm"
       category := `matchAlt
     }]
 

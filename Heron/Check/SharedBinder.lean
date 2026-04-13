@@ -75,10 +75,10 @@ private def findSharedBinders : Syntax → Array SharedBinderMatch :=
     let ty : TSyntax `term := ⟨m.binder1[2]![1]!⟩
     let repl ← `(bracketedBinder| ($allNames* : $ty))
     return #[{
-      sourceNode := m.secondBinder
-      targetNode := m.fullRange
-      insertText := repl
-      sourceLabel := m!"shared type"
+      emphasizedSyntax := m.secondBinder
+      oldSyntax := m.fullRange
+      newSyntax := repl
+      inlineViolationLabel := m!"shared type"
       category := `bracketedBinder
     }]
 

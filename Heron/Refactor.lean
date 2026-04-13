@@ -44,7 +44,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let results ← runCommandElabM snap detectAndReplace
     let mut actions : Array LazyCodeAction := #[]
     for (msg, repls, textEdits) in results do
-      unless repls.any (fun r => match r.sourceNode.getRange? with
+      unless repls.any (fun r => match r.emphasizedSyntax.getRange? with
         | some range => range.start ≤ endPos && startPos ≤ range.stop
         | none => false) do continue
       let kind := Refactor.codeActionKind (α := α)

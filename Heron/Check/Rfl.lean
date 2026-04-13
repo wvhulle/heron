@@ -25,11 +25,11 @@ private def findRflTactics : Syntax → Array Syntax :=
     let rflId := mkIdent `rfl
     let repl ← `(tactic| exact $rflId)
     return #[{
-      sourceNode := m.rflStx
-      targetNode := m.rflStx
-      insertText := repl
+      emphasizedSyntax := m.rflStx
+      oldSyntax := m.rflStx
+      newSyntax := repl
       category := `tactic
-      sourceLabel := m!"bare rfl"
+      inlineViolationLabel := m!"bare rfl"
     }]
 
 namespace Tests

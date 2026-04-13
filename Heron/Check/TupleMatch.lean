@@ -17,7 +17,7 @@ private def getTupleElements? (stx : Syntax) : Option (Array Syntax) :=
   else
     let opt :=
       stx[1]! -- optional null node
-        
+
     if opt.getNumArgs < 3 then none
     else
       -- opt[0] = first term, opt[1] = ",", opt[2] = sepBy1 null node
@@ -73,7 +73,7 @@ private def findTupleMatches : Syntax → Array TupleMatchMatch :=
           let some discrElems := getTupleElements? discr |
             return #[]
           let altsArr : Array Syntax := alts.map (·.raw)
-          if !altsArr.all (isCompatibleAlt · discrElems.size) then 
+          if !altsArr.all (isCompatibleAlt · discrElems.size) then
             return #[]
           return #[{ matchStx := stx, matchKw := stx[0]!, discrElems, altsArr }])
     | _ => #[]
@@ -100,10 +100,10 @@ private def findTupleMatches : Syntax → Array TupleMatchMatch :=
     let env ← getEnv
     match Parser.runParserCategory env `term replText with
     | .ok stx => return #[{
-        sourceNode := m.matchStx
-        targetNode := m.matchStx
-        insertText := stx
-        sourceLabel := m!"tuple match"
+        emphasizedSyntax := m.matchStx
+        oldSyntax := m.matchStx
+        newSyntax := stx
+        inlineViolationLabel := m!"tuple match"
       }]
     | .error _ => return #[]
 

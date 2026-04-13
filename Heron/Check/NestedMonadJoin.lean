@@ -70,10 +70,10 @@ instance : Check NestedMonadJoinMatch where
   explanation := fun m => m! "`{m.monadName } ({m.monadName } α)` is equivalent to `{m.monadName} α` via `join`. \
        The extra nesting layer is redundant and can be flattened."
   replacements := fun m => pure
-    #[{ sourceNode := m.outerStx
-        targetNode := m.outerStx
-        insertText := m.inner
-        sourceLabel := m!"nested monad" }]
+    #[{ emphasizedSyntax := m.outerStx
+        oldSyntax := m.outerStx
+        newSyntax := m.inner
+        inlineViolationLabel := m!"nested monad" }]
 
 namespace Tests
 

@@ -20,38 +20,37 @@ def reprintTrimmed (stx : Syntax) : String :=
 
 /-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
 def getDoElems (doSeq : Syntax) : Array Syntax :=
-  if doSeq.getKind == ``Parser.Term.doSeqBracketed then
-    doSeq[1]!.getArgs.map (·[0]!)
-  else if doSeq.getKind == ``Parser.Term.doSeqIndent then
-    doSeq[0]!.getArgs.map (·[0]!)
-  else
-    #[]
+  if doSeq.getKind == ``Parser.Term.doSeqBracketed then doSeq[1]!.getArgs.map (·[0]!)
+  else if doSeq.getKind == ``Parser.Term.doSeqIndent then doSeq[0]!.getArgs.map (·[0]!) else #[]
 
 /-- A single text replacement with associated source annotation. -/
 structure Replacement where
   /-- Syntax node to underline in the diagnostic or anchor the code action. -/
-  sourceNode : Syntax
+  emphasizedSyntax : Syntax
   /-- Syntax node whose range is replaced. -/
-  targetNode : Syntax
+  oldSyntax : Syntax
   /-- Syntax to insert in place of `targetNode`. -/
-  insertText : Syntax
+  newSyntax : Syntax
   /-- Inline label shown below the span in editors. -/
-  sourceLabel : MessageData
+  inlineViolationLabel : MessageData
   /-- Syntax category for pretty-printing (e.g. `term`, `tactic`, `doElem`). -/
   category : Name := `term
 
 /-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
 to format the replacement text. Falls back to `reprint` if formatting fails. -/
 def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
-  let some range := r.targetNode.getRange? | return none
-  if r.insertText.isMissing then
+  let some range := r.oldSyntax.getRange? |
+    return none
+  if r.newSyntax.isMissing then 
     return some { range := fileMap.utf8RangeToLspRange range, newText := "" }
-  let text ← try
-    let fmt ← PrettyPrinter.ppCategory r.category r.insertText
-    pure fmt.pretty
-  catch _ =>
-    let some text := r.insertText.reprint | return none
-    pure text.trimAscii.toString
+  let text ←
+    try
+      let fmt ← PrettyPrinter.ppCategory r.category r.newSyntax
+      pure fmt.pretty
+    catch _ =>
+      let some text := r.newSyntax.reprint |
+        return none
+      pure text.trimAscii.toString
   return some { range := fileMap.utf8RangeToLspRange range, newText := text }
 
 class Rule (α : Type) where
@@ -71,11 +70,10 @@ def heronAllOption : Lean.Option Bool :=
   { name := `linter.heron, defValue := false }
 
 initialize
-  Lean.registerOption `linter.heron {
-    defValue := .ofBool false
-    descr := "Enable all Heron linter rules."
-    name := `linter
-  }
+  Lean.registerOption `linter.heron
+      { defValue := .ofBool false
+        descr := "Enable all Heron linter rules."
+        name := `linter }
 
 def Rule.option [Rule α] : Lean.Option Bool :=
   { name := `linter ++ Rule.ruleName (α := α), defValue := false }
@@ -84,10 +82,7 @@ def Rule.option [Rule α] : Lean.Option Bool :=
 An explicit `set_option linter.<rule> false` overrides `linter.heron true`. -/
 def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
   let ruleOpt := `linter ++ Rule.ruleName (α := α)
-  if opts.contains ruleOpt then
-    (Rule.option (α := α)).get opts
-  else
-    heronAllOption.get opts
+  if opts.contains ruleOpt then (Rule.option (α := α)).get opts else heronAllOption.get opts
 
 def Rule.initOption [Rule α] : IO Unit :=
   Lean.registerOption (`linter ++ Rule.ruleName (α := α))
@@ -100,11 +95,10 @@ private def heronReelaborating : Lean.Option Bool :=
   { name := `heron.reelaborating, defValue := false }
 
 initialize
-  Lean.registerOption `heron.reelaborating {
-    defValue := .ofBool false
-    descr := "Internal: set during re-elaboration to prevent recursive linter invocation."
-    name := `heron
-  }
+  Lean.registerOption `heron.reelaborating
+      { defValue := .ofBool false
+        descr := "Internal: set during re-elaboration to prevent recursive linter invocation."
+        name := `heron }
 
 initialize
   registerTraceClass `heron (inherited := true)
@@ -121,14 +115,14 @@ private def heronProfileOption : Lean.Option Bool :=
   { name := `heron.profile, defValue := false }
 
 initialize
-  Lean.registerOption `heron.profile {
-    defValue := .ofBool false
-    descr := "Accumulate per-rule profiling data for #heronProfile."
-    name := `heron
-  }
+  Lean.registerOption `heron.profile
+      { defValue := .ofBool false
+        descr := "Accumulate per-rule profiling data for #heronProfile."
+        name := `heron }
 
 /-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
-initialize heronProfileRef : IO.Ref (Std.HashMap Name RuleProfile) ← IO.mkRef {}
+initialize heronProfileRef : IO.Ref (Std.HashMap Name RuleProfile) ←
+  IO.mkRef { }
 
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
 def isReelaborating (opts : Options) : Bool :=
@@ -136,10 +130,11 @@ def isReelaborating (opts : Options) : Bool :=
 
 /-- Run a rule if enabled and not re-elaborating, calling `handle`
 for each detected match. -/
-def Rule.runIfEnabled [Rule α] (stx : Syntax)
-    (handle : α → CommandElabM Unit) : CommandElabM Unit := do
-  unless Rule.isEnabled (α := α) (← getOptions) do return
-  if isReelaborating (← getOptions) then return
+def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Unit) : CommandElabM Unit := do
+  unless Rule.isEnabled (α := α) (← getOptions) do
+    return
+  if isReelaborating (← getOptions) then 
+    return
   let name := Rule.ruleName (α := α)
   let profiling := heronProfileOption.get (← getOptions)
   let t0 ← IO.monoNanosNow
@@ -148,14 +143,16 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax)
   for m in results do
     handle m
   let t2 ← IO.monoNanosNow
-  if profiling then
+  if profiling then 
     let map ← show IO _ from ST.Ref.get heronProfileRef
-    let prev := Std.HashMap.getD map name {}
-    let map := Std.HashMap.insert map name { prev with
-      detectNs := prev.detectNs + (t1 - t0)
-      fixNs := prev.fixNs + (t2 - t1)
-      matchCount := prev.matchCount + results.size
-      callCount := prev.callCount + 1 }
+    let prev := Std.HashMap.getD map name { }
+    let map :=
+      Std.HashMap.insert map name
+        { prev with
+          detectNs := prev.detectNs + (t1 - t0)
+          fixNs := prev.fixNs + (t2 - t1)
+          matchCount := prev.matchCount + results.size
+          callCount := prev.callCount + 1 }
     show IO Unit from ST.Ref.set heronProfileRef map
 
 /-- Re-elaborate a command collecting info trees.
@@ -170,9 +167,11 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   setInfoState { enabled := true, trees := { } }
   try
     withoutModifyingEnv do
-        withScope (fun scope =>
-          let opts := heronReelaborating.set (Elab.async.set scope.opts false) true
-          { scope with opts }) do
+        withScope
+            (fun scope =>
+              let opts := heronReelaborating.set (Elab.async.set scope.opts false) true
+              { scope with opts })
+            do
             withReader ({ · with snap? := none }) do
                 elabCommand stx
   catch _ =>
@@ -186,7 +185,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
 def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let existing := (← getInfoState).trees
-  if existing.isEmpty then
+  if existing.isEmpty then 
     collectElabInfoTrees stx
   else
     pure existing.toArray
@@ -204,16 +203,13 @@ Lean's elaborator produces multiple `TermInfo` nodes for the same source
 position at different application depths (e.g. `f`, `f x`, `f x y`).
 This keeps only the most-applied version per position. -/
 def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
-  let map := infos.foldl (init := ({} : Std.HashMap Nat (ContextInfo × TermInfo)))
-    fun map (ci, ti) =>
+  let map :=
+    infos.foldl (init := ({ } : Std.HashMap Nat (ContextInfo × TermInfo))) fun map (ci, ti) =>
       match ti.stx.getPos? true with
       | some pos =>
         let key := pos.byteIdx
         match map[key]? with
-        | some (_, old) =>
-          if ti.expr.getAppNumArgs > old.expr.getAppNumArgs
-          then map.insert key (ci, ti)
-          else map
+        | some (_, old) => if ti.expr.getAppNumArgs > old.expr.getAppNumArgs then map.insert key (ci, ti) else map
         | none => map.insert key (ci, ti)
       | none => map
   map.fold (init := #[]) fun acc _ v => acc.push v
@@ -228,9 +224,7 @@ def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : Comma
 
 /-- Find the `declId` node in a command syntax tree. -/
 partial def findDeclId? : Syntax → Option Syntax
-  | stx@(.node _ kind args) =>
-    if kind == ``Lean.Parser.Command.declId then some stx
-    else args.findSome? findDeclId?
+  | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
   | _ => none
 
 /-- Get the source range of the `declId` in a command, if any. -/
@@ -244,20 +238,22 @@ def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
   | _, _ => true
 
 /-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
-def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr)
-    : CommandElabM (Option String) := do
+def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) := do
   try
     let fmt ← runInfoMetaM ci lctx (ppExpr e)
-    return some s!"({fmt})"
-  catch _ => return none
+    return some s! "({fmt})"
+  catch _ =>
+    return none
 
 /-- Type-erased rule runner: given syntax, produces LSP `TextEdit`s via
 `Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?`. -/
-abbrev RuleRunner := Syntax → CommandElabM (Array Lsp.TextEdit)
+abbrev RuleRunner :=
+  Syntax → CommandElabM (Array Lsp.TextEdit)
 
 /-- Registry of rule runners, keyed by rule name. Used by test macros to
 invoke rules directly without going through the linter/diagnostic path. -/
-initialize ruleRunnersRef : IO.Ref (Std.HashMap Name RuleRunner) ← IO.mkRef {}
+initialize ruleRunnersRef : IO.Ref (Std.HashMap Name RuleRunner) ←
+  IO.mkRef { }
 
 /-- Register a type-erased runner for a `Rule` instance. -/
 def Rule.registerRunner [Rule α] : IO Unit :=
@@ -269,7 +265,7 @@ def Rule.registerRunner [Rule α] : IO Unit :=
       for m in results do
         let repls ← Rule.replacements (α := α) m
         for r in repls do
-          if let some edit ← liftCoreM <| r.toTextEdit fileMap then
+          if let some edit← liftCoreM <| r.toTextEdit fileMap then 
             edits := edits.push edit
       pure edits
 
@@ -278,71 +274,70 @@ def Rule.registerRunner [Rule α] : IO Unit :=
 Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
 then evaluates `immediateFnConsts` immediately so the rule is active in the current file.
 `extraSetup` is called last for any additional registration (e.g. code action providers). -/
-unsafe def ruleHandlerCore (attrLabel : String)
-    (registerConst : Name) (immediateFnConsts : Array Name)
-    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ())
-    (declName : Name) : AttrM Unit := do
+unsafe def ruleHandlerCore (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
+    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ()) (declName : Name) : AttrM Unit := do
   let env ← getEnv
-  let some info := env.find? declName
-    | throwError "@[{attrLabel}]: unknown declaration '{declName}'"
-  let some αExpr := info.type.getAppArgs[0]?
-    | throwError "@[{attrLabel}]: expected type of the form `... α`"
+  let some info := env.find? declName |
+    throwError "@[{attrLabel }]: unknown declaration '{declName}'"
+  let some αExpr := info.type.getAppArgs[0]? |
+    throwError "@[{attrLabel}]: expected type of the form `... α`"
   let inst := mkConst declName
   let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
-  let some regInfo := env.find? registerConst
-    | throwError "{registerConst} not found"
+  let some regInfo := env.find? registerConst |
+    throwError "{registerConst} not found"
   let levels := regInfo.levelParams.map fun _ => Level.zero
-  -- Aux decl 1: calls `register` (initOption + registerRunner + addLinter), tagged @[init]
   let registerName := declName ++ `_rule_init
-  addAndCompile <| .defnDecl {
-    name := registerName, levelParams := [], type := auxType
-    value := mkApp2 (mkConst registerConst levels) αExpr inst
-    hints := .opaque, safety := .unsafe
-  }
+  addAndCompile <|
+      .defnDecl
+        { name := registerName, levelParams := [], type := auxType
+          value := mkApp2 (mkConst registerConst levels) αExpr inst
+          hints := .opaque, safety := .unsafe }
   modifyEnv fun env =>
-    match regularInitAttr.setParam env registerName .anonymous with
-    | .ok env' => env'
-    | .error _ => env
-  -- Evaluate immediate functions for current file (e.g. addLinter, registerRunner)
+      match regularInitAttr.setParam env registerName .anonymous with
+      | .ok env' => env'
+      | .error _ => env
   for fnConst in immediateFnConsts do
-    let some fnInfo := (← getEnv).find? fnConst
-      | throwError "{fnConst} not found"
+    let some fnInfo := (← getEnv).find? fnConst |
+      throwError "{fnConst} not found"
     let fnLevels := fnInfo.levelParams.map fun _ => Level.zero
     let auxName := declName ++ (`_rule).append fnConst
-    addAndCompile <| .defnDecl {
-      name := auxName, levelParams := [], type := auxType
-      value := mkApp2 (mkConst fnConst fnLevels) αExpr inst
-      hints := .opaque, safety := .unsafe
-    }
-    let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} auxName
+    addAndCompile <|
+        .defnDecl
+          { name := auxName, levelParams := [], type := auxType
+            value := mkApp2 (mkConst fnConst fnLevels) αExpr inst
+            hints := .opaque, safety := .unsafe }
+    let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) { } auxName
     fn
   extraSetup declName αExpr inst
 
 syntax (name := heronProfileCmd) "#heronProfile" : command
 
-@[command_elab heronProfileCmd] def elabHeronProfile : CommandElab
+@[command_elab heronProfileCmd]
+def elabHeronProfile : CommandElab
   | stx => do
     let map ← show IO _ from ST.Ref.get heronProfileRef
-    if map.isEmpty then
+    if map.isEmpty then 
       logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
       return
     let entries := Std.HashMap.fold (init := #[]) (fun acc name profile => acc.push (name, profile)) map
     let sorted := entries.qsort fun a b => a.2.detectNs + a.2.fixNs > b.2.detectNs + b.2.fixNs
     let columns : Array Column :=
-      #[⟨"Rule", '─'⟩, ⟨"Detect", '─'⟩, ⟨"Fix", '─'⟩,
-        ⟨"Total", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
+      #[⟨"Rule", '─'⟩, ⟨"Detect", '─'⟩, ⟨"Fix", '─'⟩, ⟨"Total", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
     let fmtMs (ns : Nat) : String :=
-      let us := (ns + 500) / 1000  -- round to nearest microsecond
+      let us :=
+        (ns + 500) /
+          1000 -- round to nearest microsecond
+            
       let ms := us / 1000
       let frac := us % 1000
       let fracStr := toString frac
       let padded := String.ofList (List.replicate (3 - fracStr.length) '0') ++ fracStr
-      s!"{ms}.{padded}ms"
-    let rows := sorted.map fun (name, p) =>
-      #[toString name, fmtMs p.detectNs, fmtMs p.fixNs,
-        fmtMs (p.detectNs + p.fixNs),
-        toString p.matchCount, toString p.callCount]
+      s! "{ms }.{padded}ms"
+    let rows :=
+      sorted.map fun (name, p) =>
+        #[toString name, fmtMs p.detectNs, fmtMs p.fixNs, fmtMs (p.detectNs + p.fixNs), toString p.matchCount,
+          toString p.callCount]
     logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable columns rows)
-    show IO Unit from ST.Ref.set heronProfileRef {}
+    show IO Unit from ST.Ref.set heronProfileRef { }
 
 end Heron

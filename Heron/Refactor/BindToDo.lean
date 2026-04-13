@@ -65,10 +65,10 @@ private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
     let seq ← `(Parser.Term.doSeq| $items*)
     let repl ← `(do $seq)
     return #[{
-      sourceNode := m.fullStx
-      targetNode := m.fullStx
-      insertText := repl
-      sourceLabel := m!"bind to do"
+      emphasizedSyntax := m.fullStx
+      oldSyntax := m.fullStx
+      newSyntax := repl
+      inlineViolationLabel := m!"bind to do"
     }]
   codeActionKind := "refactor.rewrite"
 

@@ -133,10 +133,10 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
       let val : TSyntax `term := ⟨inner[4]!⟩
       result ← `(let $ident := $val; $result)
     return #[{
-      sourceNode := m.fullStx
-      targetNode := m.fullStx
-      insertText := result
-      sourceLabel := m!"unnecessary Id.run do"
+      emphasizedSyntax := m.fullStx
+      oldSyntax := m.fullStx
+      newSyntax := result
+      inlineViolationLabel := m!"unnecessary Id.run do"
     }]
 
 namespace Tests

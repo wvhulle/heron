@@ -65,10 +65,10 @@ private def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
     let elseRhs : TSyntax `term := ⟨m.elseRhs⟩
     let repl ← `(if let $pat := $discr then $thenRhs else $elseRhs)
     return #[{
-      sourceNode := m.matchStx
-      targetNode := m.matchStx
-      insertText := repl
-      sourceLabel := m!"match to if let"
+      emphasizedSyntax := m.matchStx
+      oldSyntax := m.matchStx
+      newSyntax := repl
+      inlineViolationLabel := m!"match to if let"
     }]
 
 namespace Tests

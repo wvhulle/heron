@@ -45,10 +45,10 @@ instance : Check BoolMatchMatch where
     let falseRhs : TSyntax `term := ⟨m.falseRhs⟩
     let repl ← `(if $discr then $trueRhs else $falseRhs)
     return #[{
-          sourceNode := m.matchStx
-          targetNode := m.matchStx
-          insertText := repl
-          sourceLabel := m!"bool match" }]
+          emphasizedSyntax := m.matchStx
+          oldSyntax := m.matchStx
+          newSyntax := repl
+          inlineViolationLabel := m!"bool match" }]
 
 namespace Tests
 

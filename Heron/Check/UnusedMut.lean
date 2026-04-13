@@ -91,11 +91,11 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
   replacements := fun m => do
     let repl ← `(doElem| let $m.ident := $m.valStx)
     return #[{
-      sourceNode := m.doLetStx
-      targetNode := m.doLetStx
-      insertText := repl
+      emphasizedSyntax := m.doLetStx
+      oldSyntax := m.doLetStx
+      newSyntax := repl
       category := `doElem
-      sourceLabel := m!"unused mut"
+      inlineViolationLabel := m!"unused mut"
     }]
 
 namespace Tests

@@ -23,18 +23,18 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
   pureDetect := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
   replacements := fun m => return #[
-    { sourceNode := m.negCondStx
-      targetNode := m.negCondStx
-      insertText := m.innerCond
-      sourceLabel := m!"remove negation" },
-    { sourceNode := m.thenBranch
-      targetNode := m.thenBranch
-      insertText := m.elseBranch
-      sourceLabel := m!"swap branches" },
-    { sourceNode := m.elseBranch
-      targetNode := m.elseBranch
-      insertText := m.thenBranch
-      sourceLabel := m!"swap branches" }
+    { emphasizedSyntax := m.negCondStx
+      oldSyntax := m.negCondStx
+      newSyntax := m.innerCond
+      inlineViolationLabel := m!"remove negation" },
+    { emphasizedSyntax := m.thenBranch
+      oldSyntax := m.thenBranch
+      newSyntax := m.elseBranch
+      inlineViolationLabel := m!"swap branches" },
+    { emphasizedSyntax := m.elseBranch
+      oldSyntax := m.elseBranch
+      newSyntax := m.thenBranch
+      inlineViolationLabel := m!"swap branches" }
   ]
   codeActionKind := "refactor.rewrite"
 

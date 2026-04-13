@@ -94,16 +94,16 @@ private def findGetSet (stx : Syntax) : Array GetSetMatch :=
     let modifyId := mkIdent `modify
     let repl ← `(doElem| $modifyId:ident fun $varId => $structInst)
     return #[
-      { sourceNode := m.getStx
-        targetNode := m.getStx
-        insertText := repl
+      { emphasizedSyntax := m.getStx
+        oldSyntax := m.getStx
+        newSyntax := repl
         category := `doElem
-        sourceLabel := m!"get/set → modify" },
-      { sourceNode := m.setStx
-        targetNode := m.setStx
-        insertText := Syntax.missing
+        inlineViolationLabel := m!"get/set → modify" },
+      { emphasizedSyntax := m.setStx
+        oldSyntax := m.setStx
+        newSyntax := Syntax.missing
         category := `doElem
-        sourceLabel := m!"remove set" }
+        inlineViolationLabel := m!"remove set" }
     ]
 
 namespace Tests

@@ -11,9 +11,9 @@ private structure ElsePureUnitMatch where
 
 /-- Check if a syntax node is `pure ()` or `pure Unit.unit`. -/
 private def isPureUnit : Syntax → Bool
-  | `(pure ())          => true
-  | `(pure Unit.unit)   => true
-  | _                   => false
+  | `(pure ()) => true
+  | `(pure Unit.unit) => true
+  | _ => false
 
 /-- Find `if cond then ... else pure ()` in do-blocks. -/
 private def detectElsePureUnit : Syntax → Array ElsePureUnitMatch
@@ -46,11 +46,11 @@ private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
     let thenBody : TSyntax ``Term.doSeq := ⟨m.thenBody⟩
     let repl ← `(doElem| if $cond then $thenBody)
     return #[{
-      sourceNode := m.ifStx
-      targetNode := m.ifStx
-      insertText := repl
+      emphasizedSyntax := m.ifStx
+      oldSyntax := m.ifStx
+      newSyntax := repl
       category := `doElem
-      sourceLabel := m!"else pure ()"
+      inlineViolationLabel := m!"else pure ()"
     }]
 
 namespace Tests
@@ -67,15 +67,15 @@ example : IO Unit := do
     IO.println "hello")
 
 #assertIgnore elsePureUnit in
-example : IO Unit := do
-  if true then
-    IO.println "hello"
-  else
-    IO.println "world"
+  example : IO Unit := do
+    if true then 
+      IO.println "hello"
+    else
+      IO.println "world"
 
 #assertIgnore elsePureUnit in
-example : IO Unit := do
-  if true then
-    IO.println "hello"
+  example : IO Unit := do
+    if true then 
+      IO.println "hello"
 
 end Tests

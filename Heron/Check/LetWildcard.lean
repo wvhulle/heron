@@ -37,10 +37,10 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
   reference := some { topic := "do-notation", url := "https://lean-lang.org/functional_programming_in_lean/hello-world/conveniences.html" }
   explanation := fun _ => m!"`let _ ← action` can be simplified to just `action` in a do-block."
   replacements := fun m => return #[{
-    sourceNode := m.doLetStx
-    targetNode := m.doLetStx
-    insertText := m.rhs
-    sourceLabel := m!"let _ ←"
+    emphasizedSyntax := m.doLetStx
+    oldSyntax := m.doLetStx
+    newSyntax := m.rhs
+    inlineViolationLabel := m!"let _ ←"
   }]
 
 namespace Tests

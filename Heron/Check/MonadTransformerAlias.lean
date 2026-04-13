@@ -83,7 +83,7 @@ private def findCandidates : Syntax → Array Candidate :=
 /-- Check if the outer part of an expression (everything except the last arg) has a Monad instance. -/
 private def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   let args := e.getAppArgs
-  if args.size == 0 then 
+  if args.size == 0 then
     return false
   let outerMonad := mkAppN e.getAppFn args.pop
   try
@@ -96,7 +96,7 @@ private def outerHasMonadInstance (e : Expr) : MetaM Bool := do
 
 private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array MonadTransformerAliasMatch) := do
   let candidates := findCandidates stx
-  if candidates.isEmpty then 
+  if candidates.isEmpty then
     return #[]
   let trees ← collectInfoTrees stx
   let infos := trees.flatMap collectTermInfos
@@ -113,7 +113,7 @@ private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array M
       match posMap[pos.byteIdx]? with
       | some (ci, ti) =>
         let hasMonad ← runInfoMetaM ci ti.lctx (outerHasMonadInstance ti.expr)
-        if hasMonad then 
+        if hasMonad then
           results :=
             results.push
               { stx := cand.fullStx
@@ -163,10 +163,10 @@ instance : Check MonadTransformerAliasMatch
         #[outerMonad] ++ innerArgsSyn.map (⟨·⟩)
     let allArgs : TSyntaxArray `term := allArgs
     let repl ← `($tName $allArgs*)
-    return #[{ sourceNode := m.stx
-               targetNode := m.stx
-               insertText := repl
-               sourceLabel := m!"transformer alias" }]
+    return #[{ emphasizedSyntax := m.stx
+               oldSyntax := m.stx
+               newSyntax := repl
+               inlineViolationLabel := m!"transformer alias" }]
 
 namespace Tests
 
