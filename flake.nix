@@ -38,32 +38,28 @@
         src = ./.;
       };
 
-      devShells.${system} =
-        let
-          local = pkgs.mkShell {
-            packages = with pkgs; [
-              ast-grep
-              gcc
-              llvmPackages.bintools
-            ];
-
-            shellHook = ''
-              export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
-            '';
-          };
-        in
-        rec {
-          nix = pkgs.mkShell {
-            packages = [
-              lean4.packages.${system}.lake
-              pkgs.ast-grep
-            ];
-          };
-
-          # Use locally-built lean4 — no flake rebuild on source changes.
-          # Requires: make -j -C ../lean4/build/release
-          local = local;
-          default = nix;
+      devShells.${system} = rec {
+        nix = pkgs.mkShell {
+          packages = [
+            lean4.packages.${system}.lake
+            pkgs.ast-grep
+          ];
         };
+
+        # Use locally-built lean4 — no flake rebuild on source changes.
+        # Requires: make -j -C ../lean4/build/release
+        local = pkgs.mkShell {
+          packages = with pkgs; [
+            ast-grep
+            gcc
+            llvmPackages.bintools
+          ];
+
+          shellHook = ''
+            export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
+          '';
+        };
+        default = nix;
+      };
     };
 }
