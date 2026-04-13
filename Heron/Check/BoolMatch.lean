@@ -26,12 +26,12 @@ private def findBoolMatch : Syntax → Array BoolMatchMatch :=
 
 @[check_rule]
 instance : Check BoolMatchMatch where
-  ruleName := `boolMatch
+  name := `boolMatch
   severity := .warning
   category := .simplification
   detect := fun stx => return findBoolMatch stx
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
-  node := fun m => m.matchKw
+  emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
   reference :=
     some
@@ -53,12 +53,20 @@ instance : Check BoolMatchMatch where
 namespace Tests
 
 #assertCheck boolMatch in
-def f (b : Bool) : Nat := match b with | true => 1 | false => 0
-becomes `(def f (b : Bool) : Nat := if b then 1 else 0)
+  def f (b : Bool) : Nat :=
+    match b with
+    | true => 1
+    | false => 0 becomes
+  `(def f (b : Bool) : Nat :=
+      if b then 1 else 0)
 
 #assertCheck boolMatch in
-def g (b : Bool) : Nat := match b with | false => 0 | true => 1
-becomes `(def g (b : Bool) : Nat := if b then 1 else 0)
+  def g (b : Bool) : Nat :=
+    match b with
+    | false => 0
+    | true => 1 becomes
+  `(def g (b : Bool) : Nat :=
+      if b then 1 else 0)
 
 #assertIgnore boolMatch in
   def h (n : Nat) : Nat :=

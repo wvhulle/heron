@@ -32,12 +32,12 @@ private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
   Syntax.collectAll detectElsePureUnit stx
 
 @[check_rule] instance : Check ElsePureUnitMatch where
-  ruleName := `elsePureUnit
+  name := `elsePureUnit
   severity := .information
   category := .simplification
-  pureDetect := findElsePureUnit
+  find := findElsePureUnit
   message := fun _ => m!"Redundant `else pure ()`"
-  node := fun m => m.elseBranch
+  emphasize := fun m => m.elseBranch
   tags := #[.unnecessary]
   reference := some { topic := "Single-branched if", url := "https://lean-lang.org/functional_programming_in_lean/monad-transformers/do.html" }
   explanation := fun _ => m!"In a do-block, `if cond then action else pure ()` can be simplified to `if cond then action`."
@@ -68,14 +68,14 @@ example : IO Unit := do
 
 #assertIgnore elsePureUnit in
   example : IO Unit := do
-    if true then 
+    if true then
       IO.println "hello"
     else
       IO.println "world"
 
 #assertIgnore elsePureUnit in
   example : IO Unit := do
-    if true then 
+    if true then
       IO.println "hello"
 
 end Tests

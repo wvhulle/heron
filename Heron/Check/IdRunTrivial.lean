@@ -111,12 +111,12 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
     | none => #[]
 
 @[check_rule] instance : Check IdRunTrivialMatch where
-  ruleName := `idRunTrivial
+  name := `idRunTrivial
   severity := .warning
   category := .simplification
-  pureDetect := findIdRunTrivial
+  find := findIdRunTrivial
   message := fun _ => m!"Remove unnecessary `Id.run do`"
-  node := fun m => m.idRunDoSpan
+  emphasize := fun m => m.idRunDoSpan
   reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."

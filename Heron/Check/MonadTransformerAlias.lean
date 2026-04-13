@@ -131,12 +131,12 @@ private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array M
 @[check_rule]
 instance : Check MonadTransformerAliasMatch
     where
-  ruleName := `monadTransformerAlias
+  name := `monadTransformerAlias
   severity := .information
   category := .style
   detect := detectMonadTransformerAliases
   message := fun m => m! "Consider using `{m.transformerName}` instead of nesting"
-  node := fun m => m.stx
+  emphasize := fun m => m.stx
   tags := #[]
   reference :=
     some

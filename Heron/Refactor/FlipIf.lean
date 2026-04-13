@@ -19,8 +19,8 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
     | _ => #[]
 
 @[refactor_rule] instance : Refactor FlipIfMatch where
-  ruleName := `flipIf
-  pureDetect := findFlipIfCandidates
+  name := `flipIf
+  find := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
   replacements := fun m => return #[
     { emphasizedSyntax := m.negCondStx

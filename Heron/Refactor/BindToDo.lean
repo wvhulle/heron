@@ -49,7 +49,7 @@ private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
   | none => stx.getArgs.flatMap findBindToDoAux
 
 @[refactor_rule] instance : Refactor BindToDoMatch where
-  ruleName := `bindToDo
+  name := `bindToDo
   detect := fun stx => return findBindToDoAux stx
   message := fun _ => m!"Convert `>>=` to do-notation"
   replacements := fun m => do

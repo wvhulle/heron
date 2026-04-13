@@ -18,7 +18,7 @@ Looks up the rule's runner by name and calls it directly — the same
 used by the code action providers. -/
 def collectReplacements (cmd : Syntax) (linterName : Name)
     : CommandElabM (Array Lsp.TextEdit) := do
-  let runners ← ruleRunnersRef.get
+  let runners ← Rule.testRunnerRegistry.get
   let some runner := runners[linterName]? | do
     throwError "no rule runner registered for '{linterName}'"
   -- Elaborate the command so that rules needing info trees can find them.

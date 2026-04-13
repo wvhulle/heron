@@ -33,7 +33,7 @@ class Check (α : Type) extends Rule α where
   /-- What kind of pattern this rule detects. -/
   category : Category
   /-- Syntax node whose range is underlined in the diagnostic. -/
-  node : α → Syntax
+  emphasize : α → Syntax
   /-- LSP diagnostic tags (e.g. unnecessary, deprecated) applied to the match range. -/
   tags : Array Lsp.DiagnosticTag := #[]
   /-- Detailed explanation shown in hover popup. -/
@@ -66,9 +66,9 @@ def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category)
   trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]
-  if !longFmt.pretty.isEmpty then 
+  if !longFmt.pretty.isEmpty then
     bodyParts := bodyParts.push longFmt.pretty
-  if let some ref := reference then 
+  if let some ref := reference then
     bodyParts := bodyParts.push s! "Lean Reference ({ref.topic }): *{ref.url}*"
   bodyParts := bodyParts.push s! "Disable with `set_option {optName} false`"
   let data :=
@@ -80,28 +80,28 @@ def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category)
   logMessage msg
 
 def Check.toLinter [Check α] : Linter where
-  name := Rule.ruleName (α := α)
+  name := Rule.name (α := α)
   run :=
     withSetOptionIn fun stx =>
       Rule.runIfEnabled (α := α) stx fun m => do
-        emitCheck (Check.node (α := α) m) (Check.severity (α := α)) (Check.category (α := α)) (Check.tags (α := α))
-            (Rule.option (α := α)).name (Rule.message (α := α) m) (Check.explanation (α := α) m)
+        emitCheck (emphasize (α := α) m) (Check.severity (α := α)) (Check.category (α := α)) (Check.tags (α := α))
+            (Rule.linterOption (α := α)).name (Rule.message (α := α) m) (Check.explanation (α := α) m)
             (← Rule.replacements (α := α) m) (Check.reference (α := α))
 
-def Check.addLinter [Check α] : IO Unit :=
-  let name := Rule.ruleName (α := α)
+def Check.activateLinter [Check α] : IO Unit :=
+  let name := Rule.name (α := α)
   lintersRef.modify fun linters => (linters.filter (·.name != name)).push (Check.toLinter (α := α))
 
-def Check.registerRunner [Check α] : IO Unit :=
-  Rule.registerRunner (α := α)
+def Check.activateTestRunner [Check α] : IO Unit :=
+  Rule.activateTestRunner (α := α)
 
-def Check.register [Check α] : IO Unit := do
-  Rule.initOption (α := α)
-  Check.registerRunner (α := α)
-  Check.addLinter (α := α)
+def Check.registerAll [Check α] : IO Unit := do
+  Rule.registerLinterOption (α := α)
+  Check.activateTestRunner (α := α)
+  Check.activateLinter (α := α)
 
 private unsafe def checkRuleHandler :=
-  ruleHandlerCore "check_rule" ``Check.register #[``Check.addLinter, ``Check.registerRunner]
+  handleRuleAttribute "check_rule" ``Check.registerAll #[``Check.activateLinter, ``Check.activateTestRunner]
 
 initialize _checkRuleAttr : TagAttribute ←
   registerTagAttribute `check_rule "Register a Check instance as a heron linter rule." (validate :=

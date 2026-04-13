@@ -79,12 +79,12 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
       else none
 
 @[check_rule] instance : Check UnusedMutMatch where
-  ruleName := `unusedMut
+  name := `unusedMut
   severity := .warning
   category := .simplification
-  pureDetect := findUnusedMuts
+  find := findUnusedMuts
   message := fun _ => m!"Remove unnecessary `mut`"
-  node := fun m => m.mutKeyword
+  emphasize := fun m => m.mutKeyword
   reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."

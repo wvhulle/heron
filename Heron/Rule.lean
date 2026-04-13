@@ -41,7 +41,7 @@ to format the replacement text. Falls back to `reprint` if formatting fails. -/
 def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
   let some range := r.oldSyntax.getRange? |
     return none
-  if r.newSyntax.isMissing then 
+  if r.newSyntax.isMissing then
     return some { range := fileMap.utf8RangeToLspRange range, newText := "" }
   let text ←
     try
@@ -55,18 +55,18 @@ def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
-  ruleName : Name
+  name : Name
   /-- Pure detection — set this for rules that don't need `CommandElabM`. -/
-  pureDetect : Syntax → Array α := fun _ => #[]
-  /-- Detect matches, returning typed match data. Defaults to wrapping `pureDetect`. -/
-  detect : Syntax → CommandElabM (Array α) := fun stx => pure (pureDetect stx)
+  find : Syntax → Array α := fun _ => #[]
+  /-- Detect matches, returning typed match data. -/
+  detect : Syntax → CommandElabM (Array α) := fun stx => pure (find stx)
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
   /-- Per-edit replacement data. -/
   replacements : α → CommandElabM (Array Replacement)
 
 /-- Master option that enables all Heron linter rules at once. -/
-def heronAllOption : Lean.Option Bool :=
+def Heron.allRulesLinterOption : Lean.Option Bool :=
   { name := `linter.heron, defValue := false }
 
 initialize
@@ -75,23 +75,23 @@ initialize
         descr := "Enable all Heron linter rules."
         name := `linter }
 
-def Rule.option [Rule α] : Lean.Option Bool :=
-  { name := `linter ++ Rule.ruleName (α := α), defValue := false }
+def Rule.linterOption [Rule α] : Lean.Option Bool :=
+  { name := `linter ++ Rule.name (α := α), defValue := false }
 
 /-- Check whether this rule is enabled, either individually or via `linter.heron`.
 An explicit `set_option linter.<rule> false` overrides `linter.heron true`. -/
 def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
-  let ruleOpt := `linter ++ Rule.ruleName (α := α)
-  if opts.contains ruleOpt then (Rule.option (α := α)).get opts else heronAllOption.get opts
+  let ruleOpt := `linter ++ Rule.name (α := α)
+  if opts.contains ruleOpt then (Rule.linterOption (α := α)).get opts else Heron.allRulesLinterOption.get opts
 
-def Rule.initOption [Rule α] : IO Unit :=
-  Lean.registerOption (`linter ++ Rule.ruleName (α := α))
+def Rule.registerLinterOption [Rule α] : IO Unit :=
+  Lean.registerOption (`linter ++ Rule.name (α := α))
     { defValue := .ofBool false
-      descr := s! "Enable the {Rule.ruleName (α := α)} linter rule."
+      descr := s! "Enable the {Rule.name (α := α)} linter rule."
       name := `linter }
 
 /-- Internal option to prevent recursive linter invocation during re-elaboration. -/
-private def heronReelaborating : Lean.Option Bool :=
+private def Heron.reelaboratingGuardOption : Lean.Option Bool :=
   { name := `heron.reelaborating, defValue := false }
 
 initialize
@@ -111,7 +111,7 @@ structure RuleProfile where
   callCount : Nat := 0
 
 /-- Option to enable per-rule profiling accumulation (without trace output). -/
-private def heronProfileOption : Lean.Option Bool :=
+private def Heron.profilingOption : Lean.Option Bool :=
   { name := `heron.profile, defValue := false }
 
 initialize
@@ -121,30 +121,30 @@ initialize
         name := `heron }
 
 /-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
-initialize heronProfileRef : IO.Ref (Std.HashMap Name RuleProfile) ←
+initialize Heron.profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
   IO.mkRef { }
 
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
-def isReelaborating (opts : Options) : Bool :=
-  heronReelaborating.get opts
+def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
+  Heron.reelaboratingGuardOption.get opts
 
 /-- Run a rule if enabled and not re-elaborating, calling `handle`
 for each detected match. -/
 def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Unit) : CommandElabM Unit := do
   unless Rule.isEnabled (α := α) (← getOptions) do
     return
-  if isReelaborating (← getOptions) then 
+  if Heron.isReelaboratingGuardSet (← getOptions) then
     return
-  let name := Rule.ruleName (α := α)
-  let profiling := heronProfileOption.get (← getOptions)
+  let name := Rule.name (α := α)
+  let profiling := Heron.profilingOption.get (← getOptions)
   let t0 ← IO.monoNanosNow
   let results ← Rule.detect (α := α) stx
   let t1 ← IO.monoNanosNow
   for m in results do
     handle m
   let t2 ← IO.monoNanosNow
-  if profiling then 
-    let map ← show IO _ from ST.Ref.get heronProfileRef
+  if profiling then
+    let map ← show IO _ from ST.Ref.get Heron.profilingAccumulator
     let prev := Std.HashMap.getD map name { }
     let map :=
       Std.HashMap.insert map name
@@ -153,7 +153,7 @@ def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Uni
           fixNs := prev.fixNs + (t2 - t1)
           matchCount := prev.matchCount + results.size
           callCount := prev.callCount + 1 }
-    show IO Unit from ST.Ref.set heronProfileRef map
+    show IO Unit from ST.Ref.set Heron.profilingAccumulator map
 
 /-- Re-elaborate a command collecting info trees.
 
@@ -169,7 +169,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
     withoutModifyingEnv do
         withScope
             (fun scope =>
-              let opts := heronReelaborating.set (Elab.async.set scope.opts false) true
+              let opts := Heron.reelaboratingGuardOption.set (Elab.async.set scope.opts false) true
               { scope with opts })
             do
             withReader ({ · with snap? := none }) do
@@ -185,7 +185,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
 def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let existing := (← getInfoState).trees
-  if existing.isEmpty then 
+  if existing.isEmpty then
     collectElabInfoTrees stx
   else
     pure existing.toArray
@@ -247,25 +247,25 @@ def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElab
 
 /-- Type-erased rule runner: given syntax, produces LSP `TextEdit`s via
 `Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?`. -/
-abbrev RuleRunner :=
+abbrev Rule.TestRunner :=
   Syntax → CommandElabM (Array Lsp.TextEdit)
 
 /-- Registry of rule runners, keyed by rule name. Used by test macros to
 invoke rules directly without going through the linter/diagnostic path. -/
-initialize ruleRunnersRef : IO.Ref (Std.HashMap Name RuleRunner) ←
+initialize Rule.testRunnerRegistry : IO.Ref (Std.HashMap Name Rule.TestRunner) ←
   IO.mkRef { }
 
 /-- Register a type-erased runner for a `Rule` instance. -/
-def Rule.registerRunner [Rule α] : IO Unit :=
-  ruleRunnersRef.modify fun map =>
-    map.insert (Rule.ruleName (α := α)) fun stx => do
+def Rule.activateTestRunner [Rule α] : IO Unit :=
+  Rule.testRunnerRegistry.modify fun map =>
+    map.insert (Rule.name (α := α)) fun stx => do
       let fileMap ← getFileMap
       let results ← Rule.detect (α := α) stx
       let mut edits : Array Lsp.TextEdit := #[]
       for m in results do
         let repls ← Rule.replacements (α := α) m
         for r in repls do
-          if let some edit← liftCoreM <| r.toTextEdit fileMap then 
+          if let some edit← liftCoreM <| r.toTextEdit fileMap then
             edits := edits.push edit
       pure edits
 
@@ -274,7 +274,7 @@ def Rule.registerRunner [Rule α] : IO Unit :=
 Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
 then evaluates `immediateFnConsts` immediately so the rule is active in the current file.
 `extraSetup` is called last for any additional registration (e.g. code action providers). -/
-unsafe def ruleHandlerCore (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
+unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
     (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ()) (declName : Name) : AttrM Unit := do
   let env ← getEnv
   let some info := env.find? declName |
@@ -315,8 +315,8 @@ syntax (name := heronProfileCmd) "#heronProfile" : command
 @[command_elab heronProfileCmd]
 def elabHeronProfile : CommandElab
   | stx => do
-    let map ← show IO _ from ST.Ref.get heronProfileRef
-    if map.isEmpty then 
+    let map ← show IO _ from ST.Ref.get Heron.profilingAccumulator
+    if map.isEmpty then
       logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
       return
     let entries := Std.HashMap.fold (init := #[]) (fun acc name profile => acc.push (name, profile)) map
@@ -327,7 +327,7 @@ def elabHeronProfile : CommandElab
       let us :=
         (ns + 500) /
           1000 -- round to nearest microsecond
-            
+
       let ms := us / 1000
       let frac := us % 1000
       let fracStr := toString frac
@@ -338,6 +338,6 @@ def elabHeronProfile : CommandElab
         #[toString name, fmtMs p.detectNs, fmtMs p.fixNs, fmtMs (p.detectNs + p.fixNs), toString p.matchCount,
           toString p.callCount]
     logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable columns rows)
-    show IO Unit from ST.Ref.set heronProfileRef { }
+    show IO Unit from ST.Ref.set Heron.profilingAccumulator { }
 
 end Heron

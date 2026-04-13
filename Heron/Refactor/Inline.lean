@@ -56,7 +56,7 @@ private def inlineLabel : InlineKind → MessageData
   | .letBinding => m!"Inline let binding"
 
 @[refactor_rule] instance : Refactor InlineMatch where
-  ruleName := `inline
+  name := `inline
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
   replacements := fun m => return #[{

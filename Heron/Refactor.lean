@@ -9,12 +9,12 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
-def Refactor.registerRunner [Refactor α] : IO Unit :=
-  Rule.registerRunner (α := α)
+def Refactor.activateTestRunner [Refactor α] : IO Unit :=
+  Rule.activateTestRunner (α := α)
 
-def Refactor.register [Refactor α] : IO Unit := do
-  Rule.initOption (α := α)
-  Refactor.registerRunner (α := α)
+def Refactor.registerAll [Refactor α] : IO Unit := do
+  Rule.registerLinterOption (α := α)
+  Refactor.activateTestRunner (α := α)
 
 open Server RequestM Lsp in
 def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
@@ -23,7 +23,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     let text := doc.meta.text
     let startPos := text.lspPosToUtf8Pos params.range.start
     let endPos := text.lspPosToUtf8Pos params.range.end
-    let name := Rule.ruleName (α := α)
+    let name := Rule.name (α := α)
     let detectAndReplace : CommandElabM (Array (MessageData × Array Replacement × Array Lsp.TextEdit)) :=
       withTraceNode `heron.profile
           (fun res => return match res with
@@ -61,7 +61,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     return actions
 
 private unsafe def refactorRuleHandler :=
-  ruleHandlerCore "refactor_rule" ``Refactor.register #[``Refactor.registerRunner]
+  handleRuleAttribute "refactor_rule" ``Refactor.registerAll #[``Refactor.activateTestRunner]
     (extraSetup := fun declName αExpr inst => do
       let some provInfo := (← getEnv).find? ``Refactor.toCodeActionProvider
         | throwError "Refactor.toCodeActionProvider not found"

@@ -59,12 +59,12 @@ private def findNestedMonadJoin : Syntax → Array NestedMonadJoinMatch :=
 
 @[check_rule]
 instance : Check NestedMonadJoinMatch where
-  ruleName := `nestedMonadJoin
+  name := `nestedMonadJoin
   severity := .warning
   category := .simplification
-  pureDetect := findNestedMonadJoin
+  find := findNestedMonadJoin
   message := fun m => m! "Nested `{m.monadName}` can be flattened with `join`"
-  node := fun m => m.outerStx
+  emphasize := fun m => m.outerStx
   tags := #[.unnecessary]
   reference := some { topic := "Monad join", url := "https://lean-lang.org/lean4/doc/monads/transformers.html" }
   explanation := fun m => m! "`{m.monadName } ({m.monadName } α)` is equivalent to `{m.monadName} α` via `join`. \

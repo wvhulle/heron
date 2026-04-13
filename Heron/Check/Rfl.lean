@@ -12,12 +12,12 @@ private def findRflTactics : Syntax → Array Syntax :=
     | _ => #[]
 
 @[check_rule] instance : Check RflMatch where
-  ruleName := `testRfl
+  name := `testRfl
   severity := .information
   category := .style
-  pureDetect := fun stx => (findRflTactics stx).map ({ rflStx := · })
+  find := fun stx => (findRflTactics stx).map ({ rflStx := · })
   message := fun _ => m!"Use `exact rfl`"
-  node := fun m => m.rflStx
+  emphasize := fun m => m.rflStx
   reference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"The bare `rfl` tactic is sugar for `exact rfl`. Using `exact rfl` is more explicit and consistent with other `exact` usages."

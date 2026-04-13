@@ -80,12 +80,12 @@ private def findGetSet (stx : Syntax) : Array GetSetMatch :=
       | none => none
 
 @[check_rule] instance : Check GetSetMatch where
-  ruleName := `getSet
+  name := `getSet
   severity := .warning
   category := .simplification
-  pureDetect := findGetSet
+  find := findGetSet
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
-  node := fun m => m.fullRange
+  emphasize := fun m => m.fullRange
   reference := some { topic := "modify", url := "https://lean-lang.org/functional_programming_in_lean/monad-transformers/do.html" }
   explanation := fun _ => m!"`let s ← get; set \{s with ...}` can be simplified to `modify fun s => \{s with ...}`."
   replacements := fun m => do

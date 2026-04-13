@@ -27,12 +27,12 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
       | none => none
 
 @[check_rule] instance : Check LetWildcardMatch where
-  ruleName := `letWildcard
+  name := `letWildcard
   severity := .information
   category := .simplification
-  pureDetect := findLetWildcards
+  find := findLetWildcards
   message := fun _ => m!"Redundant `let _ ←`"
-  node := fun m => m.letKeyword
+  emphasize := fun m => m.letKeyword
   tags := #[.unnecessary]
   reference := some { topic := "do-notation", url := "https://lean-lang.org/functional_programming_in_lean/hello-world/conveniences.html" }
   explanation := fun _ => m!"`let _ ← action` can be simplified to just `action` in a do-block."

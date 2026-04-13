@@ -30,12 +30,12 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
 
 @[check_rule]
 instance : Check IntrosMatch where
-  ruleName := `testIntros
+  name := `testIntros
   severity := .warning
   category := .simplification
-  pureDetect := detectIntros
+  find := detectIntros
   message := fun _ => m!"Merge intros"
-  node := fun m => m.secondIntro
+  emphasize := fun m => m.secondIntro
   tags := #[.unnecessary]
   explanation := fun _ =>
     m!"Multiple sequential `intro` tactics can be merged into one. This reduces tactic noise and is idiomatic Lean style."
