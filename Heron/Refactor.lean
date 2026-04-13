@@ -63,14 +63,13 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
 private unsafe def refactorRuleHandler :=
   handleRuleAttribute "refactor_rule" ``Refactor.registerAll #[``Refactor.activateTestRunner]
     (extraSetup := fun declName αExpr inst => do
-      let some provInfo := (← getEnv).find? ``Refactor.toCodeActionProvider
-        | throwError "Refactor.toCodeActionProvider not found"
-      let provLevels := provInfo.levelParams.map fun _ => Level.zero
       let providerName := declName ++ `_rule_provider
+      let value ← Meta.MetaM.run' <|
+        Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
       addAndCompile <| .defnDecl {
         name := providerName, levelParams := []
         type := mkConst ``Server.CodeActionProvider
-        value := mkApp2 (mkConst ``Refactor.toCodeActionProvider provLevels) αExpr inst
+        value
         hints := .opaque, safety := .unsafe
       }
       modifyEnv (Server.codeActionProviderExt.addEntry · providerName))

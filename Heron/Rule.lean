@@ -283,28 +283,24 @@ unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (imme
     throwError "@[{attrLabel}]: expected type of the form `... α`"
   let inst := mkConst declName
   let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
-  let some regInfo := env.find? registerConst |
-    throwError "{registerConst} not found"
-  let levels := regInfo.levelParams.map fun _ => Level.zero
+  let buildApp (fnName : Name) : AttrM Expr :=
+    Meta.MetaM.run' <| Meta.mkAppOptM fnName #[some αExpr, some inst]
   let registerName := declName ++ `_rule_init
   addAndCompile <|
       .defnDecl
         { name := registerName, levelParams := [], type := auxType
-          value := mkApp2 (mkConst registerConst levels) αExpr inst
+          value := ← buildApp registerConst
           hints := .opaque, safety := .unsafe }
   modifyEnv fun env =>
       match regularInitAttr.setParam env registerName .anonymous with
       | .ok env' => env'
       | .error _ => env
   for fnConst in immediateFnConsts do
-    let some fnInfo := (← getEnv).find? fnConst |
-      throwError "{fnConst} not found"
-    let fnLevels := fnInfo.levelParams.map fun _ => Level.zero
     let auxName := declName ++ (`_rule).append fnConst
     addAndCompile <|
         .defnDecl
           { name := auxName, levelParams := [], type := auxType
-            value := mkApp2 (mkConst fnConst fnLevels) αExpr inst
+            value := ← buildApp fnConst
             hints := .opaque, safety := .unsafe }
     let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) { } auxName
     fn
