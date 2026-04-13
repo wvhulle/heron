@@ -9,7 +9,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
-private structure OrPatternMatch where
+private structure DuplicateAltToOrPatternMatch where
   secondArm : Syntax
   fullRange : Syntax
   firstAlt : Syntax
@@ -23,7 +23,7 @@ private def altPatsText (alt : Syntax) : String :=
 private def altRhsText (alt : Syntax) : String :=
   reprintTrimmed alt[3]!
 
-private def findOrPatternsInAlts (alts : Array Syntax) : Array OrPatternMatch :=
+private def findDuplicateAltToOrPatternInAlts (alts : Array Syntax) : Array DuplicateAltToOrPatternMatch :=
   if alts.size < 2 then #[]
   else
     (List.range (alts.size - 1)).foldl (init := #[]) fun acc i =>
@@ -36,19 +36,19 @@ private def findOrPatternsInAlts (alts : Array Syntax) : Array OrPatternMatch :=
         | none => acc
       else acc
 
-private def findOrPatterns : Syntax → Array OrPatternMatch :=
+private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatternMatch :=
   Syntax.collectAll fun stx =>
     if stx.getKind != ``Term.match then #[]
     else
       let matchAlts := stx[5]!
       let alts := matchAlts[0]!.getArgs
-      findOrPatternsInAlts alts
+      findDuplicateAltToOrPatternInAlts alts
 
-@[check_rule] instance : Check OrPatternMatch where
-  name := `orPattern
+@[check_rule] instance : Check DuplicateAltToOrPatternMatch where
+  name := `duplicateAltToOrPattern
   severity := .information
   category := .simplification
-  detect := fun stx => return findOrPatterns stx
+  detect := fun stx => return findDuplicateAltToOrPattern stx
   message := fun _ => m!"Merge match arms with identical right-hand sides"
   emphasize := fun m => m.fullRange
   tags := #[.unnecessary]
@@ -69,14 +69,14 @@ private def findOrPatterns : Syntax → Array OrPatternMatch :=
 
 namespace Tests
 
-#assertCheck orPattern in
+#assertCheck duplicateAltToOrPattern in
 def f (x : Bool) : Nat := match x with
   | true => 1
   | false => 1
 becomes `(def f (x : Bool) : Nat := match x with
   | true | false => 1)
 
-#assertIgnore orPattern in
+#assertIgnore duplicateAltToOrPattern in
 def g (x : Bool) : Nat := match x with
   | true => 1
   | false => 0

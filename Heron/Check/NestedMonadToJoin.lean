@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-private structure NestedMonadJoinMatch where
+private structure NestedMonadToJoinMatch where
   outerStx : Syntax
   inner : Syntax
   monadName : String
@@ -32,7 +32,7 @@ private def leadingArgsMatch (outerArgs innerArgs : Array Syntax) : Bool :=
 
 /-- Detect `m (m α …)` patterns where the outer and inner constructor match.
 For multi-arg constructors like `Except ε`, also verifies the leading args match. -/
-private def findNestedMonadJoin : Syntax → Array NestedMonadJoinMatch :=
+private def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
   Syntax.collectAll fun stx =>
     match appFnName? stx with
     | none => #[]
@@ -58,11 +58,11 @@ private def findNestedMonadJoin : Syntax → Array NestedMonadJoinMatch :=
                 #[{ outerStx := stx, inner, monadName := outerName }]
 
 @[check_rule]
-instance : Check NestedMonadJoinMatch where
-  name := `nestedMonadJoin
+instance : Check NestedMonadToJoinMatch where
+  name := `nestedMonadToJoin
   severity := .warning
   category := .simplification
-  find := findNestedMonadJoin
+  find := findNestedMonadToJoin
   message := fun m => m! "Nested `{m.monadName}` can be flattened with `join`"
   emphasize := fun m => m.outerStx
   tags := #[.unnecessary]
@@ -78,36 +78,36 @@ instance : Check NestedMonadJoinMatch where
 namespace Tests
 
 -- Nested Option in a function with multiple parameters
-#assertCheck nestedMonadJoin in
+#assertCheck nestedMonadToJoin in
 def flatten (xs : List Nat) (default : Nat) : Option (Option Nat) := sorry
 becomes `(def flatten (xs : List Nat) (default : Nat) : Option Nat := sorry)
 
 -- Nested Except with compound error type, buried in a signature with binders
-#assertCheck nestedMonadJoin in
+#assertCheck nestedMonadToJoin in
 def tryParse {α : Type} (input : String) : Except (List String) (Except (List String) α) := sorry
 becomes `(def tryParse {α : Type} (input : String) : Except (List String) α := sorry)
 
 -- Nested Option appearing in a let body type annotation
-#assertCheck nestedMonadJoin in
+#assertCheck nestedMonadToJoin in
 def g := let x : Option (Option (List Nat)) := none; x
 becomes `(def g := let x : Option (List Nat) := none; x)
 
-#assertIgnore nestedMonadJoin in
+#assertIgnore nestedMonadToJoin in
   def h : Option Nat :=
     sorry
 
 -- Different error types — not joinable
-#assertIgnore nestedMonadJoin in
+#assertIgnore nestedMonadToJoin in
   def k : Except String (Except Int Nat) :=
     sorry
 
 -- Different constructors — not same-monad nesting
-#assertIgnore nestedMonadJoin in
+#assertIgnore nestedMonadToJoin in
   def l : Option (Except String Nat) :=
     sorry
 
 -- Except with matching simple error but the arg types are complex
-#assertIgnore nestedMonadJoin in
+#assertIgnore nestedMonadToJoin in
   def m' : Except (List String) (Except (List Int) Nat) :=
     sorry
 

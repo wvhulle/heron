@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Meta Parser Heron
 
-private structure MonadTransformerAliasMatch where
+private structure NestedMonadToTransformerMatch where
   stx : Syntax
   transformerName : String
   outerFn : Syntax
@@ -94,7 +94,7 @@ private def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   catch _ =>
     return false
 
-private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array MonadTransformerAliasMatch) := do
+private def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
   let candidates := findCandidates stx
   if candidates.isEmpty then
     return #[]
@@ -106,7 +106,7 @@ private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array M
       match ti.stx.getPos? true with
       | some pos => map.insert pos.byteIdx (ci, ti)
       | none => map
-  let mut results : Array MonadTransformerAliasMatch := #[]
+  let mut results : Array NestedMonadToTransformerMatch := #[]
   for cand in candidates do
     match cand.fullStx.getPos? true with
     | some pos =>
@@ -129,12 +129,12 @@ private def detectMonadTransformerAliases (stx : Syntax) : CommandElabM (Array M
   return results
 
 @[check_rule]
-instance : Check MonadTransformerAliasMatch
+instance : Check NestedMonadToTransformerMatch
     where
-  name := `monadTransformerAlias
+  name := `nestedMonadToTransformer
   severity := .information
   category := .style
-  detect := detectMonadTransformerAliases
+  detect := detectNestedMonadToTransformer
   message := fun m => m! "Consider using `{m.transformerName}` instead of nesting"
   emphasize := fun m => m.stx
   tags := #[]
@@ -171,32 +171,32 @@ instance : Check MonadTransformerAliasMatch
 namespace Tests
 
 -- IO wrapping Option with polymorphic return type and multiple parameters
-#assertCheck monadTransformerAlias in
+#assertCheck nestedMonadToTransformer in
 def tryLookup {α : Type} (table : List (String × α)) (key : String) : IO (Option α) := sorry
 becomes `(def tryLookup {α : Type} (table : List (String × α)) (key : String) : OptionT IO α := sorry)
 
 -- IO wrapping Except with compound error type
-#assertCheck monadTransformerAlias in
+#assertCheck nestedMonadToTransformer in
 def parseConfig (path : String) (strict : Bool) : IO (Except (List String) Nat) := sorry
 becomes `(def parseConfig (path : String) (strict : Bool) : ExceptT (List String) IO Nat := sorry)
 
 -- Outer monad with args (Except as outer wrapping Option) — outer needs parens
-#assertCheck monadTransformerAlias in
+#assertCheck nestedMonadToTransformer in
 def validate (input : String) : Except String (Option Nat) := sorry
 becomes `(def validate (input : String) : OptionT (Except String) Nat := sorry)
 
 -- No outer monad wrapping — plain Option
-#assertIgnore monadTransformerAlias in
+#assertIgnore nestedMonadToTransformer in
   def h : Option Nat :=
     sorry
 
 -- No outer monad wrapping — plain Except
-#assertIgnore monadTransformerAlias in
+#assertIgnore nestedMonadToTransformer in
   def k : Except String Nat :=
     sorry
 
 -- Same-constructor nesting belongs to NestedMonadJoin, not this check
-#assertIgnore monadTransformerAlias in
+#assertIgnore nestedMonadToTransformer in
   def l : Option (Option Nat) :=
     sorry
 

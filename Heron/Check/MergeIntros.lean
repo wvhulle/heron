@@ -9,7 +9,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
-private structure IntrosMatch where
+private structure MergeIntrosMatch where
   secondIntro : Syntax
   fullRange : Syntax
   allIntros : Array Syntax
@@ -20,7 +20,7 @@ private def collectIntroTactics : Syntax → Array Syntax :=
 private def introIdents : Syntax → Array Syntax :=
   Syntax.collectAll fun stx => if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
 
-private def detectIntros (stx : Syntax) : Array IntrosMatch :=
+private def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
   let intros := collectIntroTactics stx
   if intros.size ≤ 1 then #[]
   else
@@ -29,8 +29,8 @@ private def detectIntros (stx : Syntax) : Array IntrosMatch :=
     | none => #[]
 
 @[check_rule]
-instance : Check IntrosMatch where
-  name := `testIntros
+instance : Check MergeIntrosMatch where
+  name := `mergeIntros
   severity := .warning
   category := .simplification
   find := detectIntros
@@ -51,13 +51,13 @@ instance : Check IntrosMatch where
 
 namespace Tests
 
-#assertIgnore testIntros in
+#assertIgnore mergeIntros in
   example (a b : Nat) : a = a :=
     rfl
 
-#assertIgnore testIntros in example : Nat → Nat → True := by intro a; exact trivial
+#assertIgnore mergeIntros in example : Nat → Nat → True := by intro a; exact trivial
 
-#assertCheck testIntros in example : Nat → Nat → True := by intro a; intro b; exact trivial becomes
+#assertCheck mergeIntros in example : Nat → Nat → True := by intro a; intro b; exact trivial becomes
   `(example : Nat → Nat → True := by intro a b; exact trivial)
 
 end Tests

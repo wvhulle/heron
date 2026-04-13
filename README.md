@@ -39,14 +39,14 @@ Less essential but still useful:
 
 ### Refactors
 
-Refactors are invisible until you explicitly request them via the code action menu on a selection. They are intended for offering an easy way to users to _refactor idiomatic_ Lean code. Use checks for showing a clear diagnostic to the user that indicates anti-pattern.
+Refactors are invisible until you explicitly request them via the code action menu on a selection. They are intended for offering an easy way to users to rewrite between equally acceptable styles. Use checks for showing a clear diagnostic to the user that indicates a piece of code that represents an anti-pattern (or is unidiomatic as they would say in Rust).
 
 See [`Heron/Refactor/`](./Heron/Refactor) for all available refactors.
 
 ### Disabling a Rule
 
 ```lean
-set_option linter.testIntros false
+set_option linter.mergeIntros false
 ```
 
 ## Development
@@ -71,7 +71,7 @@ Tests use compile-time assertion commands that verify rules at build time. Failu
 `#assertCheck` verifies that a check rule transforms a command into the expected result:
 
 ```lean
-#assertCheck testIntros in
+#assertCheck mergeIntros in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
 becomes `(example : Nat → Nat → True := by intro a b; exact trivial)
 ```
@@ -87,7 +87,7 @@ becomes `(example : Nat := (42))
 `#assertIgnore` verifies that a rule produces no edits for the given command:
 
 ```lean
-#assertIgnore testRfl in
+#assertIgnore rflToExactRfl in
 example (a : Nat) : a = a + 0 := by simp
 ```
 
@@ -98,8 +98,8 @@ At the moment of writing, you need to use a patched Lean (for now): [`github:wvh
 - For Nix users: Configure your Nix flake to use the patched Lean. You will need to add the repo as input to your flake and then reference the `lean` or `lake` package exported by it.
 - For other users:
   1. Clone the patched Lean into `../lean4`
-  2. Build with `cmake` as documented in its `README.md`
-  3. Add `lake` to your path:
+  1. Build with `cmake` as documented in its `README.md`
+  1. Add `lake` to your path:
      ```bash
      export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
      ```

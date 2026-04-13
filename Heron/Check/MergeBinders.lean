@@ -9,7 +9,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
-private structure SharedBinderMatch where
+private structure MergeBindersMatch where
   secondBinder : Syntax
   fullRange : Syntax
   binder1 : Syntax
@@ -31,7 +31,7 @@ private def binderNames (binder : Syntax) : Array String :=
   names.getArgs.map reprintTrimmed
 
 /-- Find pairs of consecutive explicit binders in a signature's binder list. -/
-private def findSharedInBinders (binders : Array Syntax) : Array SharedBinderMatch :=
+private def findMergeableInBinders (binders : Array Syntax) : Array MergeBindersMatch :=
   if binders.size < 2 then #[]
   else
     (List.range (binders.size - 1)).foldl (init := #[]) fun acc i =>
@@ -50,19 +50,19 @@ private def findSharedInBinders (binders : Array Syntax) : Array SharedBinderMat
           else acc
         | _, _ => acc
 
-private def findSharedBinders : Syntax → Array SharedBinderMatch :=
+private def findMergeBinders : Syntax → Array MergeBindersMatch :=
   Syntax.collectAll fun stx =>
     let k := stx.getKind
     if k == ``Command.optDeclSig || k == ``Command.declSig then
       let binderSeq := stx[0]!  -- null-node of binder nodes
-      findSharedInBinders binderSeq.getArgs
+      findMergeableInBinders binderSeq.getArgs
     else #[]
 
-@[check_rule] instance : Check SharedBinderMatch where
-  name := `sharedBinder
+@[check_rule] instance : Check MergeBindersMatch where
+  name := `mergeBinders
   severity := .information
   category := .style
-  detect := fun stx => return findSharedBinders stx
+  detect := fun stx => return findMergeBinders stx
   message := fun _ => m!"Merge binders with the same type"
   emphasize := fun m => m.secondBinder
   reference := some { topic := "Shared binders", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }
@@ -84,14 +84,14 @@ private def findSharedBinders : Syntax → Array SharedBinderMatch :=
 
 namespace Tests
 
-#assertCheck sharedBinder in
+#assertCheck mergeBinders in
 def f (x : Nat) (y : Nat) := x + y
 becomes `(def f (x y : Nat) := x + y)
 
-#assertIgnore sharedBinder in
+#assertIgnore mergeBinders in
 def g (x : Nat) (y : String) := toString x ++ y
 
-#assertIgnore sharedBinder in
+#assertIgnore mergeBinders in
 def h {x : Nat} {y : Nat} := x + y
 
 end Tests

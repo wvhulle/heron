@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-private structure LetWildcardMatch where
+private structure RedundantLetWildcardMatch where
   doLetStx : Syntax
   letKeyword : Syntax
   rhs : Syntax
@@ -14,7 +14,7 @@ private def isWildcardLetArrow? : Syntax → Option (Syntax × Syntax)
   | _ => none
 
 /-- Find `let _ ← action` in do-blocks. -/
-private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
+private def findRedundantLetWildcards (stx : Syntax) : Array RedundantLetWildcardMatch :=
   let doSeqs := Syntax.collectAll (fun s =>
     if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
     else #[]) stx
@@ -26,11 +26,11 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
         some { doLetStx := elem, letKeyword := letKw, rhs }
       | none => none
 
-@[check_rule] instance : Check LetWildcardMatch where
-  name := `letWildcard
+@[check_rule] instance : Check RedundantLetWildcardMatch where
+  name := `redundantLetWildcard
   severity := .information
   category := .simplification
-  find := findLetWildcards
+  find := findRedundantLetWildcards
   message := fun _ => m!"Redundant `let _ ←`"
   emphasize := fun m => m.letKeyword
   tags := #[.unnecessary]
@@ -45,7 +45,7 @@ private def findLetWildcards (stx : Syntax) : Array LetWildcardMatch :=
 
 namespace Tests
 
-#assertCheck letWildcard in
+#assertCheck redundantLetWildcard in
 example : IO Unit := do
   let _ ← IO.println "hello"
   pure ()
@@ -54,12 +54,12 @@ example : IO Unit := do
   IO.println "hello"
   pure ())
 
-#assertIgnore letWildcard in
+#assertIgnore redundantLetWildcard in
 example : IO Unit := do
   let x ← IO.getLine
   IO.println x
 
-#assertIgnore letWildcard in
+#assertIgnore redundantLetWildcard in
 example : IO Unit := do
   IO.println "hello"
 

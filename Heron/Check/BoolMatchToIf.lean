@@ -3,14 +3,14 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-private structure BoolMatchMatch where
+private structure BoolMatchToIfMatch where
   matchStx : Syntax
   matchKw : Syntax
   discr : Syntax
   trueRhs : Syntax
   falseRhs : Syntax
 
-private def findBoolMatch : Syntax → Array BoolMatchMatch :=
+private def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
   Syntax.collectAll fun
     |
     stx@`(match $discr:term with
@@ -25,11 +25,11 @@ private def findBoolMatch : Syntax → Array BoolMatchMatch :=
     | _ => #[]
 
 @[check_rule]
-instance : Check BoolMatchMatch where
-  name := `boolMatch
+instance : Check BoolMatchToIfMatch where
+  name := `boolMatchToIf
   severity := .warning
   category := .simplification
-  detect := fun stx => return findBoolMatch stx
+  detect := fun stx => return findBoolMatchToIf stx
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
@@ -49,7 +49,7 @@ instance : Check BoolMatchMatch where
 
 namespace Tests
 
-#assertCheck boolMatch in
+#assertCheck boolMatchToIf in
   def f (b : Bool) : Nat :=
     match b with
     | true => 1
@@ -57,7 +57,7 @@ namespace Tests
   `(def f (b : Bool) : Nat :=
       if b then 1 else 0)
 
-#assertCheck boolMatch in
+#assertCheck boolMatchToIf in
   def g (b : Bool) : Nat :=
     match b with
     | false => 0
@@ -65,13 +65,13 @@ namespace Tests
   `(def g (b : Bool) : Nat :=
       if b then 1 else 0)
 
-#assertIgnore boolMatch in
+#assertIgnore boolMatchToIf in
   def h (n : Nat) : Nat :=
     match n with
     | 0 => 1
     | _ => 2
 
-#assertIgnore boolMatch in
+#assertIgnore boolMatchToIf in
   def k (n : Nat) : Nat :=
     match n with
     | 0 => 1

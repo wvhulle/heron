@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-private structure TupleMatchMatch where
+private structure TupleMatchToSimultaneousMatch where
   matchStx : Syntax
   matchKw : Syntax
   discrElems : Array Syntax
@@ -63,7 +63,7 @@ private def reprintAlt (alt : Syntax) : String :=
       | none => reprintTrimmed alt[1]!
   s! "| {patText } => {reprintTrimmed alt[3]!}"
 
-private def findTupleMatches : Syntax → Array TupleMatchMatch :=
+private def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultaneousMatch :=
   Syntax.collectAll fun
     |
     stx@`(match $discr:term with
@@ -78,11 +78,11 @@ private def findTupleMatches : Syntax → Array TupleMatchMatch :=
           return #[{ matchStx := stx, matchKw := stx[0]!, discrElems, altsArr }])
     | _ => #[]
 
-@[check_rule] instance : Check TupleMatchMatch where
-  name := `tupleMatch
+@[check_rule] instance : Check TupleMatchToSimultaneousMatch where
+  name := `tupleMatchToSimultaneous
   severity := .warning
   category := .simplification
-  find := findTupleMatches
+  find := findTupleMatchToSimultaneous
   message := fun _ => m!"Use simultaneous matching instead of matching on a tuple"
   emphasize := fun m => m.matchStx
   reference := some { topic := "Simultaneous matching", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
@@ -109,7 +109,7 @@ private def findTupleMatches : Syntax → Array TupleMatchMatch :=
 
 namespace Tests
 
-#assertCheck tupleMatch in
+#assertCheck tupleMatchToSimultaneous in
   def f (x y : Nat) : Nat :=
     match (x, y) with
     | (a, b) => a + b becomes
@@ -117,12 +117,12 @@ namespace Tests
       match x, y with
       | a, b => a + b)
 
-#assertIgnore tupleMatch in
+#assertIgnore tupleMatchToSimultaneous in
   def g (x y : Nat) : Nat :=
     match x, y with
     | a, b => a + b
 
-#assertIgnore tupleMatch in
+#assertIgnore tupleMatchToSimultaneous in
   def h (p : Nat × Nat) : Nat :=
     match p with
     | (a, b) => a + b

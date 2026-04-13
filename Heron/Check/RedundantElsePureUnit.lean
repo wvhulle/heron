@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
-private structure ElsePureUnitMatch where
+private structure RedundantElsePureUnitMatch where
   ifStx : Syntax
   elseBranch : Syntax
   cond : Syntax
@@ -16,7 +16,7 @@ private def isPureUnit : Syntax → Bool
   | _ => false
 
 /-- Find `if cond then ... else pure ()` in do-blocks. -/
-private def detectElsePureUnit : Syntax → Array ElsePureUnitMatch
+private def detectRedundantElsePureUnit : Syntax → Array RedundantElsePureUnitMatch
   | s@`(doElem| if $cond then $thenBody else $elseBody) =>
     let elseElems := getDoElems elseBody
     if elseElems.size != 1 then #[]
@@ -28,14 +28,14 @@ private def detectElsePureUnit : Syntax → Array ElsePureUnitMatch
       #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
   | _ => #[]
 
-private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
-  Syntax.collectAll detectElsePureUnit stx
+private def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElsePureUnitMatch :=
+  Syntax.collectAll detectRedundantElsePureUnit stx
 
-@[check_rule] instance : Check ElsePureUnitMatch where
-  name := `elsePureUnit
+@[check_rule] instance : Check RedundantElsePureUnitMatch where
+  name := `redundantElsePureUnit
   severity := .information
   category := .simplification
-  find := findElsePureUnit
+  find := findRedundantElsePureUnit
   message := fun _ => m!"Redundant `else pure ()`"
   emphasize := fun m => m.elseBranch
   tags := #[.unnecessary]
@@ -55,7 +55,7 @@ private def findElsePureUnit (stx : Syntax) : Array ElsePureUnitMatch :=
 
 namespace Tests
 
-#assertCheck elsePureUnit in
+#assertCheck redundantElsePureUnit in
 example : IO Unit := do
   if true then
     IO.println "hello"
@@ -66,14 +66,14 @@ example : IO Unit := do
   if true then
     IO.println "hello")
 
-#assertIgnore elsePureUnit in
+#assertIgnore redundantElsePureUnit in
   example : IO Unit := do
     if true then
       IO.println "hello"
     else
       IO.println "world"
 
-#assertIgnore elsePureUnit in
+#assertIgnore redundantElsePureUnit in
   example : IO Unit := do
     if true then
       IO.println "hello"

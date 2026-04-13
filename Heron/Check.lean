@@ -66,9 +66,9 @@ def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category)
   trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]
-  if !longFmt.pretty.isEmpty then
+  if !longFmt.pretty.isEmpty then 
     bodyParts := bodyParts.push longFmt.pretty
-  if let some ref := reference then
+  if let some ref := reference then 
     bodyParts := bodyParts.push s! "Lean Reference ({ref.topic }): *{ref.url}*"
   bodyParts := bodyParts.push s! "Disable with `set_option {optName} false`"
   let data :=
@@ -84,9 +84,10 @@ def Check.toLinter [Check α] : Linter where
   run :=
     withSetOptionIn fun stx =>
       Rule.runIfEnabled (α := α) stx fun m => do
-        emitCheck (emphasize (α := α) m) (Check.severity (α := α)) (Check.category (α := α)) (Check.tags (α := α))
-            (Rule.linterOption (α := α)).name (Rule.message (α := α) m) (Check.explanation (α := α) m)
-            (← Rule.replacements (α := α) m) (Check.reference (α := α))
+        let repls ← Rule.replacements m
+        emitCheck (node := emphasize m) (severity := Check.severity (α := α)) (category := Check.category (α := α))
+            (tags := Check.tags (α := α)) (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
+            (explanation := Check.explanation m) (repls := repls) (reference := Check.reference (α := α))
 
 def Check.activateLinter [Check α] : IO Unit :=
   let name := Rule.name (α := α)

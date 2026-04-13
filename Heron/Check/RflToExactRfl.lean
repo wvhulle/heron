@@ -3,7 +3,7 @@ import Heron.Assert
 
 open Lean Elab Command Heron
 
-private structure RflMatch where
+private structure RflToExactRflMatch where
   rflStx : Syntax
 
 private def findRflTactics : Syntax → Array Syntax :=
@@ -11,11 +11,11 @@ private def findRflTactics : Syntax → Array Syntax :=
     | stx@`(tactic| rfl) => #[stx]
     | _ => #[]
 
-@[check_rule] instance : Check RflMatch where
-  name := `testRfl
+@[check_rule] instance : Check RflToExactRflMatch where
+  name := `rflToExactRfl
   severity := .information
   category := .style
-  find := fun stx => (findRflTactics stx).map ({ rflStx := · })
+  find := fun stx => (findRflTactics stx).map fun s => { rflStx := s }
   message := fun _ => m!"Use `exact rfl`"
   emphasize := fun m => m.rflStx
   reference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }
@@ -34,9 +34,9 @@ private def findRflTactics : Syntax → Array Syntax :=
 
 namespace Tests
 
-#assertIgnore testRfl in example (a : Nat) : a = a + 0 := by simp
+#assertIgnore rflToExactRfl in example (a : Nat) : a = a + 0 := by simp
 
-#assertCheck testRfl in
+#assertCheck rflToExactRfl in
 example (a : Nat) : a = a := by rfl
 becomes `(example (a : Nat) : a = a := by exact rfl)
 

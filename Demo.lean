@@ -8,7 +8,7 @@ example (n : Nat) : n = n := by rfl
 example (a b : Nat) (_ : a = b) : a = a := by
   rfl
 
--- set_option linter.testIntros false in
+-- set_option linter.mergeIntros false in
 example : Nat → Nat → Nat → True := by
   intro a
   intro b

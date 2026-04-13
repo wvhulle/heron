@@ -95,12 +95,12 @@ private def buildReplacement? (elems : Array Syntax) : Option (Array Syntax × S
     else return (inits, finalExpr)
   | _, _ => return (inits, finalExpr)
 
-private structure IdRunTrivialMatch where
+private structure UnnecessaryIdRunMatch where
   fullStx : Syntax
   idRunDoSpan : Syntax
   elems : Array Syntax
 
-private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
+private def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :=
   Syntax.collectAll fun stx =>
     match isIdRunDo? stx with
     | some (fullStx, idRunDoSpan, doSeq) =>
@@ -110,11 +110,11 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
       else #[]
     | none => #[]
 
-@[check_rule] instance : Check IdRunTrivialMatch where
-  name := `idRunTrivial
+@[check_rule] instance : Check UnnecessaryIdRunMatch where
+  name := `unnecessaryIdRun
   severity := .warning
   category := .simplification
-  find := findIdRunTrivial
+  find := findUnnecessaryIdRun
   message := fun _ => m!"Remove unnecessary `Id.run do`"
   emphasize := fun m => m.idRunDoSpan
   reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
@@ -142,26 +142,26 @@ private def findIdRunTrivial : Syntax → Array IdRunTrivialMatch :=
 namespace Tests
 
 -- Simple return
-#assertCheck idRunTrivial in
+#assertCheck unnecessaryIdRun in
 example : Nat := Id.run do return 42
 becomes `(example : Nat := 42)
 
 -- Let + return same variable collapses
-#assertCheck idRunTrivial in
+#assertCheck unnecessaryIdRun in
 example : Nat := Id.run do
   let x := 5
   return x
 becomes `(example : Nat := 5)
 
 -- Ignore: has mut (imperative)
-#assertIgnore idRunTrivial in
+#assertIgnore unnecessaryIdRun in
 example : Nat := Id.run do
   let mut x := 5
   x := x + 1
   return x
 
 -- Ignore: has for loop
-#assertIgnore idRunTrivial in
+#assertIgnore unnecessaryIdRun in
 example : Nat := Id.run do
   let mut sum := 0
   for x in [1, 2, 3] do
@@ -169,7 +169,7 @@ example : Nat := Id.run do
   return sum
 
 -- Ignore: has early return (doIf)
-#assertIgnore idRunTrivial in
+#assertIgnore unnecessaryIdRun in
 example : Nat := Id.run do
   if true then return 1
   return 2

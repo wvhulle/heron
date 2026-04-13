@@ -9,7 +9,7 @@ private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
-private structure GetSetMatch where
+private structure GetSetToModifyMatch where
   getStx : Syntax
   setStx : Syntax
   fullRange : Syntax
@@ -43,9 +43,9 @@ private partial def containsName (varName : Name) (stx : Syntax) : Bool :=
 
 /-- For a given get-binding at index `i`, find the matching set call. -/
 private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varNameStx : Syntax)
-    : Option GetSetMatch :=
+    : Option GetSetToModifyMatch :=
   let varName := varNameStx.getId
-  let rec go (j : Nat) : Option GetSetMatch :=
+  let rec go (j : Nat) : Option GetSetToModifyMatch :=
     if h : j < elems.size then
       match isSetWithStructUpdate? elems[j] varName with
       | some (setElem, structInst) =>
@@ -68,7 +68,7 @@ private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (v
   go (i + 1)
 
 /-- Find `let s ← get; set \{s with ...}` patterns. -/
-private def findGetSet (stx : Syntax) : Array GetSetMatch :=
+private def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :=
   let doSeqs := Syntax.collectAll (fun s =>
     if s.isOfKind ``Term.doSeqIndent || s.isOfKind ``Term.doSeqBracketed then #[s]
     else #[]) stx
@@ -79,11 +79,11 @@ private def findGetSet (stx : Syntax) : Array GetSetMatch :=
       | some (getElem, varName) => findSetForGet elems i getElem varName
       | none => none
 
-@[check_rule] instance : Check GetSetMatch where
-  name := `getSet
+@[check_rule] instance : Check GetSetToModifyMatch where
+  name := `getSetToModify
   severity := .warning
   category := .simplification
-  find := findGetSet
+  find := findGetSetToModify
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
   emphasize := fun m => m.fullRange
   reference := some { topic := "modify", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
@@ -113,7 +113,7 @@ private structure MyState where
   name : String
 
 -- Basic get/set to modify
-#assertCheck getSet in
+#assertCheck getSetToModify in
 def inc : StateM MyState Unit := do
   let s ← get
   set { s with count := s.count + 1 }
@@ -122,14 +122,14 @@ def inc : StateM MyState Unit := do
   modify fun s => { s with count := s.count + 1 })
 
 -- Ignore: variable used between get and set
-#assertIgnore getSet in
+#assertIgnore getSetToModify in
 def f : StateM MyState Unit := do
   let st ← get
   IO.println s!"{st.count}"
   set { st with count := 0 }
 
 -- Ignore: no set call
-#assertIgnore getSet in
+#assertIgnore getSetToModify in
 def g : StateM MyState Nat := do
   let s ← get
   pure s.count

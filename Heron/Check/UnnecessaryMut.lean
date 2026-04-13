@@ -48,14 +48,14 @@ private partial def collectReassignedVars (elems : Array Syntax) : Std.HashSet N
         collectReassignedVars (getDoElems child) |>.fold (init := acc) fun acc n => acc.insert n
       ) acc
 
-private structure UnusedMutMatch where
+private structure UnnecessaryMutMatch where
   doLetStx : Syntax
   mutKeyword : Syntax
   ident : TSyntax `ident
   valStx : TSyntax `term
 
 /-- Find `let mut x := e` where x is never reassigned in the subsequent do-elements. -/
-private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
+private def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch :=
   -- Find all do blocks first
   let doSeqs := Syntax.collectAll (fun s =>
     if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
@@ -78,11 +78,11 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
         | none => none
       else none
 
-@[check_rule] instance : Check UnusedMutMatch where
-  name := `unusedMut
+@[check_rule] instance : Check UnnecessaryMutMatch where
+  name := `unnecessaryMut
   severity := .warning
   category := .simplification
-  find := findUnusedMuts
+  find := findUnnecessaryMuts
   message := fun _ => m!"Remove unnecessary `mut`"
   emphasize := fun m => m.mutKeyword
   reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
@@ -101,7 +101,7 @@ private def findUnusedMuts (stx : Syntax) : Array UnusedMutMatch :=
 namespace Tests
 
 -- Unused mut: x is never reassigned
-#assertCheck unusedMut in
+#assertCheck unnecessaryMut in
 example : Nat := Id.run do
   let mut x := 5
   return x + 1
@@ -111,14 +111,14 @@ example : Nat := Id.run do
   return x + 1)
 
 -- Ignore: x IS reassigned
-#assertIgnore unusedMut in
+#assertIgnore unnecessaryMut in
 example : Nat := Id.run do
   let mut x := 5
   x := x + 1
   return x
 
 -- Ignore: no mut at all
-#assertIgnore unusedMut in
+#assertIgnore unnecessaryMut in
 example : Nat := Id.run do
   let x := 5
   return x
