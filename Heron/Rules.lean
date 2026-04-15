@@ -17,3 +17,4 @@ import Heron.Check.RedundantElsePureUnit
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
 import Heron.Refactor.BindToDo
+import Heron.Refactor.InlineAll

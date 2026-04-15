@@ -101,6 +101,10 @@ def increment : StateM DemoState Unit := do
   let s ← get
   set { s with count := s.count + 1 }
 
+-- InlineAllConst: refactor available (inline all usages of add1 from definition site)
+example : Nat :=
+  add1 3 + add1 5
+
 -- ElsePureUnit: should inform (redundant else pure ())
 example : IO Unit := do
   if true then

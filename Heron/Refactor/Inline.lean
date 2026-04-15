@@ -6,7 +6,7 @@ import Lean.PrettyPrinter
 open Lean Elab Command Meta Heron
 
 /-- Check if an expression references its own name (recursive). -/
-private def isRecursive (value : Expr) (name : Name) : Bool :=
+def isRecursive (value : Expr) (name : Name) : Bool :=
   value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
 
 private inductive InlineKind where
@@ -18,7 +18,7 @@ private structure InlineMatch where
   newSyntax : Syntax
   kind : InlineKind
 
-private def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
+def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   match e.getAppFn.constName? with
   | some name =>
     !env.isProjectionFn name && !Meta.isInstanceCore env name &&
