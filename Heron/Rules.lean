@@ -25,3 +25,4 @@ import Heron.Check.UnnecessaryMetaImport
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
 import Heron.Refactor.BindToDo
+import Heron.Refactor.InlineAll
