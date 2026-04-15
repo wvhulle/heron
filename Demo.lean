@@ -108,4 +108,8 @@ example : IO Unit := do
   else
     pure ()
 
+-- UnusedImport: this check detects unused imports at file level.
+-- In this file, `Heron.Rules` is used (it provides the linter rules), so it won't be flagged.
+-- To test: create a file that imports a module but doesn't use anything from it.
+
 #heronProfile

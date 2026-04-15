@@ -43,9 +43,9 @@ class Check (α : Type) extends Rule α where
 
 /-- Emit a check diagnostic with an associated quick-fix code action. -/
 def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category) (tags : Array Lsp.DiagnosticTag)
-    (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
+    (ruleName : Name) (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
     (reference : Option Reference := none) : CommandElabM Unit := do
-  let taggedMsg := MessageData.tagged optName message
+  let taggedMsg := message.tagWithErrorName ruleName
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
@@ -86,7 +86,8 @@ def Check.toLinter [Check α] : Linter where
       Rule.runIfEnabled (α := α) stx fun m => do
         let repls ← Rule.replacements m
         emitCheck (node := emphasize m) (severity := Check.severity (α := α)) (category := Check.category (α := α))
-            (tags := Check.tags (α := α)) (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
+            (tags := Check.tags (α := α)) (ruleName := Rule.name (α := α))
+            (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
             (explanation := Check.explanation m) (repls := repls) (reference := Check.reference (α := α))
 
 def Check.activateLinter [Check α] : IO Unit :=

@@ -18,6 +18,9 @@ import Heron.Check.NatLiteralPatterns
 import Heron.Check.FunMatchToMatchFun
 import Heron.Check.ExprAppChainToMkAppN
 import Heron.Check.FunToCdot
+import Heron.Check.UnusedImport
+import Heron.Check.UnnecessaryPublicImport
+import Heron.Check.UnnecessaryMetaImport
 -- Refactors
 import Heron.Refactor.FlipIf
 import Heron.Refactor.Inline
