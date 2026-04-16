@@ -15,19 +15,46 @@ private structure MergeIntrosMatch where
   fullRange : Syntax
   allIntros : Array Syntax
 
-private meta def collectIntroTactics : Syntax → Array Syntax :=
-  Syntax.collectAll fun stx => if stx.getKind == ``Lean.Parser.Tactic.intro then #[stx] else #[]
-
 private meta def introIdents : Syntax → Array Syntax :=
   Syntax.collectAll fun stx => if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
 
-private meta def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
-  let intros := collectIntroTactics stx
-  if intros.size ≤ 1 then #[]
-  else
-    match mkSpan intros[0]! intros[intros.size - 1]! with
-    | some fullRange => #[{ secondIntro := intros[1]!, fullRange, allIntros := intros }]
-    | none => #[]
+/-- Collect tactic child nodes from the argument array of a `sepByIndent`
+tactic sequence. In that layout, element/separator positions alternate starting
+with an element at index 0. -/
+private meta def tacticsOf (args : Array Syntax) : Array Syntax :=
+  (args.mapIdx fun i s => (i, s)).filterMap fun (i, s) =>
+    if i % 2 == 0 then some s else none
+
+/-- Find maximal runs of two-or-more consecutive `intro` tactics within a single
+tactic sequence. Runs that are interrupted by any other tactic are split. -/
+private meta def introRunsIn (tactics : Array Syntax) : Array (Array Syntax) := Id.run do
+  let mut runs : Array (Array Syntax) := #[]
+  let mut current : Array Syntax := #[]
+  for tac in tactics do
+    if tac.getKind == ``Lean.Parser.Tactic.intro then
+      current := current.push tac
+    else
+      if current.size ≥ 2 then runs := runs.push current
+      current := #[]
+  if current.size ≥ 2 then runs := runs.push current
+  runs
+
+/-- Walk syntax tree, collecting mergeable runs of consecutive `intro` tactics
+from each tactic sequence encountered. -/
+private meta partial def detectIntros (stx : Syntax) : Array MergeIntrosMatch := Id.run do
+  let mut found : Array MergeIntrosMatch := #[]
+  let k := stx.getKind
+  let seqArgs : Option (Array Syntax) :=
+    if k == ``Lean.Parser.Tactic.tacticSeq1Indented then some stx[0]!.getArgs
+    else if k == ``Lean.Parser.Tactic.tacticSeqBracketed then some stx[1]!.getArgs
+    else none
+  if let some args := seqArgs then
+    for run in introRunsIn (tacticsOf args) do
+      if let some fullRange := mkSpan run[0]! run.back! then
+        found := found.push { secondIntro := run[1]!, fullRange, allIntros := run }
+  for child in stx.getArgs do
+    found := found ++ detectIntros child
+  return found
 
 @[check_rule]
 private meta instance : Check MergeIntrosMatch where

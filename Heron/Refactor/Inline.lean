@@ -2,6 +2,7 @@ module
 
 public meta import Heron.Refactor
 public meta import Lean.Meta.Tactic.Delta
+public meta import Lean.Meta.RecExt
 public meta import Lean.PrettyPrinter
 
 public section
@@ -25,6 +26,9 @@ meta def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   match e.getAppFn.constName? with
   | some name =>
     !env.isProjectionFn name && !Meta.isInstanceCore env name &&
+      -- Well-founded / structural recursion compiles away the self-reference
+      -- into `brecOn`/`rec` calls, so `isRecursive` alone is not enough.
+      !Meta.recExt.isTagged env name &&
       match env.find? name >>= (·.value?) with
       | some v => !isRecursive v name
       | none => false

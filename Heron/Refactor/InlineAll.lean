@@ -12,6 +12,9 @@ open Lean Elab Command Meta Heron Server Lsp
 
 private meta def isInlineableConst (env : Environment) (name : Name) : Bool :=
   !env.isProjectionFn name && !Meta.isInstanceCore env name &&
+    -- Well-founded / structural recursion compiles away the self-reference
+    -- into `brecOn`/`rec` calls, so `isRecursive` alone is not enough.
+    !Meta.recExt.isTagged env name &&
     match env.find? name >>= (·.value?) with
     | some v => !isRecursive v name
     | none => false
