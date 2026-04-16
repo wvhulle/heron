@@ -10,7 +10,7 @@ private structure UnusedImportMatch where
 private def detectUnusedImports (stx : Syntax) : CommandElabM (Array UnusedImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
-    if !a.isNeeded then
+    if !a.isUsed then
       some { importStx := a.importStx, moduleName := a.imp.module }
     else
       none

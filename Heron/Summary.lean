@@ -1,14 +1,16 @@
+module
+
 namespace Heron
 
 /-- A column definition for table rendering. -/
-structure Column where
+public structure Column where
   header : String
   separator : Char := '─'
 
 /-- Render a table with auto-expanding columns.
     Column widths expand to fit the widest cell in each column.
     Separator rows fill the full column width with the separator character. -/
-def renderTable (columns : Array Column) (rows : Array (Array String)) : String :=
+public def renderTable (columns : Array Column) (rows : Array (Array String)) : String :=
   let gap := 2
   let headers := columns.map (·.header)
   let widths := (#[headers] ++ rows).foldl (init := columns.map fun _ => 0) fun acc row =>

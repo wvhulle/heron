@@ -1,12 +1,17 @@
-import Lean.Elab.Command
-import Lean.Elab.Quotation
-import Heron.Rule
+module
+
+public meta import Lean.Elab.Command
+public meta import Lean.Elab.Quotation
+public meta import Heron.TestRunner
+public meta import Heron.ImportAnalysis
+
+public section
 
 namespace Heron.Assert
 
 open Lean Elab Command Heron
 
-private def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
+private meta def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
   withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
     withReader ({ · with snap? := none }) do
       try elabCommand cmd catch _ => pure ()
@@ -16,7 +21,7 @@ private def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
 Looks up the rule's runner by name and calls it directly — the same
 `Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?` path
 used by the code action providers. -/
-def collectReplacements (cmd : Syntax) (linterName : Name)
+meta def collectReplacements (cmd : Syntax) (linterName : Name)
     : CommandElabM (Array Lsp.TextEdit) := do
   let runners ← Rule.testRunnerRegistry.get
   let some runner := runners[linterName]? | do
@@ -36,7 +41,7 @@ def collectReplacements (cmd : Syntax) (linterName : Name)
 Edits are sorted by range start descending and applied back-to-front so that
 earlier byte offsets remain valid, matching the LSP specification that all
 ranges refer to the original document. -/
-def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
+meta def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
   let sorted := edits.qsort fun a b =>
     let aStart := text.lspPosToUtf8Pos a.range.start
     let bStart := text.lspPosToUtf8Pos b.range.start
@@ -50,7 +55,7 @@ def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
 
 /-- Verify that applying all edits from a rule to `cmd` produces the text in
 the `expected` quotation. -/
-private def elabAssertResult (linterName : Ident) (cmd : Syntax)
+private meta def elabAssertResult (linterName : Ident) (cmd : Syntax)
     (expectedQuot : Syntax) (stx : Syntax) : CommandElabM Unit := do
   let edits ← collectReplacements cmd linterName.getId
   if edits.isEmpty then
@@ -90,12 +95,12 @@ syntax (name := assertCheckCmd)
 syntax (name := assertRefactorCmd)
   "#assertRefactor " ident " in " command " becomes " term : command
 
-@[command_elab assertCheckCmd] def elabAssertCheck : CommandElab
+@[command_elab assertCheckCmd] meta def elabAssertCheck : CommandElab
   | stx@`(command| #assertCheck $linterName in $cmd becomes $expected) =>
     elabAssertResult linterName cmd expected stx
   | _ => throwUnsupportedSyntax
 
-@[command_elab assertRefactorCmd] def elabAssertRefactor : CommandElab
+@[command_elab assertRefactorCmd] meta def elabAssertRefactor : CommandElab
   | stx@`(command| #assertRefactor $linterName in $cmd becomes $expected) =>
     elabAssertResult linterName cmd expected stx
   | _ => throwUnsupportedSyntax
@@ -103,7 +108,7 @@ syntax (name := assertRefactorCmd)
 syntax (name := assertIgnoreCmd)
   "#assertIgnore " ident " in " command : command
 
-@[command_elab assertIgnoreCmd] def elabAssertIgnore : CommandElab
+@[command_elab assertIgnoreCmd] meta def elabAssertIgnore : CommandElab
   | stx@`(command| #assertIgnore $linterName in $cmd) => do
     let edits ← collectReplacements cmd linterName.getId
     unless edits.isEmpty do
@@ -116,5 +121,52 @@ syntax (name := assertIgnoreCmd)
       logWarningAt stx
         m!"expected no replacements but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax
+
+/-! ## Import analysis assertion
+
+Verify that `ImportAnalysis.analyzeImports` classifies the current file's
+imports exactly as expected. Unlike `#assertCheck`, this operates on the
+file's own header — so the assertion must be the last command and each
+test scenario needs its own file. -/
+
+/-- Collect all identifiers anywhere inside a syntax tree. -/
+private meta partial def collectIdents (stx : Syntax) : Array Name :=
+  if stx.isIdent then #[stx.getId]
+  else stx.getArgs.foldl (init := #[]) fun acc child => acc ++ collectIdents child
+
+/-- Sort names using `Name.cmp` so `Array.==` comparisons are order-independent. -/
+private meta def sortNames (xs : Array Name) : Array Name :=
+  xs.qsort fun a b => Name.cmp a b == .lt
+
+syntax (name := assertImportsCmd)
+  "#assertImports"
+    (ppSpace &"unused" " := " "[" ident,* "]")?
+    (ppSpace &"overPublic" " := " "[" ident,* "]")?
+    (ppSpace &"overMeta" " := " "[" ident,* "]")? : command
+
+@[command_elab assertImportsCmd] meta def elabAssertImports : CommandElab := fun stx => do
+  let expectedUnused := sortNames (collectIdents stx[1])
+  let expectedOverPublic := sortNames (collectIdents stx[2])
+  let expectedOverMeta := sortNames (collectIdents stx[3])
+  let analyses ← ImportAnalysis.analyzeImports stx
+  if analyses.isEmpty then
+    logErrorAt stx
+      m!"no imports were analyzed — `#assertImports` must be the last command of the file"
+    return
+  let actualUnused := sortNames <| analyses.filterMap fun a =>
+    if !a.isUsed then some a.imp.module else none
+  let actualOverPublic := sortNames <| analyses.filterMap fun a =>
+    if a.isUsed && a.imp.isExported && !a.needsExported then some a.imp.module else none
+  let actualOverMeta := sortNames <| analyses.filterMap fun a =>
+    if a.isUsed && a.imp.isMeta && !a.needsMeta then some a.imp.module else none
+  if actualUnused != expectedUnused then
+    logErrorAt stx
+      m!"unused imports mismatch:\n  expected: {expectedUnused}\n  actual:   {actualUnused}"
+  if actualOverPublic != expectedOverPublic then
+    logErrorAt stx
+      m!"over-public imports mismatch:\n  expected: {expectedOverPublic}\n  actual:   {actualOverPublic}"
+  if actualOverMeta != expectedOverMeta then
+    logErrorAt stx
+      m!"over-meta imports mismatch:\n  expected: {expectedOverMeta}\n  actual:   {actualOverMeta}"
 
 end Heron.Assert

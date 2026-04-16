@@ -7,10 +7,14 @@ for single-file in-editor analysis.
 
 Source: https://github.com/leanprover/lean4/blob/master/src/lake/Lake/CLI/Shake.lean
 -/
-import Lean.Elab.Command
-import Lean.Parser.Module
-import Lean.ExtraModUses
-import Lean.ResolveName
+module
+
+public import Lean.Elab.Command
+public import Lean.Parser.Module
+public import Lean.ExtraModUses
+public import Lean.ResolveName
+
+public section
 
 open Lean Elab Command Parser
 
@@ -237,8 +241,9 @@ structure ImportAnalysis where
   imp : Import
   /-- The import syntax node (for diagnostic position via `emphasize`). -/
   importStx : Syntax
-  /-- Whether this import is needed at all. -/
-  isNeeded : Bool
+  /-- Whether this import contributes any constants referenced in the file
+  (in any visibility), and is not transitively implied by another direct import. -/
+  isUsed : Bool
   /-- Whether this import needs to be `public`. -/
   needsExported : Bool
   /-- Whether this import needs to be `meta`. -/
@@ -291,12 +296,6 @@ where
     let transDeps := buildTransDeps env
     -- Compute what the current file needs
     let needs := computeNeeds env transDeps
-    -- Build transitive reachability for the current file's direct imports
-    let directImports := env.header.imports
-    let mut curTransDeps : Needs := default
-    for imp in directImports do
-      if let some j := env.getModuleIdx? imp.module then
-        curTransDeps := addTransitiveImps curTransDeps imp j (transDeps[j]?.getD default)
     -- Add Init if no prelude
     let mut deps := needs
     if prelude?.isNone then
@@ -313,30 +312,29 @@ where
           for k' in NeedsKind.all do
             let reduced := (implied.sub k' singleton).get k'
             deps := deps.sub k' reduced
-    -- Determine which direct imports are unused
+    -- Determine which direct imports are unused.
+    -- After transitive reduction, `deps` contains only the minimal set of modules
+    -- that actually need to be imported. For each direct import, we check:
+    --   - `deps.hasAny j`: is this module required (in any visibility)?
+    --   - `deps.has .pub/.metaPub j`: does it need to be exported (public)?
+    --   - `deps.has .metaPub/.metaPriv j`: does it need to be meta?
     let mut results : Array ImportAnalysis := #[]
-    -- Match syntax to imports (skip implicit Init)
     let explicitImports := importsSyntax.map fun stx => (decodeImport stx, stx.raw)
     for (imp, impStx) in explicitImports do
       if let some j := env.getModuleIdx? imp.module then
-        let k := NeedsKind.ofImport imp
-        let isNeeded := deps.has k j || imp.importAll
-        -- Check if a private version would cover it (unnecessary public)
+        let usedAny := deps.hasAny j || imp.importAll
         let needsExported := deps.has .pub j || deps.has .metaPub j
-        -- Check if a non-meta version would cover it (unnecessary meta)
         let needsMeta := deps.has .metaPub j || deps.has .metaPriv j
-        -- Also check if implied by other imports' transitive deps
-        let isImplied := curTransDeps.has k j && !isNeeded
         results := results.push {
           imp, importStx := impStx
-          isNeeded := isNeeded && !isImplied
+          isUsed := usedAny
           needsExported, needsMeta
         }
       else
         -- Module not found — don't flag it (might be a build error)
         results := results.push {
           imp, importStx := impStx
-          isNeeded := true, needsExported := imp.isExported, needsMeta := imp.isMeta
+          isUsed := true, needsExported := imp.isExported, needsMeta := imp.isMeta
         }
     return results
 

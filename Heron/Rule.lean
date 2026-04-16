@@ -3,6 +3,7 @@ import Lean.Server.InfoUtils
 import Lean.Compiler.InitAttr
 import Lean.PrettyPrinter
 import Heron.Summary
+import Heron.TestRunner
 
 open Lean Elab Command Meta
 
@@ -250,16 +251,6 @@ def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElab
     return some s! "({fmt})"
   catch _ =>
     return none
-
-/-- Type-erased rule runner: given syntax, produces LSP `TextEdit`s via
-`Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?`. -/
-abbrev Rule.TestRunner :=
-  Syntax → CommandElabM (Array Lsp.TextEdit)
-
-/-- Registry of rule runners, keyed by rule name. Used by test macros to
-invoke rules directly without going through the linter/diagnostic path. -/
-initialize Rule.testRunnerRegistry : IO.Ref (Std.HashMap Name Rule.TestRunner) ←
-  IO.mkRef { }
 
 /-- Register a type-erased runner for a `Rule` instance. -/
 def Rule.activateTestRunner [Rule α] : IO Unit :=

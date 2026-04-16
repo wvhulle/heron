@@ -12,7 +12,7 @@ private def detectUnnecessaryPublicImports (stx : Syntax) :
     CommandElabM (Array UnnecessaryPublicImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
-    if a.isNeeded && a.imp.isExported && !a.needsExported then
+    if a.isUsed && a.imp.isExported && !a.needsExported then
       -- Extract the `public` keyword syntax from the import syntax node
       -- Import syntax: `$[public%$pubTk?]? $[meta%$metaTk?]? import $[all%$allTk?]? $id`
       let publicKw := a.importStx[0]![0]!

@@ -12,7 +12,7 @@ private def detectUnnecessaryMetaImports (stx : Syntax) :
     CommandElabM (Array UnnecessaryMetaImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
-    if a.isNeeded && a.imp.isMeta && !a.needsMeta then
+    if a.isUsed && a.imp.isMeta && !a.needsMeta then
       -- Extract the `meta` keyword syntax from the import syntax node
       -- Import syntax: `$[public%$pubTk?]? $[meta%$metaTk?]? import $[all%$allTk?]? $id`
       let metaKw := a.importStx[1]![0]!
