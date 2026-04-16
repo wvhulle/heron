@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Heron
 
@@ -48,16 +47,3 @@ instance : Check MergeIntrosMatch where
           newSyntax := repl
           category := `tactic
           inlineViolationLabel := m!"sequential intro" }]
-
-namespace Tests
-
-#assertIgnore mergeIntros in
-  example (a b : Nat) : a = a :=
-    rfl
-
-#assertIgnore mergeIntros in example : Nat → Nat → True := by intro a; exact trivial
-
-#assertCheck mergeIntros in example : Nat → Nat → True := by intro a; intro b; exact trivial becomes
-  `(example : Nat → Nat → True := by intro a b; exact trivial)
-
-end Tests

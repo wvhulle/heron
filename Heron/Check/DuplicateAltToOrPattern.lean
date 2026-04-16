@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
@@ -65,22 +64,3 @@ private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatte
       inlineViolationLabel := m!"duplicate arm"
       category := `matchAlt
     }]
-
-namespace Tests
-
-#assertCheck duplicateAltToOrPattern in
-  def f (x : Bool) : Nat :=
-    match x with
-    | true => 1
-    | false => 1 becomes
-  `(def f (x : Bool) : Nat :=
-      match x with
-      | true | false => 1)
-
-#assertIgnore duplicateAltToOrPattern in
-  def g (x : Bool) : Nat :=
-    match x with
-    | true => 1
-    | false => 0
-
-end Tests

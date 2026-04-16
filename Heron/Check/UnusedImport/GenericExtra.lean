@@ -16,9 +16,10 @@ import Heron.Check.UnusedImport.ExtraModUseHelper
 import Heron.Check.UnusedImport.ExtraModUseUmbrella
 import Lean.Data.PersistentHashMap
 
--- Force direct-hit coverage for the `Heron.Assert` and helper imports
--- (their value comes from side-effect registration, not from references).
-private def _usedAssert := @Heron.Assert.applyEdits
+-- Force direct-hit coverage for the helper import (its value comes from the
+-- side-effect registration of `#recordExtra`, not from constant references).
+-- `Heron.Assert` self-registers via its elaborators, so no similar shim is
+-- needed for it.
 private def _usedHelper := @elabRecordExtra
 
 #recordExtra Heron.Check.UnusedImport.ExtraModUseLeaf

@@ -5,9 +5,6 @@ import Heron.Check.BoolMatchToIf
 -- A non-rule module that is also genuinely unused.
 import Lean.Data.Json.Parser
 
--- Reference a constant from `Heron.Assert` so it is counted as used.
-private def _used := @Heron.Assert.applyEdits
-
 -- Assert both genuinely unused imports are still detected. This regression
 -- guard ensures the fix for the rule-module false positive does not
 -- over-correct by marking all rule modules as used regardless of whether

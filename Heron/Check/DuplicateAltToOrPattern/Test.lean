@@ -1,0 +1,17 @@
+import Heron.Assert
+import Heron.Check.DuplicateAltToOrPattern
+
+#assertCheck duplicateAltToOrPattern in
+  def f (x : Bool) : Nat :=
+    match x with
+    | true => 1
+    | false => 1 becomes
+  `(def f (x : Bool) : Nat :=
+      match x with
+      | true | false => 1)
+
+#assertIgnore duplicateAltToOrPattern in
+  def g (x : Bool) : Nat :=
+    match x with
+    | true => 1
+    | false => 0

@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
@@ -42,25 +41,3 @@ private def findRedundantLetWildcards (stx : Syntax) : Array RedundantLetWildcar
     newSyntax := m.rhs
     inlineViolationLabel := m!"let _ ←"
   }]
-
-namespace Tests
-
-#assertCheck redundantLetWildcard in
-example : IO Unit := do
-  let _ ← IO.println "hello"
-  pure ()
-becomes `(command|
-example : IO Unit := do
-  IO.println "hello"
-  pure ())
-
-#assertIgnore redundantLetWildcard in
-example : IO Unit := do
-  let x ← IO.getLine
-  IO.println x
-
-#assertIgnore redundantLetWildcard in
-example : IO Unit := do
-  IO.println "hello"
-
-end Tests

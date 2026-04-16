@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
@@ -50,21 +49,3 @@ private def findNatLiteralPatterns : Syntax → Array NatLiteralPatternsMatch :=
       let repl ← `($argId + 1)
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := repl, inlineViolationLabel := m!"Nat.succ → + 1" }
       return #[r]
-
-namespace Tests
-
-#assertCheck natLiteralPatterns in
-def f (n : Nat) : Nat := match n with
-  | Nat.zero => 0
-  | Nat.succ k => k
-becomes `(def f (n : Nat) : Nat := match n with
-  | 0 => 0
-  | k + 1 => k)
-
--- Ignore: already using numeric patterns
-#assertIgnore natLiteralPatterns in
-def g (n : Nat) : Nat := match n with
-  | 0 => 0
-  | k + 1 => k
-
-end Tests

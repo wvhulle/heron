@@ -1,9 +1,18 @@
 module
 
+-- Needed publicly: the `@[command_elab]`-registered elaborators below must be
+-- public for the attribute to accept them, and `CommandElab` appears in their
+-- signatures. Narrowing this further would require splitting the syntax
+-- declarations and elaborators into separate modules.
 public meta import Lean.Elab.Command
-public meta import Lean.Elab.Quotation
+-- `public` required: referenced (via a private helper) by public
+-- `@[command_elab]` elaborators. The module system checks transitively
+-- through private helpers.
 public meta import Heron.TestRunner
 public meta import Heron.ImportAnalysis
+-- Private: only used by the elaborator-internal helper `elabAssertResult` for
+-- `Syntax.getQuotContent`, which is available without re-exporting.
+meta import Lean.Elab.Quotation
 
 public section
 
@@ -21,7 +30,7 @@ private meta def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
 Looks up the rule's runner by name and calls it directly — the same
 `Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?` path
 used by the code action providers. -/
-meta def collectReplacements (cmd : Syntax) (linterName : Name)
+private meta def collectReplacements (cmd : Syntax) (linterName : Name)
     : CommandElabM (Array Lsp.TextEdit) := do
   let runners ← Rule.testRunnerRegistry.get
   let some runner := runners[linterName]? | do
@@ -41,7 +50,7 @@ meta def collectReplacements (cmd : Syntax) (linterName : Name)
 Edits are sorted by range start descending and applied back-to-front so that
 earlier byte offsets remain valid, matching the LSP specification that all
 ranges refer to the original document. -/
-meta def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
+private meta def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
   let sorted := edits.qsort fun a b =>
     let aStart := text.lspPosToUtf8Pos a.range.start
     let bStart := text.lspPosToUtf8Pos b.range.start
@@ -89,6 +98,13 @@ private meta def elabAssertResult (linterName : Ident) (cmd : Syntax)
     logErrorAt stx
       m!"\n\n{linterName} failed to rewrite:\n\noriginal:\n{original.trimAscii}\n\nexpected:\n{expectedNorm}\n\nactual:\n{actualNorm}\n"
 
+/-- Record `Heron.Assert` as an implicit dependency of the current file so the
+unused-import analysis counts it as used whenever any of the `#assert*`
+commands below are invoked. This removes the need for consumers to write a
+dummy `_usedAssert := @Heron.Assert.applyEdits` reference. -/
+private meta def recordAssertUsage : CommandElabM Unit :=
+  Lean.recordExtraModUse `Heron.Assert (isMeta := true)
+
 syntax (name := assertCheckCmd)
   "#assertCheck " ident " in " command " becomes " term : command
 
@@ -96,12 +112,14 @@ syntax (name := assertRefactorCmd)
   "#assertRefactor " ident " in " command " becomes " term : command
 
 @[command_elab assertCheckCmd] meta def elabAssertCheck : CommandElab
-  | stx@`(command| #assertCheck $linterName in $cmd becomes $expected) =>
+  | stx@`(command| #assertCheck $linterName in $cmd becomes $expected) => do
+    recordAssertUsage
     elabAssertResult linterName cmd expected stx
   | _ => throwUnsupportedSyntax
 
 @[command_elab assertRefactorCmd] meta def elabAssertRefactor : CommandElab
-  | stx@`(command| #assertRefactor $linterName in $cmd becomes $expected) =>
+  | stx@`(command| #assertRefactor $linterName in $cmd becomes $expected) => do
+    recordAssertUsage
     elabAssertResult linterName cmd expected stx
   | _ => throwUnsupportedSyntax
 
@@ -110,6 +128,7 @@ syntax (name := assertIgnoreCmd)
 
 @[command_elab assertIgnoreCmd] meta def elabAssertIgnore : CommandElab
   | stx@`(command| #assertIgnore $linterName in $cmd) => do
+    recordAssertUsage
     let edits ← collectReplacements cmd linterName.getId
     unless edits.isEmpty do
       let text ← getFileMap
@@ -145,6 +164,7 @@ syntax (name := assertImportsCmd)
     (ppSpace &"overMeta" " := " "[" ident,* "]")? : command
 
 @[command_elab assertImportsCmd] meta def elabAssertImports : CommandElab := fun stx => do
+  recordAssertUsage
   let expectedUnused := sortNames (collectIdents stx[1])
   let expectedOverPublic := sortNames (collectIdents stx[2])
   let expectedOverMeta := sortNames (collectIdents stx[3])

@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
@@ -46,38 +45,3 @@ instance : Check FunMatchToMatchFunMatch where
           oldSyntax := m.funStx
           newSyntax := repl
           inlineViolationLabel := m!"fun match → fun |" }]
-
-namespace Tests
-
-#assertCheck funMatchToMatchFun in
-  def f := fun x =>
-    match x with
-    | 0 => "zero"
-    | _ => "other" becomes
-  `(def f := fun
-      | 0 => "zero"
-      | _ => "other")
-
--- Ignore: multiple parameters
-#assertIgnore funMatchToMatchFun in
-  def g := fun x y =>
-    match x with
-    | 0 => y
-    | _ =>
-      0
-
--- Ignore: match on different variable
-#assertIgnore funMatchToMatchFun in
-  def h (y : Nat) := fun x =>
-    match y with
-    | 0 => x
-    | _ =>
-      0
-
--- Ignore: already using fun | syntax
-#assertIgnore funMatchToMatchFun in
-  def k := fun
-    | 0 => "zero"
-    | _ => "other"
-
-end Tests

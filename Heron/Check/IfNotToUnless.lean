@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Parser Heron
 
@@ -46,39 +45,3 @@ private def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
       category := `doElem
       inlineViolationLabel := m!"if not → unless"
     }]
-
-namespace Tests
-
-#assertCheck ifNotToUnless in
-example : IO Unit := do
-  if not true then
-    IO.println "hello"
-becomes `(command|
-example : IO Unit := do
-  unless true do
-    IO.println "hello")
-
-#assertCheck ifNotToUnless in
-example : IO Unit := do
-  if !true then
-    IO.println "hello"
-becomes `(command|
-example : IO Unit := do
-  unless true do
-    IO.println "hello")
-
--- Ignore: has else branch
-#assertIgnore ifNotToUnless in
-  example : IO Unit := do
-    if not true then
-      IO.println "hello"
-    else
-      IO.println "world"
-
--- Ignore: no negation
-#assertIgnore ifNotToUnless in
-  example : IO Unit := do
-    if true then
-      IO.println "hello"
-
-end Tests

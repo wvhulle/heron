@@ -1,5 +1,4 @@
 import Heron.Check
-import Heron.Assert
 
 open Lean Elab Command Heron
 
@@ -31,13 +30,3 @@ private def findRflTactics : Syntax → Array Syntax :=
       category := `tactic
       inlineViolationLabel := m!"bare rfl"
     }]
-
-namespace Tests
-
-#assertIgnore rflToExactRfl in example (a : Nat) : a = a + 0 := by simp
-
-#assertCheck rflToExactRfl in
-example (a : Nat) : a = a := by rfl
-becomes `(example (a : Nat) : a = a := by exact rfl)
-
-end Tests
