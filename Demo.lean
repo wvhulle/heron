@@ -1,4 +1,13 @@
 import Heron.Rules
+-- UnusedImport demo: these three modules are imported but nothing from them
+-- is referenced below, so the `unusedImport` linter should flag all three.
+-- (`public import` / `meta import` variants for `unnecessaryPublicImport` /
+-- `unnecessaryMetaImport` require `module` mode, which in turn requires every
+-- imported file to be a module — `Heron.Rules` is legacy, so we can't demo
+-- those two checks here.)
+import Lean.Data.Json.Parser
+import Init.System.FilePath
+import Lean.Data.Lsp.Capabilities
 
 set_option linter.heron true
 set_option heron.profile true

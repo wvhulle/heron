@@ -13,6 +13,7 @@ public import Lean.Elab.Command
 public import Lean.Parser.Module
 public import Lean.ExtraModUses
 public import Lean.ResolveName
+public import Heron.ImplicitImports
 
 public section
 
@@ -65,46 +66,29 @@ def get (needs : Needs) (k : NeedsKind) : Std.HashSet Nat :=
 def has (needs : Needs) (k : NeedsKind) (i : ModuleIdx) : Bool :=
   needs.get k |>.contains i
 
-def set (needs : Needs) (k : NeedsKind) (s : Std.HashSet Nat) : Needs :=
-  match k with
-  | .pub => { needs with pub := s }
-  | .priv => { needs with priv := s }
-  | .metaPub => { needs with metaPub := s }
-  | .metaPriv => { needs with metaPriv := s }
-
 def modify (needs : Needs) (k : NeedsKind) (f : Std.HashSet Nat → Std.HashSet Nat) : Needs :=
-  needs.set k (f (needs.get k))
+  match k with
+  | .pub => { needs with pub := f needs.pub }
+  | .priv => { needs with priv := f needs.priv }
+  | .metaPub => { needs with metaPub := f needs.metaPub }
+  | .metaPriv => { needs with metaPriv := f needs.metaPriv }
 
-def unionSet (needs : Needs) (k : NeedsKind) (s : Std.HashSet Nat) : Needs :=
-  needs.modify k fun old => s.fold (init := old) fun acc v => acc.insert v
+def union (needs : Needs) (k : NeedsKind) (s : Std.HashSet Nat) : Needs :=
+  needs.modify k (· ∪ s)
 
-def unionSingleton (needs : Needs) (k : NeedsKind) (i : Nat) : Needs :=
-  needs.modify k (·.insert i)
-
-/-- Remove elements in `s` from the given kind. -/
 def sub (needs : Needs) (k : NeedsKind) (s : Std.HashSet Nat) : Needs :=
-  needs.modify k fun old => old.filter fun v => !s.contains v
+  needs.modify k (· \ s)
 
 end Needs
 
 instance : Union Needs where
   union a b :=
-    { pub := b.pub.fold (init := a.pub) fun acc v => acc.insert v
-      priv := b.priv.fold (init := a.priv) fun acc v => acc.insert v
-      metaPub := b.metaPub.fold (init := a.metaPub) fun acc v => acc.insert v
-      metaPriv := b.metaPriv.fold (init := a.metaPriv) fun acc v => acc.insert v }
+    { pub := a.pub ∪ b.pub, priv := a.priv ∪ b.priv
+      metaPub := a.metaPub ∪ b.metaPub, metaPriv := a.metaPriv ∪ b.metaPriv }
 
 /-- Check if any kind has the given module index. -/
 def Needs.hasAny (needs : Needs) (i : ModuleIdx) : Bool :=
   needs.pub.contains i || needs.priv.contains i ||
-  needs.metaPub.contains i || needs.metaPriv.contains i
-
-/-- Check if the module is needed as exported (public). -/
-def Needs.hasExported (needs : Needs) (i : ModuleIdx) : Bool :=
-  needs.pub.contains i || needs.metaPub.contains i
-
-/-- Check if the module is needed as meta. -/
-def Needs.hasMeta (needs : Needs) (i : ModuleIdx) : Bool :=
   needs.metaPub.contains i || needs.metaPriv.contains i
 
 /-! ## Transitive import computation — adapted from Shake.addTransitiveImps -/
@@ -115,44 +99,40 @@ def addTransitiveImps (transImps : Needs) (imp : Import) (j : Nat) (impTransImps
   let mut transImps := transImps
   -- public non-meta import: transitive public reach
   if imp.isExported && !imp.isMeta then
-    transImps := transImps.unionSingleton .pub j |>.unionSet .pub (impTransImps.get .pub)
+    transImps := transImps.union .pub {j} |>.union .pub (impTransImps.get .pub)
   -- private non-meta import
   if !imp.isExported && !imp.isMeta then
-    transImps := transImps.unionSingleton .priv j |>.unionSet .priv (impTransImps.get .pub)
+    transImps := transImps.union .priv {j} |>.union .priv (impTransImps.get .pub)
     if imp.importAll then
-      transImps := transImps.unionSet .priv
-        (impTransImps.get .pub |>.fold (init := impTransImps.get .priv) fun acc v => acc.insert v)
+      transImps := transImps.union .priv (impTransImps.get .pub ∪ impTransImps.get .priv)
   -- public meta propagation
   if imp.isExported then
-    transImps := transImps.unionSet .metaPub (impTransImps.get .metaPub)
+    transImps := transImps.union .metaPub (impTransImps.get .metaPub)
     if imp.isMeta then
-      transImps := transImps.unionSingleton .metaPub j
-        |>.unionSet .metaPub (impTransImps.get .pub |>.fold (init := impTransImps.get .metaPub) fun acc v => acc.insert v)
+      transImps := transImps.union .metaPub {j}
+        |>.union .metaPub (impTransImps.get .pub ∪ impTransImps.get .metaPub)
   -- private meta propagation
   if !imp.isExported then
     if imp.isMeta then
-      transImps := transImps.unionSingleton .metaPriv j
-        |>.unionSet .metaPriv (impTransImps.get .pub |>.fold (init := impTransImps.get .metaPub) fun acc v => acc.insert v)
+      transImps := transImps.union .metaPriv {j}
+        |>.union .metaPriv (impTransImps.get .pub ∪ impTransImps.get .metaPub)
     if imp.importAll then
-      transImps := transImps.unionSet .metaPriv
-        (impTransImps.get .metaPub |>.fold (init := impTransImps.get .metaPriv) fun acc v => acc.insert v)
+      transImps := transImps.union .metaPriv (impTransImps.get .metaPub ∪ impTransImps.get .metaPriv)
     else
-      transImps := transImps.unionSet .metaPriv (impTransImps.get .metaPub)
+      transImps := transImps.union .metaPriv (impTransImps.get .metaPub)
   transImps
 
 /-- Build the transitive dependency array for all modules.
-Adapted from `Lake.Shake.initStateFromEnv`. -/
+Adapted from `Lake.Shake.initStateFromEnv`. Modules in `env.header.moduleData`
+are topologically sorted, so `transDeps[j]` for earlier `j` is always ready. -/
 def buildTransDeps (env : Environment) : Array Needs := Id.run do
   let mut transDeps : Array Needs := #[]
-  for _ in [:env.header.moduleData.size] do
-    transDeps := transDeps.push default
   for i in [:env.header.moduleData.size] do
-    let mod := env.header.moduleData[i]!
     let mut transImps : Needs := default
-    for imp in mod.imports do
+    for imp in env.header.moduleData[i]!.imports do
       if let some j := env.getModuleIdx? imp.module then
         transImps := addTransitiveImps transImps imp j (transDeps[j]?.getD default)
-    transDeps := transDeps.set! i transImps
+    transDeps := transDeps.push transImps
   transDeps
 
 /-! ## Needs computation — adapted from Shake.calcNeeds -/
@@ -203,10 +183,10 @@ where
       let c := if c.isStr && c.getString!.startsWith "_simp_" then c.getPrefix else c
       if let some j := env.getModuleIdxFor? c then
         let k := { k with isMeta := k.isMeta && !isDeclMeta' env c }
-        deps := deps.unionSingleton k j
+        deps := deps.union k {j}
         -- Include indirect mod uses
         for indMod in indirectModUses[c]?.getD #[] do
-          deps := deps.unionSingleton k indMod
+          deps := deps.union k {indMod}
       return deps
 
 /-! ## Header parsing -/
@@ -294,37 +274,76 @@ where
     let (_, prelude?, importsSyntax) := decodeHeader headerStx
     -- Build transitive deps for all imported modules
     let transDeps := buildTransDeps env
-    -- Compute what the current file needs
+    -- Compute what the current file needs from constant references
     let needs := computeNeeds env transDeps
     -- Add Init if no prelude
     let mut deps := needs
     if prelude?.isNone then
       if let some initIdx := env.getModuleIdx? `Init then
-        deps := deps.unionSingleton .pub initIdx
-    -- Transitive reduction: remove modules that are implied by other needed imports
+        deps := deps.union .pub {initIdx}
+    -- Merge implicit dependencies into `deps`. Two sources:
+    --   1. `Lean.getExtraModUsesInEnv` — the general Lean mechanism
+    --      (`recordExtraModUse` from macros/attributes/`@[init]` side effects).
+    --   2. `Heron.ruleUsedInFiles` — Heron's linter-triggered dependencies.
+    --      A separate registry is required because `Lean.Elab.Command.runLinters`
+    --      rolls back env changes after each linter, so `recordExtraModUse`
+    --      calls from linter bodies don't persist.
+    for extra in Lean.getExtraModUsesInEnv env do
+      if let some eIdx := env.getModuleIdx? extra.module then
+        let k : NeedsKind := { isExported := extra.isExported, isMeta := extra.isMeta }
+        deps := deps.union k {eIdx}
+    let ruleUses := (← Heron.ruleUsedInFiles.get).getD env.mainModule { }
+    for ruleMod in ruleUses do
+      if let some eIdx := env.getModuleIdx? ruleMod then
+        -- Rules fire at linter-execution (elab) time, so they're meta deps; the
+        -- registering module's `@[init]` must be visible, so they're public.
+        deps := deps.union .metaPub {eIdx}
+    -- Transitive reduction on `deps`: remove modules implied by other
+    -- modules already in `deps`, leaving a minimal cover of needs.
     for j in [:env.header.moduleData.size] do
       let jTransDeps := transDeps[j]?.getD default
       for k in NeedsKind.all do
         if deps.has k j then
           let implied := addTransitiveImps default
             { module := .anonymous, isExported := k.isExported, isMeta := k.isMeta } j jTransDeps
-          let singleton : Std.HashSet Nat := ({} : Std.HashSet Nat).insert j
           for k' in NeedsKind.all do
-            let reduced := (implied.sub k' singleton).get k'
-            deps := deps.sub k' reduced
-    -- Determine which direct imports are unused.
-    -- After transitive reduction, `deps` contains only the minimal set of modules
-    -- that actually need to be imported. For each direct import, we check:
-    --   - `deps.hasAny j`: is this module required (in any visibility)?
-    --   - `deps.has .pub/.metaPub j`: does it need to be exported (public)?
-    --   - `deps.has .metaPub/.metaPriv j`: does it need to be meta?
-    let mut results : Array ImportAnalysis := #[]
+            deps := deps.sub k' ((implied.sub k' {j}).get k')
+    -- A direct import `I` at idx `j` is used iff any of:
+    --   (1) Direct hit: `j ∈ deps` — something in the file needs `I` itself.
+    --   (2) Unique cover: `reach(I)` contains some need in `deps` that no
+    --       other direct import (or auto-`Init`) reaches. This handles
+    --       umbrella imports like `Heron.Rules` that cover rule-source
+    --       modules (`Heron.Check.*`) the consumer never references directly.
+    --   (3) `imp.importAll` — the user explicitly opted into full re-export.
+    let flatReach (j : Nat) : Std.HashSet Nat :=
+      let jTD := transDeps[j]?.getD default
+      (jTD.pub ∪ jTD.priv ∪ jTD.metaPub ∪ jTD.metaPriv).insert j
     let explicitImports := importsSyntax.map fun stx => (decodeImport stx, stx.raw)
+    let directIdxs : Array Nat :=
+      explicitImports.filterMap fun (imp, _) => env.getModuleIdx? imp.module
+    let autoInitReach : Std.HashSet Nat :=
+      if prelude?.isNone then
+        match env.getModuleIdx? `Init with
+        | some i => flatReach i
+        | none => { }
+      else { }
+    let depsFlat : Std.HashSet Nat :=
+      deps.pub ∪ deps.priv ∪ deps.metaPub ∪ deps.metaPriv
+    let mut results : Array ImportAnalysis := #[]
     for (imp, impStx) in explicitImports do
       if let some j := env.getModuleIdx? imp.module then
-        let usedAny := deps.hasAny j || imp.importAll
-        let needsExported := deps.has .pub j || deps.has .metaPub j
-        let needsMeta := deps.has .metaPub j || deps.has .metaPriv j
+        let isDirectHit := depsFlat.contains j
+        let mut otherReach : Std.HashSet Nat := autoInitReach
+        for j' in directIdxs do
+          if j' != j then
+            otherReach := otherReach ∪ flatReach j'
+        let uniqueCover := (flatReach j).filter fun n =>
+          depsFlat.contains n && !otherReach.contains n
+        let usedAny := isDirectHit || !uniqueCover.isEmpty || imp.importAll
+        let needsExported := deps.has .pub j || deps.has .metaPub j ||
+          uniqueCover.any fun n => deps.has .pub n || deps.has .metaPub n
+        let needsMeta := deps.has .metaPub j || deps.has .metaPriv j ||
+          uniqueCover.any fun n => deps.has .metaPub n || deps.has .metaPriv n
         results := results.push {
           imp, importStx := impStx
           isUsed := usedAny
