@@ -1,9 +1,11 @@
-import Heron.Assert
+module
+
+meta import Heron.Assert
 -- A rule-providing module with its linter NOT enabled — the import
 -- is genuinely unused and must still be flagged.
-import Heron.Check.BoolMatchToIf
+meta import Heron.Check.BoolMatchToIf
 -- A non-rule module that is also genuinely unused.
-import Lean.Data.Json.Parser
+meta import Lean.Data.Json.Parser
 
 -- Assert both genuinely unused imports are still detected. This regression
 -- guard ensures the fix for the rule-module false positive does not

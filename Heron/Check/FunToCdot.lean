@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -10,7 +12,7 @@ private structure FunToCdotMatch where
 /-- Count how many times `name` appears as an identifier in `stx`,
 returning `none` if any occurrence is nested inside `Term.paren`
 (which would change `·` scoping). -/
-private partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideParens := false) : Option Nat :=
+private meta partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideParens := false) : Option Nat :=
   if stx.isIdent && stx.getId == name then if insideParens then none else some 1
   else
     match stx with
@@ -25,7 +27,7 @@ private partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideParens
         return n + m
     | _ => some 0
 
-private def findFunToCdot : Syntax → Array FunToCdotMatch :=
+private meta def findFunToCdot : Syntax → Array FunToCdotMatch :=
   Syntax.collectAll fun
     | stx@`(fun $x:ident => $body) =>
       if body.raw.isIdent then #[]
@@ -35,7 +37,7 @@ private def findFunToCdot : Syntax → Array FunToCdotMatch :=
     | _ => #[]
 
 @[check_rule]
-instance : Check FunToCdotMatch where
+private meta instance : Check FunToCdotMatch where
   name := `funToCdot
   severity := .information
   category := .simplification

@@ -1,11 +1,15 @@
-import Lean.Elab.Command
-import Lean.Server.InfoUtils
-import Lean.Compiler.InitAttr
-import Lean.ExtraModUses
-import Lean.PrettyPrinter
-import Heron.ImplicitImports
-import Heron.Summary
-import Heron.TestRunner
+module
+
+public meta import Lean.Elab.Command
+public meta import Lean.Server.InfoUtils
+public meta import Lean.Compiler.InitAttr
+public meta import Lean.ExtraModUses
+public meta import Lean.PrettyPrinter
+public meta import Heron.ImplicitImports
+public meta import Heron.Summary
+public meta import Heron.TestRunner
+
+public section
 
 open Lean Elab Command Meta
 
@@ -18,11 +22,11 @@ partial def Lean.Syntax.collectAll (f : Syntax → Array α) (stx : Syntax) : Ar
 namespace Heron
 
 /-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
-def reprintTrimmed (stx : Syntax) : String :=
+meta def reprintTrimmed (stx : Syntax) : String :=
   (stx.updateTrailing "".toRawSubstring |>.reprint.getD "").trimAscii.toString
 
 /-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
-def getDoElems (doSeq : Syntax) : Array Syntax :=
+meta def getDoElems (doSeq : Syntax) : Array Syntax :=
   if doSeq.getKind == ``Parser.Term.doSeqBracketed then doSeq[1]!.getArgs.map (·[0]!)
   else if doSeq.getKind == ``Parser.Term.doSeqIndent then doSeq[0]!.getArgs.map (·[0]!) else #[]
 
@@ -41,7 +45,7 @@ structure Replacement where
 
 /-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
 to format the replacement text. Falls back to `reprint` if formatting fails. -/
-def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
+meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
   let some range := r.oldSyntax.getRange? |
     return none
   if r.newSyntax.isMissing then
@@ -69,41 +73,41 @@ class Rule (α : Type) where
   replacements : α → CommandElabM (Array Replacement)
 
 /-- Master option that enables all Heron linter rules at once. -/
-def Heron.allRulesLinterOption : Lean.Option Bool :=
+meta def Heron.allRulesLinterOption : Lean.Option Bool :=
   { name := `linter.heron, defValue := false }
 
-initialize
+meta initialize
   Lean.registerOption `linter.heron
       { defValue := .ofBool false
         descr := "Enable all Heron linter rules."
         name := `linter }
 
-def Rule.linterOption [Rule α] : Lean.Option Bool :=
+meta def Rule.linterOption [Rule α] : Lean.Option Bool :=
   { name := `linter ++ Rule.name (α := α), defValue := false }
 
 /-- Check whether this rule is enabled, either individually or via `linter.heron`.
 An explicit `set_option linter.<rule> false` overrides `linter.heron true`. -/
-def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
+meta def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
   let ruleOpt := `linter ++ Rule.name (α := α)
   if opts.contains ruleOpt then (Rule.linterOption (α := α)).get opts else Heron.allRulesLinterOption.get opts
 
-def Rule.registerLinterOption [Rule α] : IO Unit :=
+meta def Rule.registerLinterOption [Rule α] : IO Unit :=
   Lean.registerOption (`linter ++ Rule.name (α := α))
     { defValue := .ofBool false
       descr := s! "Enable the {Rule.name (α := α)} linter rule."
       name := `linter }
 
 /-- Internal option to prevent recursive linter invocation during re-elaboration. -/
-private def Heron.reelaboratingGuardOption : Lean.Option Bool :=
+private meta def Heron.reelaboratingGuardOption : Lean.Option Bool :=
   { name := `heron.reelaborating, defValue := false }
 
-initialize
+meta initialize
   Lean.registerOption `heron.reelaborating
       { defValue := .ofBool false
         descr := "Internal: set during re-elaboration to prevent recursive linter invocation."
         name := `heron }
 
-initialize
+meta initialize
   registerTraceClass `heron (inherited := true)
 
 /-- Accumulated per-rule profiling data. -/
@@ -114,38 +118,38 @@ structure RuleProfile where
   callCount : Nat := 0
 
 /-- Option to enable per-rule profiling accumulation (without trace output). -/
-private def Heron.profilingOption : Lean.Option Bool :=
+private meta def Heron.profilingOption : Lean.Option Bool :=
   { name := `heron.profile, defValue := false }
 
-initialize
+meta initialize
   Lean.registerOption `heron.profile
       { defValue := .ofBool false
         descr := "Accumulate per-rule profiling data for #heronProfile."
         name := `heron }
 
 /-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
-initialize Heron.profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
+meta initialize Heron.profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
   IO.mkRef { }
 
-def Heron.profilingAccumulator.get : BaseIO (Std.HashMap Name RuleProfile) :=
+meta def Heron.profilingAccumulator.get : BaseIO (Std.HashMap Name RuleProfile) :=
   ST.Ref.get Heron.profilingAccumulator
 
-def Heron.profilingAccumulator.set (map : Std.HashMap Name RuleProfile) : BaseIO Unit :=
+meta def Heron.profilingAccumulator.set (map : Std.HashMap Name RuleProfile) : BaseIO Unit :=
   ST.Ref.set Heron.profilingAccumulator map
 
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
-def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
+meta def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
 
 /-- Register the source module of a rule instance. Called at import time
 by an `@[init]` aux decl generated by `handleRuleAttribute`. Populates the
 `Heron.ruleSourceModules` registry (defined in `Heron.ImplicitImports`). -/
-def Rule.registerSourceModule [Rule α] (srcMod : Name) : IO Unit :=
+meta def Rule.registerSourceModule [Rule α] (srcMod : Name) : IO Unit :=
   Heron.ruleSourceModules.modify (·.insert (Rule.name (α := α)) srcMod)
 
 /-- Run a rule if enabled and not re-elaborating, calling `handle`
 for each detected match. -/
-def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Unit) : CommandElabM Unit := do
+meta def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Unit) : CommandElabM Unit := do
   unless Rule.isEnabled (α := α) (← getOptions) do
     return
   if Heron.isReelaboratingGuardSet (← getOptions) then
@@ -185,7 +189,7 @@ Uses the scoped `heron.reelaborating` option instead of clearing the global
 `lintersRef` to prevent recursive linter invocation. This is safe under
 concurrent (async) elaboration — `withScope` modifies only the current
 command's options, so other commands' linters are unaffected. -/
-def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let savedInfoState ← getInfoState
   let savedMessages := (← get).messages
   setInfoState { enabled := true, trees := { } }
@@ -207,7 +211,7 @@ def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
 
 /-- Get existing info trees when available (LSP code action requests),
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
-def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+meta def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let existing := (← getInfoState).trees
   if existing.isEmpty then
     collectElabInfoTrees stx
@@ -215,7 +219,7 @@ def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
     pure existing.toArray
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
-def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
+meta def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
   tree.foldInfo (init := #[]) fun ctx info acc =>
     match info with
     | .ofTermInfo ti => acc.push (ctx, ti)
@@ -226,7 +230,7 @@ def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
 Lean's elaborator produces multiple `TermInfo` nodes for the same source
 position at different application depths (e.g. `f`, `f x`, `f x y`).
 This keeps only the most-applied version per position. -/
-def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
+meta def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
   let map :=
     infos.foldl (init := ({ } : Std.HashMap Nat (ContextInfo × TermInfo))) fun map (ci, ti) =>
       match ti.stx.getPos? true with
@@ -239,7 +243,7 @@ def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (Cont
   map.fold (init := #[]) fun acc _ v => acc.push v
 
 /-- Run `MetaM` inside a `ContextInfo` context. -/
-def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
+meta def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
   match ← (ci.runMetaM lctx x).toBaseIO with
   | .ok a =>
     pure a
@@ -247,22 +251,22 @@ def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : Comma
     throwError "{e}"
 
 /-- Find the `declId` node in a command syntax tree. -/
-partial def findDeclId? : Syntax → Option Syntax
+meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
   | _ => none
 
 /-- Get the source range of the `declId` in a command, if any. -/
-def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
+meta def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
   (findDeclId? stx).bind (·.getRange?)
 
 /-- Check whether a `TermInfo` lies outside the declaration-id range. -/
-def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
+meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
   match declRange?, ti.stx.getPos? with
   | some r, some p => !r.contains p
   | _, _ => true
 
 /-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
-def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) := do
+meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) := do
   try
     let fmt ← runInfoMetaM ci lctx (ppExpr e)
     return some s! "({fmt})"
@@ -270,7 +274,7 @@ def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElab
     return none
 
 /-- Register a type-erased runner for a `Rule` instance. -/
-def Rule.activateTestRunner [Rule α] : IO Unit :=
+meta def Rule.activateTestRunner [Rule α] : IO Unit :=
   Rule.testRunnerRegistry.modify fun map =>
     map.insert (Rule.name (α := α)) fun stx => do
       let fileMap ← getFileMap
@@ -288,7 +292,7 @@ def Rule.activateTestRunner [Rule α] : IO Unit :=
 Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
 then evaluates `immediateFnConsts` immediately so the rule is active in the current file.
 `extraSetup` is called last for any additional registration (e.g. code action providers). -/
-unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
+meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
     (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ()) (declName : Name) : AttrM Unit := do
   let env ← getEnv
   let some info := env.find? declName |
@@ -344,7 +348,7 @@ unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (imme
 syntax (name := heronProfileCmd) "#heronProfile" : command
 
 @[command_elab heronProfileCmd]
-def elabHeronProfile : CommandElab
+meta def elabHeronProfile : CommandElab
   | stx => do
     let map ← Heron.profilingAccumulator.get
     if map.isEmpty then

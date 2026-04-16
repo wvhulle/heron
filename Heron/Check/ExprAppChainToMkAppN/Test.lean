@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.ExprAppChainToMkAppN
+module
+
+meta import Heron.Assert
+meta import Heron.Check.ExprAppChainToMkAppN
 
 #assertCheck exprAppChainToMkAppN in
 def f (a b : Lean.Expr) := Expr.app (Expr.app a a) b

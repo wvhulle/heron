@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.UnnecessaryIdRun
+module
+
+meta import Heron.Assert
+meta import Heron.Check.UnnecessaryIdRun
 
 -- Simple return
 #assertCheck unnecessaryIdRun in

@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.RedundantElsePureUnit
+module
+
+meta import Heron.Assert
+meta import Heron.Check.RedundantElsePureUnit
 
 #assertCheck redundantElsePureUnit in
 example : IO Unit := do

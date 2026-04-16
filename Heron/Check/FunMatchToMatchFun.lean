@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -8,14 +10,14 @@ private structure FunMatchToMatchFunMatch where
 
 /-- Detect `fun x => match x with | ...` where x is the sole parameter
 and the body is immediately a match on exactly that parameter. -/
-private def detectFunMatch? : Syntax → Option FunMatchToMatchFunMatch
+private meta def detectFunMatch? : Syntax → Option FunMatchToMatchFunMatch
   | stx@`(fun $x:ident => match $discr:term with $alts:matchAlts) =>
     if discr.raw.isIdent && discr.raw.getId == x.getId then
       some { funStx := stx, matchAlts := alts }
     else none
   | _ => none
 
-private def findFunMatchToMatchFun (stx : Syntax) : Array FunMatchToMatchFunMatch :=
+private meta def findFunMatchToMatchFun (stx : Syntax) : Array FunMatchToMatchFunMatch :=
   Syntax.collectAll
     (fun s =>
       match detectFunMatch? s with
@@ -24,7 +26,7 @@ private def findFunMatchToMatchFun (stx : Syntax) : Array FunMatchToMatchFunMatc
     stx
 
 @[check_rule]
-instance : Check FunMatchToMatchFunMatch where
+private meta instance : Check FunMatchToMatchFunMatch where
   name := `funMatchToMatchFun
   severity := .information
   category := .simplification

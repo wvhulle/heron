@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.BoolMatchToIf
+module
+
+meta import Heron.Assert
+meta import Heron.Check.BoolMatchToIf
 
 -- Enable the `boolMatchToIf` linter — this rule is provided by the
 -- `Heron.Check.BoolMatchToIf` import. Without the extra-mod-use tracking,

@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -11,7 +13,7 @@ private structure TupleMatchToSimultaneousMatch where
 /-- Extract elements from a `Term.tuple` syntax node `(a, b, ...)`.
 Parser: "(" >> optional (term >> ", " >> sepBy1 term ", ") >> ")"
 So: [0]="(", [1]=optional-null([0]=first, [1]=",", [2]=sepBy1-null), [2]=")" -/
-private def getTupleElements? (stx : Syntax) : Option (Array Syntax) :=
+private meta def getTupleElements? (stx : Syntax) : Option (Array Syntax) :=
   if !stx.isOfKind ``Term.tuple then none
   else
     let opt :=
@@ -26,7 +28,7 @@ private def getTupleElements? (stx : Syntax) : Option (Array Syntax) :=
       some (#[first] ++ rest)
 
 /-- Extract elements from a pattern that is a tuple. -/
-private def getPatternTupleElements? (stx : Syntax) : Option (Array Syntax) :=
+private meta def getPatternTupleElements? (stx : Syntax) : Option (Array Syntax) :=
   getTupleElements? stx <|>
     -- Also try anonymous constructor ⟨a, b⟩
     if stx.isOfKind ``Term.anonymousCtor then
@@ -35,7 +37,7 @@ private def getPatternTupleElements? (stx : Syntax) : Option (Array Syntax) :=
     else none
 
 /-- Extract the single pattern from a matchAlt, if it has exactly one. -/
-private def getAltPattern? (alt : Syntax) : Option Syntax := do
+private meta def getAltPattern? (alt : Syntax) : Option Syntax := do
   let pats := alt[1]!
   guard (pats.getNumArgs == 1)
   let patGroup := pats[0]!
@@ -43,7 +45,7 @@ private def getAltPattern? (alt : Syntax) : Option Syntax := do
   return patGroup[0]!
 
 /-- Check if a match alt has a tuple pattern of the expected arity (or is a wildcard). -/
-private def isCompatibleAlt (alt : Syntax) (arity : Nat) : Bool :=
+private meta def isCompatibleAlt (alt : Syntax) (arity : Nat) : Bool :=
   match getAltPattern? alt with
   | some p =>
     match getPatternTupleElements? p with
@@ -52,7 +54,7 @@ private def isCompatibleAlt (alt : Syntax) (arity : Nat) : Bool :=
   | none => false
 
 /-- Reprint a match alt with tuple patterns unwrapped. -/
-private def reprintAlt (alt : Syntax) : String :=
+private meta def reprintAlt (alt : Syntax) : String :=
   let patText :=
     match getAltPattern? alt >>= getPatternTupleElements? with
     | some elems => ", ".intercalate (elems.map reprintTrimmed).toList
@@ -62,7 +64,7 @@ private def reprintAlt (alt : Syntax) : String :=
       | none => reprintTrimmed alt[1]!
   s! "| {patText } => {reprintTrimmed alt[3]!}"
 
-private def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultaneousMatch :=
+private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultaneousMatch :=
   Syntax.collectAll fun
     |
     stx@`(match $discr:term with
@@ -77,7 +79,7 @@ private def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultan
           return #[{ matchStx := stx, matchKw := stx[0]!, discrElems, altsArr }])
     | _ => #[]
 
-@[check_rule] instance : Check TupleMatchToSimultaneousMatch where
+@[check_rule] private meta instance : Check TupleMatchToSimultaneousMatch where
   name := `tupleMatchToSimultaneous
   severity := .warning
   category := .simplification

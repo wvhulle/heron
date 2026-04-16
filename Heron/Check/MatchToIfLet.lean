@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -11,7 +13,7 @@ private structure MatchToIfLetMatch where
   elseRhs : Syntax
 
 /-- Check if a match alt pattern is a wildcard `_`. -/
-private def isWildcardAlt? (alt : Syntax) : Option Syntax :=
+private meta def isWildcardAlt? (alt : Syntax) : Option Syntax :=
   let pats := alt[1]!  -- null-node of pattern groups
   if pats.getNumArgs != 1 then none
   else
@@ -23,7 +25,7 @@ private def isWildcardAlt? (alt : Syntax) : Option Syntax :=
         some alt
       else none
 
-private def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
+private meta def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
   | stx@`(match $discr:term with $alts:matchAlt*) => do
     guard (alts.size == 2)
     let a0 := alts[0]!.raw
@@ -42,13 +44,13 @@ private def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
     }
   | _ => none
 
-private def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
+private meta def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
   Syntax.collectAll fun stx =>
     match detectMatchToIfLet? stx with
     | some m => #[m]
     | none => #[]
 
-@[check_rule] instance : Check MatchToIfLetMatch where
+@[check_rule] private meta instance : Check MatchToIfLetMatch where
   name := `matchToIfLet
   severity := .information
   category := .style

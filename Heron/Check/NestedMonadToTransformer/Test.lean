@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.NestedMonadToTransformer
+module
+
+meta import Heron.Assert
+meta import Heron.Check.NestedMonadToTransformer
 
 -- IO wrapping Option with polymorphic return type and multiple parameters
 #assertCheck nestedMonadToTransformer in

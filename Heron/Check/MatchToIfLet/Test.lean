@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.MatchToIfLet
+module
+
+meta import Heron.Assert
+meta import Heron.Check.MatchToIfLet
 
 #assertCheck matchToIfLet in
 def f (x : Option Nat) : Nat := match x with | some v => v | _ => 0

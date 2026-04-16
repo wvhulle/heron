@@ -1,5 +1,9 @@
-import Heron.Rule
-import Lean.Server.CodeActions.Basic
+module
+
+public meta import Heron.Rule
+public meta import Lean.Server.CodeActions.Basic
+
+public section
 
 open Lean Elab Command Meta
 
@@ -13,7 +17,7 @@ inductive Category where
 | correctness
   deriving Inhabited, BEq
 
-instance : ToString Category where
+meta instance : ToString Category where
   toString
     | .style => "style"
     | .simplification => "simplification"
@@ -42,7 +46,7 @@ class Check (α : Type) extends Rule α where
   reference : Option Reference := none
 
 /-- Emit a check diagnostic with an associated quick-fix code action. -/
-def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category) (tags : Array Lsp.DiagnosticTag)
+meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
     (reference : Option Reference := none) : CommandElabM Unit := do
   let taggedMsg := message.tagWithErrorName ruleName
@@ -66,9 +70,9 @@ def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category)
   trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
   let longFmt ← liftCoreM explanation.format
   let mut bodyParts : Array String := #[]
-  if !longFmt.pretty.isEmpty then 
+  if !longFmt.pretty.isEmpty then
     bodyParts := bodyParts.push longFmt.pretty
-  if let some ref := reference then 
+  if let some ref := reference then
     bodyParts := bodyParts.push s! "Lean Reference ({ref.topic }): *{ref.url}*"
   bodyParts := bodyParts.push s! "Disable with `set_option {optName} false`"
   let data :=
@@ -79,7 +83,7 @@ def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category)
   let msg := { msg with diagnosticData? := some data.compress }
   logMessage msg
 
-def Check.toLinter [Check α] : Linter where
+meta def Check.toLinter [Check α] : Linter where
   name := Rule.name (α := α)
   run :=
     withSetOptionIn fun stx =>
@@ -90,28 +94,28 @@ def Check.toLinter [Check α] : Linter where
             (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
             (explanation := Check.explanation m) (repls := repls) (reference := Check.reference (α := α))
 
-def Check.activateLinter [Check α] : IO Unit :=
+meta def Check.activateLinter [Check α] : IO Unit :=
   let name := Rule.name (α := α)
   lintersRef.modify fun linters => (linters.filter (·.name != name)).push (Check.toLinter (α := α))
 
-def Check.activateTestRunner [Check α] : IO Unit :=
+meta def Check.activateTestRunner [Check α] : IO Unit :=
   Rule.activateTestRunner (α := α)
 
-def Check.registerAll [Check α] : IO Unit := do
+meta def Check.registerAll [Check α] : IO Unit := do
   Rule.registerLinterOption (α := α)
   Check.activateTestRunner (α := α)
   Check.activateLinter (α := α)
 
-private unsafe def checkRuleHandler :=
+private meta unsafe def checkRuleHandler :=
   handleRuleAttribute "check_rule" ``Check.registerAll #[``Check.activateLinter, ``Check.activateTestRunner]
 
-initialize _checkRuleAttr : TagAttribute ←
+meta initialize _checkRuleAttr : TagAttribute ←
   registerTagAttribute `check_rule "Register a Check instance as a heron linter rule." (validate :=
       unsafe checkRuleHandler) (applicationTime := .afterCompilation)
 
 open Server RequestM Lsp in
 @[code_action_provider]
-def heronCheckFixProvider : CodeActionProvider := fun params _snap => do
+meta def heronCheckFixProvider : CodeActionProvider := fun params _snap => do
   let doc ← readDoc
   let mut actions : Array LazyCodeAction := #[]
   for diag in params.context.diagnostics do

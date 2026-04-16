@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -9,7 +11,7 @@ private structure ExprAppChainToMkAppNMatch where
 
 /-- Collect a chain of nested `Expr.app`/`.app` calls, returning (innermost fn, args left-to-right).
 Handles parenthesized inner expressions directly via quasiquote patterns. -/
-private partial def collectAppChain : Syntax → Option (Syntax × Array Syntax)
+private meta partial def collectAppChain : Syntax → Option (Syntax × Array Syntax)
   | `(Expr.app ($inner) $arg) =>
     match collectAppChain inner with
     | some (fn, args) => some (fn, args.push arg)
@@ -30,7 +32,7 @@ private partial def collectAppChain : Syntax → Option (Syntax × Array Syntax)
 
 /-- Find chains of 2+ nested `Expr.app` / `.app` calls.
 Walk top-down, skip children of matched chains to avoid duplicates. -/
-private partial def findExprAppChains (stx : Syntax) : Array ExprAppChainToMkAppNMatch :=
+private meta partial def findExprAppChains (stx : Syntax) : Array ExprAppChainToMkAppNMatch :=
   match collectAppChain stx with
   | some (fn, args) =>
     if args.size >= 2 then
@@ -41,7 +43,7 @@ private partial def findExprAppChains (stx : Syntax) : Array ExprAppChainToMkApp
       stx.getArgs.flatMap findExprAppChains
   | none => stx.getArgs.flatMap findExprAppChains
 
-@[check_rule] instance : Check ExprAppChainToMkAppNMatch where
+@[check_rule] private meta instance : Check ExprAppChainToMkAppNMatch where
   name := `exprAppChainToMkAppN
   severity := .information
   category := .simplification

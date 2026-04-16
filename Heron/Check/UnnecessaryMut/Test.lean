@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.UnnecessaryMut
+module
+
+meta import Heron.Assert
+meta import Heron.Check.UnnecessaryMut
 
 -- Unused mut: x is never reassigned
 #assertCheck unnecessaryMut in

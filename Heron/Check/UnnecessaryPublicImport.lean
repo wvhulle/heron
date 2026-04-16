@@ -1,5 +1,7 @@
-import Heron.Check
-import Heron.ImportAnalysis
+module
+
+public meta import Heron.Check
+public meta import Heron.ImportAnalysis
 
 open Lean Elab Command Heron
 
@@ -8,7 +10,7 @@ private structure UnnecessaryPublicImportMatch where
   publicKw : Syntax
   moduleName : Name
 
-private def detectUnnecessaryPublicImports (stx : Syntax) :
+private meta def detectUnnecessaryPublicImports (stx : Syntax) :
     CommandElabM (Array UnnecessaryPublicImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
@@ -20,7 +22,7 @@ private def detectUnnecessaryPublicImports (stx : Syntax) :
     else
       none
 
-@[check_rule] instance : Check UnnecessaryPublicImportMatch where
+@[check_rule] private meta instance : Check UnnecessaryPublicImportMatch where
   name := `unnecessaryPublicImport
   severity := .warning
   category := .simplification

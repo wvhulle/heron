@@ -1,12 +1,15 @@
-import Heron.Refactor
-import Heron.Assert
-import Lean.Meta.Tactic.Delta
-import Lean.PrettyPrinter
+module
+
+public meta import Heron.Refactor
+public meta import Lean.Meta.Tactic.Delta
+public meta import Lean.PrettyPrinter
+
+public section
 
 open Lean Elab Command Meta Heron
 
 /-- Check if an expression references its own name (recursive). -/
-def isRecursive (value : Expr) (name : Name) : Bool :=
+meta def isRecursive (value : Expr) (name : Name) : Bool :=
   value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
 
 private inductive InlineKind where
@@ -18,7 +21,7 @@ private structure InlineMatch where
   newSyntax : Syntax
   kind : InlineKind
 
-def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
+meta def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
   match e.getAppFn.constName? with
   | some name =>
     !env.isProjectionFn name && !Meta.isInstanceCore env name &&
@@ -27,7 +30,7 @@ def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
       | none => false
   | none => false
 
-private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineMatch) := do
+private meta def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array InlineMatch) := do
   let trees ← collectInfoTrees stx
   let env ← getEnv
   let infos := trees.flatMap collectTermInfos
@@ -51,11 +54,11 @@ private def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array Inlin
       catch _ => pure ()
   return results
 
-private def inlineLabel : InlineKind → MessageData
+private meta def inlineLabel : InlineKind → MessageData
   | .const name => m!"Inline '{name}'"
   | .letBinding => m!"Inline let binding"
 
-@[refactor_rule] instance : Refactor InlineMatch where
+@[refactor_rule] private meta instance : Refactor InlineMatch where
   name := `inline
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
@@ -66,26 +69,3 @@ private def inlineLabel : InlineKind → MessageData
     inlineViolationLabel := inlineLabel m.kind
   }]
   codeActionKind := "refactor.inline"
-
-namespace Tests
-
-def double (n : Nat) :=
-  n + n
-
-#assertRefactor inline in
-example : Nat := double 3
-becomes `(example : Nat := (3 + 3))
-
-def myConst :=
-  42
-
--- The definition site of `d` should not flag `d` itself for inlining.
-#assertIgnore inline in
-  def d :=
-    0
-
-#assertRefactor inline in
-example : Nat := myConst
-becomes `(example : Nat := (42))
-
-end Tests

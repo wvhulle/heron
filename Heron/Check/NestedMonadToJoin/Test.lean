@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.NestedMonadToJoin
+module
+
+meta import Heron.Assert
+meta import Heron.Check.NestedMonadToJoin
 
 -- Nested Option in a function with multiple parameters
 #assertCheck nestedMonadToJoin in

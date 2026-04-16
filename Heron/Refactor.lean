@@ -1,5 +1,9 @@
-import Heron.Rule
-import Lean.Server.CodeActions.Basic
+module
+
+public meta import Heron.Rule
+public meta import Lean.Server.CodeActions.Basic
+
+public section
 
 open Lean Elab Command Meta
 
@@ -9,15 +13,15 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
-def Refactor.activateTestRunner [Refactor α] : IO Unit :=
+meta def Refactor.activateTestRunner [Refactor α] : IO Unit :=
   Rule.activateTestRunner (α := α)
 
-def Refactor.registerAll [Refactor α] : IO Unit := do
+meta def Refactor.registerAll [Refactor α] : IO Unit := do
   Rule.registerLinterOption (α := α)
   Refactor.activateTestRunner (α := α)
 
 open Server RequestM Lsp in
-def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
+meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
   fun params snap => do
     let doc ← readDoc
     let text := doc.meta.text
@@ -60,7 +64,7 @@ def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
       }
     return actions
 
-private unsafe def refactorRuleHandler :=
+private meta unsafe def refactorRuleHandler :=
   handleRuleAttribute "refactor_rule" ``Refactor.registerAll #[``Refactor.activateTestRunner]
     (extraSetup := fun declName αExpr inst => do
       let providerName := declName ++ `_rule_provider
@@ -74,7 +78,7 @@ private unsafe def refactorRuleHandler :=
       }
       modifyEnv (Server.codeActionProviderExt.addEntry · providerName))
 
-initialize _refactorRuleAttr : TagAttribute ←
+meta initialize _refactorRuleAttr : TagAttribute ←
   registerTagAttribute `refactor_rule
     "Register a Refactor instance as a code action provider."
     (validate := unsafe refactorRuleHandler)

@@ -1,3 +1,5 @@
+module
+
 /-
 Helper used by `GenericExtra.lean` to exercise the *generic* Lean
 `recordExtraModUse` path from non-Heron code: a plain command elaborator
@@ -6,8 +8,10 @@ or linter involved.
 
 Kept separate from the test so the test's import list is clean.
 -/
-import Lean.Elab.Command
-import Lean.ExtraModUses
+public meta import Lean.Elab.Command
+public meta import Lean.ExtraModUses
+
+public section
 
 open Lean Elab Command
 
@@ -16,6 +20,6 @@ current file via Lean's standard `recordExtraModUse`. No Heron machinery
 involved — stands in for arbitrary third-party metaprogramming. -/
 syntax (name := recordExtraCmd) "#recordExtra " ident : command
 
-@[command_elab recordExtraCmd] def elabRecordExtra : CommandElab
+@[command_elab recordExtraCmd] meta def elabRecordExtra : CommandElab
   | `(#recordExtra $id) => Lean.recordExtraModUse id.getId (isMeta := false)
   | _ => throwUnsupportedSyntax

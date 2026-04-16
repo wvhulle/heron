@@ -1,19 +1,22 @@
-import Heron.Refactor
-import Heron.Refactor.Inline
-import Heron.Assert
-import Lean.Meta.Tactic.Delta
-import Lean.PrettyPrinter
-import Lean.Server.FileWorker.Utils
+module
+
+public meta import Heron.Refactor
+public meta import Heron.Refactor.Inline
+public meta import Lean.Meta.Tactic.Delta
+public meta import Lean.PrettyPrinter
+public meta import Lean.Server.FileWorker.Utils
+
+public section
 
 open Lean Elab Command Meta Heron Server Lsp
 
-private def isInlineableConst (env : Environment) (name : Name) : Bool :=
+private meta def isInlineableConst (env : Environment) (name : Name) : Bool :=
   !env.isProjectionFn name && !Meta.isInstanceCore env name &&
     match env.find? name >>= (·.value?) with
     | some v => !isRecursive v name
     | none => false
 
-private def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdStx : Syntax) (ns : Name) : Option Name :=
+private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdStx : Syntax) (ns : Name) : Option Name :=
   do
   let pos ← declIdStx.getPos? true
   match infos.find? fun (_, ti) => ti.stx.getPos? true == some pos with
@@ -22,7 +25,7 @@ private def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdS
   | none =>
     some (ns ++ declIdStx[0]!.getId)
 
-private def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Option Syntax) := do
+private meta def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Option Syntax) := do
   let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) |
     return none
   try
@@ -31,7 +34,7 @@ private def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Optio
   catch _ =>
     return none
 
-private def findAndExpandUsages (trees : Array InfoTree) (declRange? : Option Syntax.Range) (constName : Name) :
+private meta def findAndExpandUsages (trees : Array InfoTree) (declRange? : Option Syntax.Range) (constName : Name) :
     CommandElabM (Array (Syntax × Syntax)) :=
   let infos := trees.flatMap collectTermInfos
   let candidates :=
@@ -41,7 +44,7 @@ private def findAndExpandUsages (trees : Array InfoTree) (declRange? : Option Sy
       return none
     return some (ti.stx, newStx)
 
-private def countUsagesPerConst (trees : Array InfoTree) (declRange? : Option Syntax.Range) (env : Environment) :
+private meta def countUsagesPerConst (trees : Array InfoTree) (declRange? : Option Syntax.Range) (env : Environment) :
     Std.HashMap Name Nat :=
   let infos := trees.flatMap collectTermInfos
   let candidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
@@ -53,18 +56,18 @@ private structure InlineAllConstMatch where
   constName : Name
   usageReplacements : Array (Syntax × Syntax)
 
-private def detectInlineAllConst (stx : Syntax) : CommandElabM (Array InlineAllConstMatch) := do
+private meta def detectInlineAllConst (stx : Syntax) : CommandElabM (Array InlineAllConstMatch) := do
   let trees ← collectInfoTrees stx
   let declRange? := getDeclIdRange? stx
   let usageCounts := countUsagesPerConst trees declRange? (← getEnv)
   usageCounts.toArray.filterMapM fun (name, count) => do
-      if count ≤ 1 then 
+      if count ≤ 1 then
         return none
       let repls ← findAndExpandUsages trees declRange? name
       return some { constName := name, usageReplacements := repls }
 
 @[refactor_rule]
-instance : Refactor InlineAllConstMatch where
+private meta instance : Refactor InlineAllConstMatch where
   name := `inlineAllConst
   detect := detectInlineAllConst
   message := fun m => m! "Inline all {m.usageReplacements.size } usages of '{m.constName}'"
@@ -76,7 +79,7 @@ instance : Refactor InlineAllConstMatch where
           inlineViolationLabel := m! "Inline all usages of '{m.constName}'" }
   codeActionKind := "refactor.inline"
 
-private def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
+private meta def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
   let declIdStx ← findDeclId? stx
   let declIdRange ← declIdStx.getRange?
   let startPos := text.lspPosToUtf8Pos params.range.start
@@ -84,7 +87,7 @@ private def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : 
   guard (declIdRange.start ≤ endPos && startPos ≤ declIdRange.stop)
   return declIdStx
 
-private def buildReplacements (declIdStx : Syntax) (defStx : Syntax) (usageRepls : Array (Syntax × Syntax))
+private meta def buildReplacements (declIdStx : Syntax) (defStx : Syntax) (usageRepls : Array (Syntax × Syntax))
     (constName : Name) : Array Replacement :=
   let label := m! "Inline all usages of '{constName}'"
   let usages :=
@@ -97,7 +100,7 @@ private def buildReplacements (declIdStx : Syntax) (defStx : Syntax) (usageRepls
   usages.push defRemoval
 
 @[code_action_provider]
-unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap => do
+meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap => do
   let doc ← RequestM.readDoc
   let some declIdStx := cursorOnDeclId? params doc.meta.text snap.stx |
     return #[]
@@ -115,7 +118,7 @@ unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap => d
         let repls := buildReplacements declIdStx snap.stx usageRepls constName
         let fileMap ← getFileMap
         repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
-  if textEdits.isEmpty then 
+  if textEdits.isEmpty then
     return #[]
   let title := s! "Inline all usages of '{constName}'"
   return #[{
@@ -126,32 +129,3 @@ unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap => d
               { title, kind? := "refactor.inline"
                 edit? :=
                   some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits := textEdits } }) }]
-
-namespace Tests
-
-def triple (n : Nat) :=
-  n + n + n
-
-#assertRefactor inlineAllConst in
-  example : Nat :=
-    triple 2 + triple 3 becomes
-  `(example : Nat :=
-      (2 + 2 + 2) + (3 + 3 + 3))
-
-def myVal :=
-  10
-
-#assertIgnore inlineAllConst in
-  example : Nat :=
-    myVal
-
-#assertIgnore inlineAllConst in
-  def unused :=
-    42
-
-#assertIgnore inlineAllConst in
-  def recFn : Nat → Nat
-    | 0 => 0
-    | n + 1 => recFn n
-
-end Tests

@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.TupleMatchToSimultaneous
+module
+
+meta import Heron.Assert
+meta import Heron.Check.TupleMatchToSimultaneous
 
 #assertCheck tupleMatchToSimultaneous in
   def f (x y : Nat) : Nat :=

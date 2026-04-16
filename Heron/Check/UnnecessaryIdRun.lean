@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Term Heron
 
 /-- Match `Id.run do <doSeq>`, returning `(fullAppStx, idRunDoSpan, doSeqNode)`. -/
-private def isIdRunDo? : Syntax → Option (Syntax × Syntax × Syntax)
+private meta def isIdRunDo? : Syntax → Option (Syntax × Syntax × Syntax)
   | stx@`($fn $arg) =>
     if fn.raw.isIdent && fn.raw.getId == `Id.run then
       let doBlock := arg.raw
@@ -19,7 +21,7 @@ private def isIdRunDo? : Syntax → Option (Syntax × Syntax × Syntax)
   | _ => none
 
 /-- Check if a doElem is an imperative construct. -/
-private def isImperative (elem : Syntax) : Bool :=
+private meta def isImperative (elem : Syntax) : Bool :=
   let k := elem.getKind
   k == ``doFor || k == ``doReassign || k == ``doReassignArrow ||
   k == ``doBreak || k == ``doContinue || k == ``doLetArrow || k == ``doLetRec ||
@@ -30,7 +32,7 @@ private def isImperative (elem : Syntax) : Bool :=
   (k == ``doLet && !elem[1]!.getArgs.isEmpty)
 
 /-- Check if the do sequence is purely non-imperative. -/
-private def isPureDoSeq (elems : Array Syntax) : Bool :=
+private meta def isPureDoSeq (elems : Array Syntax) : Bool :=
   if elems.isEmpty then false
   else
     let n := elems.size
@@ -44,7 +46,7 @@ private def isPureDoSeq (elems : Array Syntax) : Bool :=
       else false
 
 /-- Get the variable name from a doLet's letDecl. -/
-private def getLetVarName? (doLet : Syntax) : Option Name :=
+private meta def getLetVarName? (doLet : Syntax) : Option Name :=
   if doLet.getKind == ``doLet then
     let letDecl := doLet[2]!  -- doLet[0]="let", [1]=optional mut, [2]=letDecl
     let inner := letDecl[0]!  -- letIdDecl
@@ -58,7 +60,7 @@ private def getLetVarName? (doLet : Syntax) : Option Name :=
   else none
 
 /-- Get the RHS expression from a doLet's letIdDecl. -/
-private def getLetRhs? (doLet : Syntax) : Option Syntax :=
+private meta def getLetRhs? (doLet : Syntax) : Option Syntax :=
   if doLet.getKind == ``doLet then
     let letDecl := doLet[2]!
     let inner := letDecl[0]!
@@ -67,7 +69,7 @@ private def getLetRhs? (doLet : Syntax) : Option Syntax :=
   else none
 
 /-- Get the expression from a doReturn node. -/
-private def getReturnExpr? (elem : Syntax) : Option Syntax :=
+private meta def getReturnExpr? (elem : Syntax) : Option Syntax :=
   if elem.getKind == ``doReturn then
     let optExpr := elem[1]!
     if optExpr.getNumArgs >= 1 then some optExpr[0]!
@@ -77,7 +79,7 @@ private def getReturnExpr? (elem : Syntax) : Option Syntax :=
 /-- Build the replacement syntax for a pure do sequence.
 Extracts the final expression and any let bindings, converting
 `do let x := e; return x` → `e` and `do let x := e; body` → `let x := e\nbody`. -/
-private def buildReplacement? (elems : Array Syntax) : Option (Array Syntax × Syntax) := do
+private meta def buildReplacement? (elems : Array Syntax) : Option (Array Syntax × Syntax) := do
   guard !elems.isEmpty
   let last := elems.back!
   let finalExpr ←
@@ -99,7 +101,7 @@ private structure UnnecessaryIdRunMatch where
   idRunDoSpan : Syntax
   elems : Array Syntax
 
-private def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :=
+private meta def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :=
   Syntax.collectAll fun stx =>
     match isIdRunDo? stx with
     | some (fullStx, idRunDoSpan, doSeq) =>
@@ -109,7 +111,7 @@ private def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :=
       else #[]
     | none => #[]
 
-@[check_rule] instance : Check UnnecessaryIdRunMatch where
+@[check_rule] private meta instance : Check UnnecessaryIdRunMatch where
   name := `unnecessaryIdRun
   severity := .warning
   category := .simplification

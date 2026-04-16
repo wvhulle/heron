@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.RedundantLetWildcard
+module
+
+meta import Heron.Assert
+meta import Heron.Check.RedundantLetWildcard
 
 #assertCheck redundantLetWildcard in
 example : IO Unit := do

@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.MergeBinders
+module
+
+meta import Heron.Assert
+meta import Heron.Check.MergeBinders
 
 #assertCheck mergeBinders in
 def f (x : Nat) (y : Nat) := x + y

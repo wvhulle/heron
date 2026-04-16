@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -9,7 +11,7 @@ private inductive NatLiteralPatternsMatch where
   | succ (appStx : Syntax) (arg : Syntax)
 
 /-- Find `Nat.zero` or `Nat.succ k` idents inside a pattern. -/
-private def detectNatPattern : Syntax → Array NatLiteralPatternsMatch :=
+private meta def detectNatPattern : Syntax → Array NatLiteralPatternsMatch :=
   Syntax.collectAll fun
     | stx@`($fn $arg) =>
       if fn.raw.isIdent && fn.raw.getId == `Nat.succ then #[.succ stx arg]
@@ -18,13 +20,13 @@ private def detectNatPattern : Syntax → Array NatLiteralPatternsMatch :=
       if stx.isIdent && stx.getId == `Nat.zero then #[.zero stx]
       else #[]
 
-private def findNatLiteralPatterns : Syntax → Array NatLiteralPatternsMatch :=
+private meta def findNatLiteralPatterns : Syntax → Array NatLiteralPatternsMatch :=
   Syntax.collectAll fun
     | `(match $_:term with $alts:matchAlts) =>
       alts.raw[0]!.getArgs.flatMap fun alt => detectNatPattern alt[1]!
     | _ => #[]
 
-@[check_rule] instance : Check NatLiteralPatternsMatch where
+@[check_rule] private meta instance : Check NatLiteralPatternsMatch where
   name := `natLiteralPatterns
   severity := .information
   category := .style

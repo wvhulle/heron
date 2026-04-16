@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Meta Parser Heron
 
@@ -11,7 +13,7 @@ private structure NestedMonadToTransformerMatch where
   innerArgs : Array Syntax
 
 /-- Map inner type constructor to its transformer name. -/
-private def transformerFor? : String → Option String
+private meta def transformerFor? : String → Option String
   | "Option" => some "OptionT"
   | "Except" => some "ExceptT"
   | _ => none
@@ -26,7 +28,7 @@ private structure Candidate where
   innerArgs : Array Syntax
 
 /-- Build the replacement text for a transformer alias. -/
-private def buildReplacement (outerFn : String) (outerArgs : Array Syntax)
+private meta def buildReplacement (outerFn : String) (outerArgs : Array Syntax)
     (innerFn : String) (innerArgs : Array Syntax) (tName : String) : String :=
   let outerLeading := outerArgs.pop.map reprintTrimmed
   let outerMonadText :=
@@ -44,7 +46,7 @@ private def buildReplacement (outerFn : String) (outerArgs : Array Syntax)
 
 /-- Detect a candidate at a single node: `f ... (Option α)` or `f ... (Except ε α)`.
 Excludes cases where outer and inner constructor match (handled by NestedMonadJoin). -/
-private def detectCandidate? : Syntax → Option Candidate
+private meta def detectCandidate? : Syntax → Option Candidate
   | stx@`($outerFn $outerArgs*) => do
     guard outerFn.raw.isIdent
     guard (outerArgs.size > 0)
@@ -73,14 +75,14 @@ private def detectCandidate? : Syntax → Option Candidate
   | _ => none
 
 /-- Find syntactic candidates across the whole syntax tree. -/
-private def findCandidates : Syntax → Array Candidate :=
+private meta def findCandidates : Syntax → Array Candidate :=
   Syntax.collectAll fun stx =>
     match detectCandidate? stx with
     | some c => #[c]
     | none => #[]
 
 /-- Check if the outer part of an expression (everything except the last arg) has a Monad instance. -/
-private def outerHasMonadInstance (e : Expr) : MetaM Bool := do
+private meta def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   let args := e.getAppArgs
   if args.size == 0 then
     return false
@@ -93,7 +95,7 @@ private def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   catch _ =>
     return false
 
-private def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
+private meta def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
   let candidates := findCandidates stx
   if candidates.isEmpty then
     return #[]
@@ -128,7 +130,7 @@ private def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (Array 
   return results
 
 @[check_rule]
-instance : Check NestedMonadToTransformerMatch
+private meta instance : Check NestedMonadToTransformerMatch
     where
   name := `nestedMonadToTransformer
   severity := .information

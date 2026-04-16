@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -9,13 +11,13 @@ private structure RedundantElsePureUnitMatch where
   thenBody : Syntax
 
 /-- Check if a syntax node is `pure ()` or `pure Unit.unit`. -/
-private def isPureUnit : Syntax → Bool
+private meta def isPureUnit : Syntax → Bool
   | `(pure ()) => true
   | `(pure Unit.unit) => true
   | _ => false
 
 /-- Find `if cond then ... else pure ()` in do-blocks. -/
-private def detectRedundantElsePureUnit : Syntax → Array RedundantElsePureUnitMatch
+private meta def detectRedundantElsePureUnit : Syntax → Array RedundantElsePureUnitMatch
   | s@`(doElem| if $cond then $thenBody else $elseBody) =>
     let elseElems := getDoElems elseBody
     if elseElems.size != 1 then #[]
@@ -27,10 +29,10 @@ private def detectRedundantElsePureUnit : Syntax → Array RedundantElsePureUnit
       #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
   | _ => #[]
 
-private def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElsePureUnitMatch :=
+private meta def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElsePureUnitMatch :=
   Syntax.collectAll detectRedundantElsePureUnit stx
 
-@[check_rule] instance : Check RedundantElsePureUnitMatch where
+@[check_rule] private meta instance : Check RedundantElsePureUnitMatch where
   name := `redundantElsePureUnit
   severity := .information
   category := .simplification

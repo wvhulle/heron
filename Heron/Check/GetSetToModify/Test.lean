@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.GetSetToModify
+module
+
+meta import Heron.Assert
+meta import Heron.Check.GetSetToModify
 
 private structure MyState where
   count : Nat

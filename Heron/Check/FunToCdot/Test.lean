@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.FunToCdot
+module
+
+meta import Heron.Assert
+meta import Heron.Check.FunToCdot
 
 #assertCheck funToCdot in
   def f :=

@@ -1,16 +1,18 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Heron
 
 private structure RflToExactRflMatch where
   rflStx : Syntax
 
-private def findRflTactics : Syntax → Array Syntax :=
+private meta def findRflTactics : Syntax → Array Syntax :=
   Syntax.collectAll fun
     | stx@`(tactic| rfl) => #[stx]
     | _ => #[]
 
-@[check_rule] instance : Check RflToExactRflMatch where
+@[check_rule] private meta instance : Check RflToExactRflMatch where
   name := `rflToExactRfl
   severity := .information
   category := .style

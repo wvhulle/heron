@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.NatLiteralPatterns
+module
+
+meta import Heron.Assert
+meta import Heron.Check.NatLiteralPatterns
 
 #assertCheck natLiteralPatterns in
 def f (n : Nat) : Nat := match n with

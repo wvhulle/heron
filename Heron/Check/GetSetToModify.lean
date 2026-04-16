@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
-private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r1 ← stx1.getRange?
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
@@ -16,12 +18,12 @@ private structure GetSetToModifyMatch where
   structInst : Syntax
 
 /-- Check if a do-element is `let <name> ← get`. -/
-private def isGetBinding? : Syntax → Option (Syntax × Syntax)
+private meta def isGetBinding? : Syntax → Option (Syntax × Syntax)
   | elem@`(doElem| let $x ← get) => some (elem, x)
   | _ => none
 
 /-- Check if a do-element is `set { <name> with ... }`. -/
-private def isSetWithStructUpdate? (elem : Syntax) (varName : Name) : Option (Syntax × Syntax) :=
+private meta def isSetWithStructUpdate? (elem : Syntax) (varName : Name) : Option (Syntax × Syntax) :=
   match elem with
   | `(doElem| set { $src with $fields,* }) =>
     if src.raw.getId == varName then
@@ -33,7 +35,7 @@ private def isSetWithStructUpdate? (elem : Syntax) (varName : Name) : Option (Sy
 
 /-- Check if a variable name appears anywhere in a syntax tree,
 either as an exact ident match or as the leading component of a dotted name. -/
-private partial def containsName (varName : Name) (stx : Syntax) : Bool :=
+private meta partial def containsName (varName : Name) (stx : Syntax) : Bool :=
   if stx.isIdent then
     let n := stx.getId
     n == varName || n.getRoot == varName
@@ -41,7 +43,7 @@ private partial def containsName (varName : Name) (stx : Syntax) : Bool :=
     stx.getArgs.any (containsName varName)
 
 /-- For a given get-binding at index `i`, find the matching set call. -/
-private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varNameStx : Syntax)
+private meta def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varNameStx : Syntax)
     : Option GetSetToModifyMatch :=
   let varName := varNameStx.getId
   let rec go (j : Nat) : Option GetSetToModifyMatch :=
@@ -67,7 +69,7 @@ private def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (v
   go (i + 1)
 
 /-- Find `let s ← get; set \{s with ...}` patterns. -/
-private def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :=
+private meta def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :=
   let doSeqs := Syntax.collectAll (fun s =>
     if s.isOfKind ``Term.doSeqIndent || s.isOfKind ``Term.doSeqBracketed then #[s]
     else #[]) stx
@@ -78,7 +80,7 @@ private def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :=
       | some (getElem, varName) => findSetForGet elems i getElem varName
       | none => none
 
-@[check_rule] instance : Check GetSetToModifyMatch where
+@[check_rule] private meta instance : Check GetSetToModifyMatch where
   name := `getSetToModify
   severity := .warning
   category := .simplification

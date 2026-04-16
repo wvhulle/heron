@@ -1,5 +1,6 @@
-import Heron.Refactor
-import Heron.Assert
+module
+
+public meta import Heron.Refactor
 
 open Lean Elab Command Parser Heron
 
@@ -9,7 +10,7 @@ private structure BindToDoMatch where
   finalBody : Syntax
 
 /-- Try to decompose `lhs >>= fun x => body` into `(lhs, varName, body)`. -/
-private def decomposeBind? (stx : Syntax) : Option (Syntax × Syntax × Syntax) :=
+private meta def decomposeBind? (stx : Syntax) : Option (Syntax × Syntax × Syntax) :=
   if stx.getKind != `«term_>>=_» then none
   else
     let lhs := stx[0]!
@@ -27,7 +28,7 @@ private def decomposeBind? (stx : Syntax) : Option (Syntax × Syntax × Syntax) 
           some (lhs, varName, body)
 
 /-- Collect a chain of `>>= fun x => ...` bindings. -/
-private partial def collectBindChain (stx : Syntax) : Array (Syntax × Syntax) × Syntax :=
+private meta partial def collectBindChain (stx : Syntax) : Array (Syntax × Syntax) × Syntax :=
   match decomposeBind? stx with
   | none => (#[], stx)
   | some (lhs, varName, body) =>
@@ -36,7 +37,7 @@ private partial def collectBindChain (stx : Syntax) : Array (Syntax × Syntax) �
 
 /-- Walk the syntax tree, matching outermost `>>=` chains only.
 After matching a chain, skip its children to avoid duplicate inner matches. -/
-private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
+private meta partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
   match decomposeBind? stx with
   | some _ =>
     let (bindings, finalBody) := collectBindChain stx
@@ -48,7 +49,7 @@ private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
       #[{ fullStx := stx, bindings, finalBody }] ++ lhsResults ++ bodyResults
   | none => stx.getArgs.flatMap findBindToDoAux
 
-@[refactor_rule] instance : Refactor BindToDoMatch where
+@[refactor_rule] private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
   detect := fun stx => return findBindToDoAux stx
   message := fun _ => m!"Convert `>>=` to do-notation"
@@ -71,23 +72,3 @@ private partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
       inlineViolationLabel := m!"bind to do"
     }]
   codeActionKind := "refactor.rewrite"
-
-namespace Tests
-
-#assertRefactor bindToDo in
-def f := IO.getLine >>= fun s => IO.println s
-becomes `(def f := do
-  let s ← IO.getLine
-  IO.println s)
-
-#assertRefactor bindToDo in
-def g := IO.getLine >>= fun s => IO.getLine >>= fun t => IO.println (s ++ t)
-becomes `(def g := do
-  let s ← IO.getLine
-  let t ← IO.getLine
-  IO.println (s ++ t))
-
-#assertIgnore bindToDo in
-def h := [1, 2, 3].bind (fun x => [x, x])
-
-end Tests

@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -8,24 +10,24 @@ private structure IfNotToUnlessMatch where
   thenBody : Syntax
 
 /-- Check if a condition is a negation: `not e`, `!e`, or `Not e`. -/
-private def isNegation? : Syntax → Option Syntax
+private meta def isNegation? : Syntax → Option Syntax
   | `(not $inner) => some inner
   | `(!$inner) => some inner
   | `(Not $inner) => some inner
   | _ => none
 
 /-- Find `if not cond then body` (no else) in do-blocks. -/
-private def detectIfNotToUnless : Syntax → Array IfNotToUnlessMatch
+private meta def detectIfNotToUnless : Syntax → Array IfNotToUnlessMatch
   | s@`(doElem| if $cond then $thenBody) =>
     match isNegation? cond with
     | some inner => #[{ ifStx := s, innerCond := inner, thenBody }]
     | none => #[]
   | _ => #[]
 
-private def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
+private meta def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
   Syntax.collectAll detectIfNotToUnless stx
 
-@[check_rule] instance : Check IfNotToUnlessMatch where
+@[check_rule] private meta instance : Check IfNotToUnlessMatch where
   name := `ifNotToUnless
   severity := .information
   category := .simplification

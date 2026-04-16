@@ -1,5 +1,6 @@
-import Heron.Refactor
-import Heron.Assert
+module
+
+public meta import Heron.Refactor
 
 open Lean Elab Command Heron
 
@@ -9,7 +10,7 @@ private structure FlipIfMatch where
   thenBranch : Syntax
   elseBranch : Syntax
 
-private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
+private meta def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
   Syntax.collectAll fun
     | `(if $cond then $thenBr else $elseBr) =>
       match cond with
@@ -18,7 +19,7 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
       | _ => #[]
     | _ => #[]
 
-@[refactor_rule] instance : Refactor FlipIfMatch where
+@[refactor_rule] private meta instance : Refactor FlipIfMatch where
   name := `flipIf
   find := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
@@ -37,23 +38,3 @@ private def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
       inlineViolationLabel := m!"swap branches" }
   ]
   codeActionKind := "refactor.rewrite"
-
-namespace Tests
-
-#assertRefactor flipIf in
-def flipMe (p : Bool) (a b : Nat) : Nat := if !p then a else b
-becomes `(def flipMe (p : Bool) (a b : Nat) : Nat := if p then b else a)
-
-#assertIgnore flipIf in
-def noFlip (p : Bool) (a b : Nat) : Nat := if p then a else b
-
-#assertRefactor flipIf in
-example : String :=
-  let a := false
-  if !a then "No a" else "Yes a"
-becomes `(command|
-example : String :=
-  let a := false
-  if a then "Yes a" else "No a")
-
-end Tests

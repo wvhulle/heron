@@ -1,28 +1,30 @@
+module
+
 -- Checks
-import Heron.Check.RflToExactRfl
-import Heron.Check.MergeIntros
-import Heron.Check.UnnecessaryIdRun
-import Heron.Check.UnnecessaryMut
-import Heron.Check.BoolMatchToIf
-import Heron.Check.DuplicateAltToOrPattern
-import Heron.Check.MergeBinders
-import Heron.Check.NestedMonadToJoin
-import Heron.Check.NestedMonadToTransformer
-import Heron.Check.RedundantLetWildcard
-import Heron.Check.TupleMatchToSimultaneous
-import Heron.Check.MatchToIfLet
-import Heron.Check.GetSetToModify
-import Heron.Check.RedundantElsePureUnit
-import Heron.Check.IfNotToUnless
-import Heron.Check.NatLiteralPatterns
-import Heron.Check.FunMatchToMatchFun
-import Heron.Check.ExprAppChainToMkAppN
-import Heron.Check.FunToCdot
-import Heron.Check.UnusedImport
-import Heron.Check.UnnecessaryPublicImport
-import Heron.Check.UnnecessaryMetaImport
+public import Heron.Check.RflToExactRfl
+public import Heron.Check.MergeIntros
+public import Heron.Check.UnnecessaryIdRun
+public import Heron.Check.UnnecessaryMut
+public import Heron.Check.BoolMatchToIf
+public import Heron.Check.DuplicateAltToOrPattern
+public import Heron.Check.MergeBinders
+public import Heron.Check.NestedMonadToJoin
+public import Heron.Check.NestedMonadToTransformer
+public import Heron.Check.RedundantLetWildcard
+public import Heron.Check.TupleMatchToSimultaneous
+public import Heron.Check.MatchToIfLet
+public import Heron.Check.GetSetToModify
+public import Heron.Check.RedundantElsePureUnit
+public import Heron.Check.IfNotToUnless
+public import Heron.Check.NatLiteralPatterns
+public import Heron.Check.FunMatchToMatchFun
+public import Heron.Check.ExprAppChainToMkAppN
+public import Heron.Check.FunToCdot
+public import Heron.Check.UnusedImport
+public import Heron.Check.UnnecessaryPublicImport
+public import Heron.Check.UnnecessaryMetaImport
 -- Refactors
-import Heron.Refactor.FlipIf
-import Heron.Refactor.Inline
-import Heron.Refactor.BindToDo
-import Heron.Refactor.InlineAll
+public import Heron.Refactor.FlipIf
+public import Heron.Refactor.Inline
+public import Heron.Refactor.BindToDo
+public import Heron.Refactor.InlineAll

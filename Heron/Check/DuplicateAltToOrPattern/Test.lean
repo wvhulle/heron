@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.DuplicateAltToOrPattern
+module
+
+meta import Heron.Assert
+meta import Heron.Check.DuplicateAltToOrPattern
 
 #assertCheck duplicateAltToOrPattern in
   def f (x : Bool) : Nat :=

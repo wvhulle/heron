@@ -1,5 +1,7 @@
-import Heron.Check
-import Heron.ImportAnalysis
+module
+
+public meta import Heron.Check
+public meta import Heron.ImportAnalysis
 
 open Lean Elab Command Heron
 
@@ -7,7 +9,7 @@ private structure UnusedImportMatch where
   importStx : Syntax
   moduleName : Name
 
-private def detectUnusedImports (stx : Syntax) : CommandElabM (Array UnusedImportMatch) := do
+private meta def detectUnusedImports (stx : Syntax) : CommandElabM (Array UnusedImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
     if !a.isUsed then
@@ -15,7 +17,7 @@ private def detectUnusedImports (stx : Syntax) : CommandElabM (Array UnusedImpor
     else
       none
 
-@[check_rule] instance : Check UnusedImportMatch where
+@[check_rule] private meta instance : Check UnusedImportMatch where
   name := `unusedImport
   severity := .warning
   category := .simplification

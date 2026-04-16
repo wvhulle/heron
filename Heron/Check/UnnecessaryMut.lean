@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
 /-- Get the variable name from a doLet's letIdDecl. -/
-private def getDoLetVarName? (doLet : Syntax) : Option Name :=
+private meta def getDoLetVarName? (doLet : Syntax) : Option Name :=
   if doLet.getKind == ``Term.doLet then
     let letDecl := doLet[2]!  -- doLet[0]="let", [1]=optional mut, [2]=letDecl
     let inner := letDecl[0]!  -- letIdDecl (or letPatDecl)
@@ -17,11 +19,11 @@ private def getDoLetVarName? (doLet : Syntax) : Option Name :=
   else none
 
 /-- Check if a doLet has the `mut` keyword. -/
-private def hasMut (doLet : Syntax) : Bool :=
+private meta def hasMut (doLet : Syntax) : Bool :=
   doLet.getKind == ``Term.doLet && !doLet[1]!.getArgs.isEmpty
 
 /-- Get the variable name from a doReassign's letIdDecl. -/
-private def getReassignVarName? (elem : Syntax) : Option Name :=
+private meta def getReassignVarName? (elem : Syntax) : Option Name :=
   if elem.getKind == ``Term.doReassign then
     let letIdDecl := elem[0]!
     if letIdDecl.getKind == ``Term.letIdDecl then
@@ -34,7 +36,7 @@ private def getReassignVarName? (elem : Syntax) : Option Name :=
   else none
 
 /-- Collect all reassigned variable names from a list of doElems (recursively into nested blocks). -/
-private partial def collectReassignedVars (elems : Array Syntax) : Std.HashSet Name :=
+private meta partial def collectReassignedVars (elems : Array Syntax) : Std.HashSet Name :=
   elems.foldl (init := {}) fun acc elem =>
     let k := elem.getKind
     if k == ``Term.doReassign then
@@ -54,7 +56,7 @@ private structure UnnecessaryMutMatch where
   valStx : TSyntax `term
 
 /-- Find `let mut x := e` where x is never reassigned in the subsequent do-elements. -/
-private def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch :=
+private meta def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch :=
   -- Find all do blocks first
   let doSeqs := Syntax.collectAll (fun s =>
     if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
@@ -77,7 +79,7 @@ private def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch :=
         | none => none
       else none
 
-@[check_rule] instance : Check UnnecessaryMutMatch where
+@[check_rule] private meta instance : Check UnnecessaryMutMatch where
   name := `unnecessaryMut
   severity := .warning
   category := .simplification

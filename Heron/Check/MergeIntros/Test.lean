@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.MergeIntros
+module
+
+meta import Heron.Assert
+meta import Heron.Check.MergeIntros
 
 #assertIgnore mergeIntros in
   example (a b : Nat) : a = a :=

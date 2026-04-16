@@ -1,3 +1,5 @@
+module
+
 /-
 Regression test for the *generic* `Lean.recordExtraModUse` path.
 
@@ -11,7 +13,7 @@ the recorded extra `Heron.Check.UnusedImport.ExtraModUseLeaf` and must
 be kept. `Lean.Data.PersistentHashMap` is genuinely unused and must be
 flagged.
 -/
-import Heron.Assert
+meta import Heron.Assert
 import Heron.Check.UnusedImport.ExtraModUseHelper
 import Heron.Check.UnusedImport.ExtraModUseUmbrella
 import Lean.Data.PersistentHashMap
@@ -20,7 +22,7 @@ import Lean.Data.PersistentHashMap
 -- side-effect registration of `#recordExtra`, not from constant references).
 -- `Heron.Assert` self-registers via its elaborators, so no similar shim is
 -- needed for it.
-private def _usedHelper := @elabRecordExtra
+private meta def _usedHelper := @elabRecordExtra
 
 #recordExtra Heron.Check.UnusedImport.ExtraModUseLeaf
 

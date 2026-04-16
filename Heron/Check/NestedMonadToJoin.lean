@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -9,7 +11,7 @@ private structure NestedMonadToJoinMatch where
 
 /-- Detect `m (m α …)` patterns where the outer and inner constructor match.
 For multi-arg constructors like `Except ε`, also verifies the leading args match. -/
-private def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
+private meta def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
   Syntax.collectAll fun
     | stx@`($fn $args*) =>
       if !fn.raw.isIdent || args.size == 0 then #[]
@@ -31,7 +33,7 @@ private def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
     | _ => #[]
 
 @[check_rule]
-instance : Check NestedMonadToJoinMatch where
+private meta instance : Check NestedMonadToJoinMatch where
   name := `nestedMonadToJoin
   severity := .warning
   category := .simplification

@@ -1,4 +1,6 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
@@ -9,7 +11,7 @@ private structure BoolMatchToIfMatch where
   trueRhs : Syntax
   falseRhs : Syntax
 
-private def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
+private meta def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
   Syntax.collectAll fun
     |
     stx@`(match $discr:term with
@@ -24,7 +26,7 @@ private def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
     | _ => #[]
 
 @[check_rule]
-instance : Check BoolMatchToIfMatch where
+private meta instance : Check BoolMatchToIfMatch where
   name := `boolMatchToIf
   severity := .warning
   category := .simplification

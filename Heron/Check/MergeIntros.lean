@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Heron
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
-private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r1 ← stx1.getRange?
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
@@ -13,13 +15,13 @@ private structure MergeIntrosMatch where
   fullRange : Syntax
   allIntros : Array Syntax
 
-private def collectIntroTactics : Syntax → Array Syntax :=
+private meta def collectIntroTactics : Syntax → Array Syntax :=
   Syntax.collectAll fun stx => if stx.getKind == ``Lean.Parser.Tactic.intro then #[stx] else #[]
 
-private def introIdents : Syntax → Array Syntax :=
+private meta def introIdents : Syntax → Array Syntax :=
   Syntax.collectAll fun stx => if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
 
-private def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
+private meta def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
   let intros := collectIntroTactics stx
   if intros.size ≤ 1 then #[]
   else
@@ -28,7 +30,7 @@ private def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
     | none => #[]
 
 @[check_rule]
-instance : Check MergeIntrosMatch where
+private meta instance : Check MergeIntrosMatch where
   name := `mergeIntros
   severity := .warning
   category := .simplification

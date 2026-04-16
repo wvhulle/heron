@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
-private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r1 ← stx1.getRange?
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
@@ -15,22 +17,22 @@ private structure MergeBindersMatch where
   binder2 : Syntax
 
 /-- Get the type text of an explicitBinder, if it has a type annotation. -/
-private def binderTypeText? (binder : Syntax) : Option String :=
+private meta def binderTypeText? (binder : Syntax) : Option String :=
   let typeSpec := binder[2]!
   if typeSpec.getNumArgs >= 2 then some (reprintTrimmed typeSpec[1]!)
   else none
 
 /-- Check if an explicitBinder has a default value. -/
-private def hasDefault (binder : Syntax) : Bool :=
+private meta def hasDefault (binder : Syntax) : Bool :=
   binder[3]!.getNumArgs > 0
 
 /-- Get the variable name texts from an explicitBinder. -/
-private def binderNames (binder : Syntax) : Array String :=
+private meta def binderNames (binder : Syntax) : Array String :=
   let names := binder[1]!  -- null-node of idents
   names.getArgs.map reprintTrimmed
 
 /-- Find pairs of consecutive explicit binders in a signature's binder list. -/
-private def findMergeableInBinders (binders : Array Syntax) : Array MergeBindersMatch :=
+private meta def findMergeableInBinders (binders : Array Syntax) : Array MergeBindersMatch :=
   if binders.size < 2 then #[]
   else
     (List.range (binders.size - 1)).foldl (init := #[]) fun acc i =>
@@ -49,7 +51,7 @@ private def findMergeableInBinders (binders : Array Syntax) : Array MergeBinders
           else acc
         | _, _ => acc
 
-private def findMergeBinders : Syntax → Array MergeBindersMatch :=
+private meta def findMergeBinders : Syntax → Array MergeBindersMatch :=
   Syntax.collectAll fun stx =>
     let k := stx.getKind
     if k == ``Command.optDeclSig || k == ``Command.declSig then
@@ -57,7 +59,7 @@ private def findMergeBinders : Syntax → Array MergeBindersMatch :=
       findMergeableInBinders binderSeq.getArgs
     else #[]
 
-@[check_rule] instance : Check MergeBindersMatch where
+@[check_rule] private meta instance : Check MergeBindersMatch where
   name := `mergeBinders
   severity := .information
   category := .style

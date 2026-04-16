@@ -1,9 +1,11 @@
-import Heron.Check
+module
+
+public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
 /-- Create a `Syntax` spanning two syntax nodes. -/
-private def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
+private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
   let r1 ← stx1.getRange?
   let r2 ← stx2.getRange?
   return Syntax.ofRange ⟨r1.start, r2.stop⟩
@@ -15,14 +17,14 @@ private structure DuplicateAltToOrPatternMatch where
   secondAlt : Syntax
 
 /-- Reprint a matchAlt's pattern portion (everything between | and =>). -/
-private def altPatsText (alt : Syntax) : String :=
+private meta def altPatsText (alt : Syntax) : String :=
   reprintTrimmed alt[1]!
 
 /-- Reprint a matchAlt's RHS. -/
-private def altRhsText (alt : Syntax) : String :=
+private meta def altRhsText (alt : Syntax) : String :=
   reprintTrimmed alt[3]!
 
-private def findDuplicateAltToOrPatternInAlts (alts : Array Syntax) : Array DuplicateAltToOrPatternMatch :=
+private meta def findDuplicateAltToOrPatternInAlts (alts : Array Syntax) : Array DuplicateAltToOrPatternMatch :=
   if alts.size < 2 then #[]
   else
     (List.range (alts.size - 1)).foldl (init := #[]) fun acc i =>
@@ -34,7 +36,7 @@ private def findDuplicateAltToOrPatternInAlts (alts : Array Syntax) : Array Dupl
         | none => acc
       else acc
 
-private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatternMatch :=
+private meta def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatternMatch :=
   Syntax.collectAll fun
     |
     `(match $_:term with
@@ -42,7 +44,7 @@ private def findDuplicateAltToOrPattern : Syntax → Array DuplicateAltToOrPatte
       findDuplicateAltToOrPatternInAlts (alts.map (·.raw))
     | _ => #[]
 
-@[check_rule] instance : Check DuplicateAltToOrPatternMatch where
+@[check_rule] private meta instance : Check DuplicateAltToOrPatternMatch where
   name := `duplicateAltToOrPattern
   severity := .information
   category := .simplification

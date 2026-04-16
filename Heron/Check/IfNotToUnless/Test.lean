@@ -1,5 +1,7 @@
-import Heron.Assert
-import Heron.Check.IfNotToUnless
+module
+
+meta import Heron.Assert
+meta import Heron.Check.IfNotToUnless
 
 #assertCheck ifNotToUnless in
 example : IO Unit := do
