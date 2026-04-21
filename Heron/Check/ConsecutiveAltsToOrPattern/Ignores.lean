@@ -1,9 +1,9 @@
 module
 
 meta import Heron.Assert
-meta import Heron.Check.DuplicateAltToOrPattern
+meta import Heron.Check.ConsecutiveAltsToOrPattern
 
-#assertIgnore duplicateAltToOrPattern in
+#assertIgnore consecutiveAltsToOrPattern in
   def g (x : Bool) : Nat :=
     match x with
     | true => 1
