@@ -16,3 +16,10 @@ def rec1 : Nat → Nat
 
 #assertIgnore inline in
 example : Nat := rec1 5
+
+-- Instances should not be inlined.
+instance : ToString Bool where
+  toString := fun b => if b then "yes" else "no"
+
+#assertIgnore inline in
+example : String := toString true

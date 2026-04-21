@@ -15,21 +15,28 @@ private meta def isInlineableConst (env : Environment) (name : Name) : Bool :=
     -- Well-founded / structural recursion compiles away the self-reference
     -- into `brecOn`/`rec` calls, so `isRecursive` alone is not enough.
     !Meta.recExt.isTagged env name &&
-    match env.find? name >>= (·.value?) with
+    match env.find? name >>= (·.value? (allowOpaque := true)) with
     | some v => !isRecursive v name
     | none => false
 
-private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdStx : Syntax) (ns : Name) : Option Name :=
+private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdStx : Syntax) (ns : Name) (env : Environment) : Option Name :=
   do
-  let pos ← declIdStx.getPos? true
-  match infos.find? fun (_, ti) => ti.stx.getPos? true == some pos with
+  let pos ← declIdStx.getPos? false
+  -- Match by position, accepting synthetic source info (e.g. from `meta def`)
+  match infos.find? fun (_, ti) => ti.stx.getPos? false == some pos with
   | some (_, ti) =>
     ti.expr.constName?
   | none =>
-    some (ns ++ declIdStx[0]!.getId)
+    -- Fallback: construct the name from the identifier; try the private-mangled
+    -- variant if the plain name is not in the environment.
+    let plainName := ns ++ declIdStx[0]!.getId
+    if env.find? plainName |>.isSome then some plainName
+    else infos.findSome? fun (_, ti) =>
+      ti.expr.constName?.bind fun n =>
+        if n.componentsRev.head? == plainName.componentsRev.head? then some n else none
 
 private meta def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Option Syntax) := do
-  let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) |
+  let some expanded ← runInfoMetaM ci ti.lctx (expandConst? ti.expr) |
     return none
   try
     let delabbed ← runInfoMetaM ci ti.lctx (PrettyPrinter.delab expanded)
@@ -109,7 +116,7 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
     return #[]
   let snapInfos := collectTermInfos snap.infoTree
   let ns := snap.cmdState.scopes.head!.currNamespace
-  let some constName := resolveConstName? snapInfos declIdStx ns |
+  let some constName := resolveConstName? snapInfos declIdStx ns snap.env |
     return #[]
   unless isInlineableConst snap.env constName do
     return #[]

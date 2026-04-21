@@ -6,7 +6,7 @@ public import Heron.Check.MergeIntros
 public import Heron.Check.UnnecessaryIdRun
 public import Heron.Check.UnnecessaryMut
 public import Heron.Check.BoolMatchToIf
-public import Heron.Check.DuplicateAltToOrPattern
+public import Heron.Check.ConsecutiveAltsToOrPattern
 public import Heron.Check.MergeBinders
 public import Heron.Check.NestedMonadToJoin
 public import Heron.Check.NestedMonadToTransformer

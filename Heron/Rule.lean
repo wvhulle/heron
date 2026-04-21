@@ -303,7 +303,11 @@ meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) 
   let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
   let buildApp (fnName : Name) : AttrM Expr :=
     Meta.MetaM.run' <| Meta.mkAppOptM fnName #[some αExpr, some inst]
-  let registerName := declName ++ `_rule_init
+  -- Use the user-facing name for auxiliary declarations so that the
+  -- interpreter can resolve them across module boundaries.  Private
+  -- name mangling makes generated constants invisible to importers.
+  let auxBase := privateToUserName declName
+  let registerName := auxBase ++ `_rule_init
   addAndCompile <|
       .defnDecl
         { name := registerName, levelParams := [], type := auxType
@@ -314,7 +318,7 @@ meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) 
       | .ok env' => env'
       | .error _ => env
   for fnConst in immediateFnConsts do
-    let auxName := declName ++ (`_rule).append fnConst
+    let auxName := auxBase ++ (`_rule).append fnConst
     addAndCompile <|
         .defnDecl
           { name := auxName, levelParams := [], type := auxType
@@ -329,7 +333,7 @@ meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) 
   -- to typeclass resolution so `Check α` (which extends `Rule α`) is accepted.
   let sourceMod := (← getEnv).mainModule
   let srcModExpr := toExpr sourceMod
-  let registerSourceName := declName ++ `_rule_source
+  let registerSourceName := auxBase ++ `_rule_source
   let registerSourceValue ← Meta.MetaM.run' <|
       Meta.mkAppOptM ``Rule.registerSourceModule #[some αExpr, none, some srcModExpr]
   addAndCompile <|

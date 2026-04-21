@@ -28,3 +28,11 @@ def recFn2 : Nat → Nat
 
 #assertIgnore inlineAllConst in
 example : Nat := recFn2 1 + recFn2 2
+
+-- A meta recursive definition must not be inlined.
+meta def metaRec : Nat → Nat
+  | 0 => 0
+  | n + 1 => metaRec n
+
+#assertIgnore inlineAllConst in
+example : Nat := metaRec 1 + metaRec 2

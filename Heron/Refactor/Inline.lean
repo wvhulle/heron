@@ -13,6 +13,15 @@ open Lean Elab Command Meta Heron
 meta def isRecursive (value : Expr) (name : Name) : Bool :=
   value.find? (fun e => e.isConst && e.constName? == some name) |>.isSome
 
+/-- Like `delta?` but also expands opaque definitions (e.g. `meta def`). -/
+meta def expandConst? (e : Expr) : CoreM (Option Expr) :=
+  matchConst e.getAppFn (fun _ => return none) fun fInfo fLvls => do
+    if fInfo.hasValue (allowOpaque := true) && fInfo.levelParams.length == fLvls.length then
+      let f ← instantiateValueLevelParams fInfo fLvls
+      return some (f.betaRev e.getAppRevArgs (useZeta := true))
+    else
+      return none
+
 private inductive InlineKind where
   | const (name : Name)
   | letBinding
@@ -29,7 +38,7 @@ meta def isInlineableUsage (env : Environment) (e : Expr) : Bool :=
       -- Well-founded / structural recursion compiles away the self-reference
       -- into `brecOn`/`rec` calls, so `isRecursive` alone is not enough.
       !Meta.recExt.isTagged env name &&
-      match env.find? name >>= (·.value?) with
+      match env.find? name >>= (·.value? (allowOpaque := true)) with
       | some v => !isRecursive v name
       | none => false
   | none => false
@@ -42,7 +51,7 @@ private meta def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array 
   let mut results : Array InlineMatch := #[]
   let constCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && isInlineableUsage env ti.expr
   for (ci, ti) in deduplicateTermInfos constCandidates do
-    if let some expanded ← runInfoMetaM ci ti.lctx (delta? ti.expr) then
+    if let some expanded ← runInfoMetaM ci ti.lctx (expandConst? ti.expr) then
       try
         let delabbed ← runInfoMetaM ci ti.lctx (PrettyPrinter.delab expanded)
         let name := ti.expr.getAppFn.constName?.getD `unknown

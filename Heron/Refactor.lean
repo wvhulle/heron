@@ -67,7 +67,7 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
 private meta unsafe def refactorRuleHandler :=
   handleRuleAttribute "refactor_rule" ``Refactor.registerAll #[``Refactor.activateTestRunner]
     (extraSetup := fun declName αExpr inst => do
-      let providerName := declName ++ `_rule_provider
+      let providerName := privateToUserName declName ++ `_rule_provider
       let value ← Meta.MetaM.run' <|
         Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
       addAndCompile <| .defnDecl {
