@@ -13,7 +13,6 @@ public import Lean.Elab.Command
 public import Lean.Parser.Module
 public import Lean.ExtraModUses
 public import Lean.ResolveName
-public import Heron.ImplicitImports
 
 public section
 
@@ -281,23 +280,12 @@ where
     if prelude?.isNone then
       if let some initIdx := env.getModuleIdx? `Init then
         deps := deps.union .pub {initIdx}
-    -- Merge implicit dependencies into `deps`. Two sources:
-    --   1. `Lean.getExtraModUsesInEnv` — the general Lean mechanism
-    --      (`recordExtraModUse` from macros/attributes/`@[init]` side effects).
-    --   2. `Heron.ruleUsedInFiles` — Heron's linter-triggered dependencies.
-    --      A separate registry is required because `Lean.Elab.Command.runLinters`
-    --      rolls back env changes after each linter, so `recordExtraModUse`
-    --      calls from linter bodies don't persist.
+    -- Merge implicit dependencies from `Lean.getExtraModUsesInEnv`
+    -- (`recordExtraModUse` from macros/attributes/`@[init]` side effects).
     for extra in Lean.getExtraModUsesInEnv env do
       if let some eIdx := env.getModuleIdx? extra.module then
         let k : NeedsKind := { isExported := extra.isExported, isMeta := extra.isMeta }
         deps := deps.union k {eIdx}
-    let ruleUses := (← Heron.ruleUsedInFiles.get).getD env.mainModule { }
-    for ruleMod in ruleUses do
-      if let some eIdx := env.getModuleIdx? ruleMod then
-        -- Rules fire at linter-execution (elab) time, so they're meta deps; the
-        -- registering module's `@[init]` must be visible, so they're public.
-        deps := deps.union .metaPub {eIdx}
     -- Transitive reduction on `deps`: remove modules implied by other
     -- modules already in `deps`, leaving a minimal cover of needs.
     for j in [:env.header.moduleData.size] do

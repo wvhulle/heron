@@ -79,7 +79,7 @@ private meta def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch 
         | none => none
       else none
 
-@[check_rule] private meta instance : Check UnnecessaryMutMatch where
+private meta instance : Check UnnecessaryMutMatch where
   name := `unnecessaryMut
   severity := .warning
   category := .simplification
@@ -98,3 +98,5 @@ private meta def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch 
       category := `doElem
       inlineViolationLabel := m!"unused mut"
     }]
+
+meta initialize Check.register (α := UnnecessaryMutMatch)

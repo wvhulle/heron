@@ -39,7 +39,7 @@ private meta def findConsecutiveAltsToOrPattern : Syntax → Array ConsecutiveAl
       findConsecutiveAltsToOrPatternInAlts (alts.map (·.raw) |>.toList)
     | _ => #[]
 
-@[check_rule] private meta instance : Check ConsecutiveAltsToOrPatternMatch where
+private meta instance : Check ConsecutiveAltsToOrPatternMatch where
   name := `consecutiveAltsToOrPattern
   severity := .information
   category := .simplification
@@ -60,3 +60,5 @@ private meta def findConsecutiveAltsToOrPattern : Syntax → Array ConsecutiveAl
       inlineViolationLabel := m!"duplicate arm"
       category := `matchAlt
     }]
+
+meta initialize Check.register (α := ConsecutiveAltsToOrPatternMatch)

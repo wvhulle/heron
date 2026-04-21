@@ -59,7 +59,7 @@ private meta def findMergeBinders : Syntax → Array MergeBindersMatch :=
       findMergeableInBinders binderSeq.getArgs
     else #[]
 
-@[check_rule] private meta instance : Check MergeBindersMatch where
+private meta instance : Check MergeBindersMatch where
   name := `mergeBinders
   severity := .information
   category := .style
@@ -82,3 +82,5 @@ private meta def findMergeBinders : Syntax → Array MergeBindersMatch :=
       inlineViolationLabel := m!"shared type"
       category := `bracketedBinder
     }]
+
+meta initialize Check.register (α := MergeBindersMatch)

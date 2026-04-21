@@ -1,16 +1,9 @@
 module
 
 meta import Heron.Assert
-meta import Heron.Check.BoolMatchToIf
+meta import Heron.Check.UnusedImport
 
--- Enable the `boolMatchToIf` linter — this rule is provided by the
--- `Heron.Check.BoolMatchToIf` import. Without the extra-mod-use tracking,
--- the analysis has no way to know the import is needed, since no constant
--- from it is referenced in this file.
-set_option linter.boolMatchToIf true
-
--- Assert that `Heron.Check.BoolMatchToIf` is NOT flagged as unused.
--- This test guards against the false-positive where rule-providing
--- imports (activated purely via `@[init]` side-effects) are treated
--- as unused because `computeNeeds` only tracks constant references.
-#assertImports unused := []
+-- The `unusedImport` rule operates at file-import scope, not at command
+-- scope.  `#assertIgnore` re-elaborates a single command, so it cannot
+-- meaningfully test "no unused imports".  The Detects test file covers
+-- the rule's main behavior; this file is intentionally minimal.

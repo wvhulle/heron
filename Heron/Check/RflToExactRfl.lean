@@ -12,7 +12,7 @@ private meta def findRflTactics : Syntax → Array Syntax :=
     | stx@`(tactic| rfl) => #[stx]
     | _ => #[]
 
-@[check_rule] private meta instance : Check RflToExactRflMatch where
+private meta instance : Check RflToExactRflMatch where
   name := `rflToExactRfl
   severity := .information
   category := .style
@@ -32,3 +32,5 @@ private meta def findRflTactics : Syntax → Array Syntax :=
       category := `tactic
       inlineViolationLabel := m!"bare rfl"
     }]
+
+meta initialize Check.register (α := RflToExactRflMatch)

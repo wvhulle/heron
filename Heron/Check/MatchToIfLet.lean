@@ -50,7 +50,7 @@ private meta def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
     | some m => #[m]
     | none => #[]
 
-@[check_rule] private meta instance : Check MatchToIfLetMatch where
+private meta instance : Check MatchToIfLetMatch where
   name := `matchToIfLet
   severity := .information
   category := .style
@@ -71,3 +71,5 @@ private meta def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
       newSyntax := repl
       inlineViolationLabel := m!"match to if let"
     }]
+
+meta initialize Check.register (α := MatchToIfLetMatch)

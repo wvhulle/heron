@@ -22,7 +22,7 @@ private meta def detectUnnecessaryMetaImports (stx : Syntax) :
     else
       none
 
-@[check_rule] private meta instance : Check UnnecessaryMetaImportMatch where
+private meta instance : Check UnnecessaryMetaImportMatch where
   name := `unnecessaryMetaImport
   severity := .warning
   category := .simplification
@@ -39,3 +39,5 @@ private meta def detectUnnecessaryMetaImports (stx : Syntax) :
       newSyntax := .missing
       inlineViolationLabel := m!"unnecessary meta"
     }]
+
+meta initialize Check.register (α := UnnecessaryMetaImportMatch)

@@ -43,7 +43,7 @@ private meta partial def findExprAppChains (stx : Syntax) : Array ExprAppChainTo
       stx.getArgs.flatMap findExprAppChains
   | none => stx.getArgs.flatMap findExprAppChains
 
-@[check_rule] private meta instance : Check ExprAppChainToMkAppNMatch where
+private meta instance : Check ExprAppChainToMkAppNMatch where
   name := `exprAppChainToMkAppN
   severity := .information
   category := .simplification
@@ -63,3 +63,5 @@ private meta partial def findExprAppChains (stx : Syntax) : Array ExprAppChainTo
       newSyntax := repl
       inlineViolationLabel := m!"Expr.app chain → mkAppN"
     }]
+
+meta initialize Check.register (α := ExprAppChainToMkAppNMatch)

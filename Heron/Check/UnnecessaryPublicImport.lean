@@ -22,7 +22,7 @@ private meta def detectUnnecessaryPublicImports (stx : Syntax) :
     else
       none
 
-@[check_rule] private meta instance : Check UnnecessaryPublicImportMatch where
+private meta instance : Check UnnecessaryPublicImportMatch where
   name := `unnecessaryPublicImport
   severity := .warning
   category := .simplification
@@ -39,3 +39,5 @@ private meta def detectUnnecessaryPublicImports (stx : Syntax) :
       newSyntax := .missing
       inlineViolationLabel := m!"unnecessary public"
     }]
+
+meta initialize Check.register (α := UnnecessaryPublicImportMatch)

@@ -111,7 +111,7 @@ private meta def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :
       else #[]
     | none => #[]
 
-@[check_rule] private meta instance : Check UnnecessaryIdRunMatch where
+private meta instance : Check UnnecessaryIdRunMatch where
   name := `unnecessaryIdRun
   severity := .warning
   category := .simplification
@@ -139,3 +139,5 @@ private meta def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :
       newSyntax := result
       inlineViolationLabel := m!"unnecessary Id.run do"
     }]
+
+meta initialize Check.register (α := UnnecessaryIdRunMatch)

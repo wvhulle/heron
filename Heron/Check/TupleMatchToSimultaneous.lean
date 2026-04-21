@@ -79,7 +79,7 @@ private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSim
           return #[{ matchStx := stx, matchKw := stx[0]!, discrElems, altsArr }])
     | _ => #[]
 
-@[check_rule] private meta instance : Check TupleMatchToSimultaneousMatch where
+private meta instance : Check TupleMatchToSimultaneousMatch where
   name := `tupleMatchToSimultaneous
   severity := .warning
   category := .simplification
@@ -107,3 +107,5 @@ private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSim
         inlineViolationLabel := m!"tuple match"
       }]
     | .error _ => return #[]
+
+meta initialize Check.register (α := TupleMatchToSimultaneousMatch)

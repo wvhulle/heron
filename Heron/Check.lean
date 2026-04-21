@@ -91,25 +91,13 @@ meta def Check.toLinter [Check α] : Linter where
             (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
             (explanation := Check.explanation m) (repls := repls) (reference := Check.reference (α := α))
 
-meta def Check.activateLinter [Check α] : IO Unit :=
+/-- Register a `Check` instance: linter option, linter, and test runner.
+Called from `meta initialize` in each rule file. -/
+meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
-  lintersRef.modify fun linters => (linters.filter (·.name != name)).push (Check.toLinter (α := α))
-
-meta def Check.activate [Check α] : IO Unit := do
-  Rule.activateTestRunner (α := α)
-  Check.activateLinter (α := α)
-
-meta def Check.registerAll [Check α] (srcMod : Name) : IO Unit := do
-  Rule.registerLinterOption (α := α)
-  Check.activate (α := α)
-  Rule.registerSourceModule (α := α) srcMod
-
-private meta unsafe def checkRuleHandler (declName : Name) : AttrM Unit :=
-  Meta.MetaM.run' <| handleRuleAttribute "check_rule" ``Check.registerAll ``Check.activate (declName := declName)
-
-meta initialize _checkRuleAttr : TagAttribute ←
-  registerTagAttribute `check_rule "Register a Check instance as a heron linter rule." (validate :=
-      unsafe checkRuleHandler) (applicationTime := .afterCompilation)
+  Rule.registerLinterOption name
+  lintersRef.modify fun ls => (ls.filter (·.name != name)).push (Check.toLinter (α := α))
+  Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
 @[code_action_provider]

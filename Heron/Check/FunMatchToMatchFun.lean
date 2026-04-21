@@ -25,7 +25,6 @@ private meta def findFunMatchToMatchFun (stx : Syntax) : Array FunMatchToMatchFu
       | none => #[])
     stx
 
-@[check_rule]
 private meta instance : Check FunMatchToMatchFunMatch where
   name := `funMatchToMatchFun
   severity := .information
@@ -47,3 +46,5 @@ private meta instance : Check FunMatchToMatchFunMatch where
           oldSyntax := m.funStx
           newSyntax := repl
           inlineViolationLabel := m!"fun match → fun |" }]
+
+meta initialize Check.register (α := FunMatchToMatchFunMatch)

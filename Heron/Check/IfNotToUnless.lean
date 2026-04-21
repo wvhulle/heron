@@ -27,7 +27,7 @@ private meta def detectIfNotToUnless : Syntax → Array IfNotToUnlessMatch
 private meta def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
   Syntax.collectAll detectIfNotToUnless stx
 
-@[check_rule] private meta instance : Check IfNotToUnlessMatch where
+private meta instance : Check IfNotToUnlessMatch where
   name := `ifNotToUnless
   severity := .information
   category := .simplification
@@ -47,3 +47,5 @@ private meta def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
       category := `doElem
       inlineViolationLabel := m!"if not → unless"
     }]
+
+meta initialize Check.register (α := IfNotToUnlessMatch)

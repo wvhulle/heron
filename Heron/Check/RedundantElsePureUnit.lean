@@ -32,7 +32,7 @@ private meta def detectRedundantElsePureUnit : Syntax → Array RedundantElsePur
 private meta def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElsePureUnitMatch :=
   Syntax.collectAll detectRedundantElsePureUnit stx
 
-@[check_rule] private meta instance : Check RedundantElsePureUnitMatch where
+private meta instance : Check RedundantElsePureUnitMatch where
   name := `redundantElsePureUnit
   severity := .information
   category := .simplification
@@ -53,3 +53,5 @@ private meta def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElseP
       category := `doElem
       inlineViolationLabel := m!"else pure ()"
     }]
+
+meta initialize Check.register (α := RedundantElsePureUnitMatch)

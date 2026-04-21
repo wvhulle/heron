@@ -84,12 +84,15 @@ def addNats (x : Nat) (y : Nat) :=
 
 -- BindToDo: refactor available (>>= to do)
 def bindDemo :=
-  Option.some 1 >>= fun x => Option.some (x + 1)
+  Option.some 1 >>= fun x =>
+    Option.some
+      (x + 1)
 
 -- LetWildcard: should inform (redundant let _ ←)
 example : IO Unit := do
   let _ ← IO.println "hello"
-  pure ()
+  pure
+      ()
 
 -- TupleMatch: should warn (match on tuple discriminant)
 def addPair (x y : Nat) : Nat :=
@@ -100,7 +103,8 @@ def addPair (x y : Nat) : Nat :=
 def fromOption (x : Option Nat) : Nat :=
   match x with
   | some v => v
-  | _ => 0
+  | _ =>
+    0
 
 -- GetSet: should warn (get/set → modify)
 private structure DemoState where
@@ -108,18 +112,22 @@ private structure DemoState where
 
 def increment : StateM DemoState Unit := do
   let s ← get
-  set { s with count := s.count + 1 }
+  set
+      { s with count := s.count + 1 }
 
 -- InlineAllConst: refactor available (inline all usages of add1 from definition site)
 example : Nat :=
-  add1 3 + add1 5
+  add1 3 +
+    add1
+      5
 
 -- ElsePureUnit: should inform (redundant else pure ())
 example : IO Unit := do
-  if true then
+  if true then 
     IO.println "done"
   else
-    pure ()
+    pure
+        ()
 
 -- UnusedImport: this check detects unused imports at file level.
 -- In this file, `Heron.Rules` is used (it provides the linter rules), so it won't be flagged.

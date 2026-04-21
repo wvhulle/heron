@@ -25,7 +25,6 @@ private meta def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
       #[{ matchStx := stx, matchKw := stx[0]!, discr, trueRhs := rhs2, falseRhs := rhs1 }]
     | _ => #[]
 
-@[check_rule]
 private meta instance : Check BoolMatchToIfMatch where
   name := `boolMatchToIf
   severity := .warning
@@ -47,3 +46,5 @@ private meta instance : Check BoolMatchToIfMatch where
           oldSyntax := m.matchStx
           newSyntax := repl
           inlineViolationLabel := m!"bool match" }]
+
+meta initialize Check.register (α := BoolMatchToIfMatch)

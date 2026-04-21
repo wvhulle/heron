@@ -19,7 +19,7 @@ private meta def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
       | _ => #[]
     | _ => #[]
 
-@[refactor_rule] private meta instance : Refactor FlipIfMatch where
+private meta instance : Refactor FlipIfMatch where
   name := `flipIf
   find := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
@@ -38,3 +38,8 @@ private meta def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
       inlineViolationLabel := m!"swap branches" }
   ]
   codeActionKind := "refactor.rewrite"
+
+@[code_action_provider]
+public meta def flipIfProvider := Refactor.toCodeActionProvider (α := FlipIfMatch)
+
+meta initialize Refactor.register (α := FlipIfMatch)

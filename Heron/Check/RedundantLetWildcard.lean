@@ -27,7 +27,7 @@ private meta def findRedundantLetWildcards (stx : Syntax) : Array RedundantLetWi
         some { doLetStx := elem, letKeyword := letKw, rhs }
       | none => none
 
-@[check_rule] private meta instance : Check RedundantLetWildcardMatch where
+private meta instance : Check RedundantLetWildcardMatch where
   name := `redundantLetWildcard
   severity := .information
   category := .simplification
@@ -43,3 +43,5 @@ private meta def findRedundantLetWildcards (stx : Syntax) : Array RedundantLetWi
     newSyntax := m.rhs
     inlineViolationLabel := m!"let _ ←"
   }]
+
+meta initialize Check.register (α := RedundantLetWildcardMatch)

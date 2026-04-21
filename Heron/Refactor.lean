@@ -13,13 +13,12 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
-meta def Refactor.activate [Refactor α] : IO Unit :=
-  Rule.activateTestRunner (α := α)
-
-meta def Refactor.registerAll [Refactor α] (srcMod : Name) : IO Unit := do
-  Rule.registerLinterOption (α := α)
-  Refactor.activate (α := α)
-  Rule.registerSourceModule (α := α) srcMod
+/-- Register a `Refactor` instance: linter option and test runner.
+Code action provider registration is handled by `@[code_action_provider]` in rule files. -/
+meta def Refactor.register [Refactor α] : IO Unit := do
+  let name := Rule.name (α := α)
+  Rule.registerLinterOption name
+  Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
 meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
@@ -63,25 +62,5 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             { textDocument := doc.versionedIdentifier, edits := textEdits }
         })
       }
-
-private meta unsafe def refactorRuleHandler (declName : Name) : AttrM Unit :=
-  Meta.MetaM.run' <| handleRuleAttribute "refactor_rule" ``Refactor.registerAll ``Refactor.activate
-    (extraSetup := fun _declName αExpr inst => do
-      let providerName ← mkAuxDeclName (kind := `_rule_provider)
-      let value ← Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
-      addAndCompile <| .defnDecl {
-        name := providerName, levelParams := []
-        type := mkConst ``Server.CodeActionProvider
-        value
-        hints := .opaque, safety := .unsafe
-      }
-      modifyEnv (Server.codeActionProviderExt.addEntry · providerName))
-    (declName := declName)
-
-meta initialize _refactorRuleAttr : TagAttribute ←
-  registerTagAttribute `refactor_rule
-    "Register a Refactor instance as a code action provider."
-    (validate := unsafe refactorRuleHandler)
-    (applicationTime := .afterCompilation)
 
 end Heron

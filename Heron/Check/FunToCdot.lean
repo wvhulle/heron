@@ -36,7 +36,6 @@ private meta def findFunToCdot : Syntax → Array FunToCdotMatch :=
         | _ => #[]
     | _ => #[]
 
-@[check_rule]
 private meta instance : Check FunToCdotMatch where
   name := `funToCdot
   severity := .information
@@ -58,3 +57,5 @@ private meta instance : Check FunToCdotMatch where
           oldSyntax := m.funStx
           newSyntax := newBody
           inlineViolationLabel := m!"fun → ·" }]
+
+meta initialize Check.register (α := FunToCdotMatch)

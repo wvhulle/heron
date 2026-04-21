@@ -71,7 +71,7 @@ private meta def inlineLabel : InlineKind → MessageData
   | .const name => m!"Inline '{name}'"
   | .letBinding => m!"Inline let binding"
 
-@[refactor_rule] private meta instance : Refactor InlineMatch where
+private meta instance : Refactor InlineMatch where
   name := `inline
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
@@ -82,3 +82,8 @@ private meta def inlineLabel : InlineKind → MessageData
     inlineViolationLabel := inlineLabel m.kind
   }]
   codeActionKind := "refactor.inline"
+
+@[code_action_provider]
+public meta def inlineProvider := Refactor.toCodeActionProvider (α := InlineMatch)
+
+meta initialize Refactor.register (α := InlineMatch)

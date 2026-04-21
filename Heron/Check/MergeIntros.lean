@@ -56,7 +56,6 @@ private meta partial def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
     found := found ++ detectIntros child
   return found
 
-@[check_rule]
 private meta instance : Check MergeIntrosMatch where
   name := `mergeIntros
   severity := .warning
@@ -76,3 +75,5 @@ private meta instance : Check MergeIntrosMatch where
           newSyntax := repl
           category := `tactic
           inlineViolationLabel := m!"sequential intro" }]
+
+meta initialize Check.register (α := MergeIntrosMatch)

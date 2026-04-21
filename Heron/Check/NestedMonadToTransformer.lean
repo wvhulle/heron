@@ -129,7 +129,6 @@ private meta def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (A
       pure ()
   return results
 
-@[check_rule]
 private meta instance : Check NestedMonadToTransformerMatch
     where
   name := `nestedMonadToTransformer
@@ -168,3 +167,5 @@ private meta instance : Check NestedMonadToTransformerMatch
                oldSyntax := m.stx
                newSyntax := repl
                inlineViolationLabel := m!"transformer alias" }]
+
+meta initialize Check.register (α := NestedMonadToTransformerMatch)

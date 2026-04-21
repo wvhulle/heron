@@ -32,7 +32,6 @@ private meta def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch
         | _ => #[]
     | _ => #[]
 
-@[check_rule]
 private meta instance : Check NestedMonadToJoinMatch where
   name := `nestedMonadToJoin
   severity := .warning
@@ -49,3 +48,5 @@ private meta instance : Check NestedMonadToJoinMatch where
         oldSyntax := m.outerStx
         newSyntax := m.inner
         inlineViolationLabel := m!"nested monad" }]
+
+meta initialize Check.register (α := NestedMonadToJoinMatch)

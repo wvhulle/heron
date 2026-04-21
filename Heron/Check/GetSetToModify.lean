@@ -80,7 +80,7 @@ private meta def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :
       | some (getElem, varName) => findSetForGet elems i getElem varName
       | none => none
 
-@[check_rule] private meta instance : Check GetSetToModifyMatch where
+private meta instance : Check GetSetToModifyMatch where
   name := `getSetToModify
   severity := .warning
   category := .simplification
@@ -106,3 +106,5 @@ private meta def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :
         category := `doElem
         inlineViolationLabel := m!"remove set" }
     ]
+
+meta initialize Check.register (α := GetSetToModifyMatch)

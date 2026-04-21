@@ -26,7 +26,7 @@ private meta def findNatLiteralPatterns : Syntax → Array NatLiteralPatternsMat
       alts.raw[0]!.getArgs.flatMap fun alt => detectNatPattern alt[1]!
     | _ => #[]
 
-@[check_rule] private meta instance : Check NatLiteralPatternsMatch where
+private meta instance : Check NatLiteralPatternsMatch where
   name := `natLiteralPatterns
   severity := .information
   category := .style
@@ -51,3 +51,5 @@ private meta def findNatLiteralPatterns : Syntax → Array NatLiteralPatternsMat
       let repl ← `($argId + 1)
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := repl, inlineViolationLabel := m!"Nat.succ → + 1" }
       return #[r]
+
+meta initialize Check.register (α := NatLiteralPatternsMatch)

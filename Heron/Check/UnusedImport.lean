@@ -17,7 +17,7 @@ private meta def detectUnusedImports (stx : Syntax) : CommandElabM (Array Unused
     else
       none
 
-@[check_rule] private meta instance : Check UnusedImportMatch where
+private meta instance : Check UnusedImportMatch where
   name := `unusedImport
   severity := .warning
   category := .simplification
@@ -34,3 +34,5 @@ private meta def detectUnusedImports (stx : Syntax) : CommandElabM (Array Unused
       newSyntax := .missing
       inlineViolationLabel := m!"unused import"
     }]
+
+meta initialize Check.register (α := UnusedImportMatch)

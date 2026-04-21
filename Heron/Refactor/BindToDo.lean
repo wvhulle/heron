@@ -49,7 +49,7 @@ private meta partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
       #[{ fullStx := stx, bindings, finalBody }] ++ lhsResults ++ bodyResults
   | none => stx.getArgs.flatMap findBindToDoAux
 
-@[refactor_rule] private meta instance : Refactor BindToDoMatch where
+private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
   detect := fun stx => return findBindToDoAux stx
   message := fun _ => m!"Convert `>>=` to do-notation"
@@ -72,3 +72,8 @@ private meta partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
       inlineViolationLabel := m!"bind to do"
     }]
   codeActionKind := "refactor.rewrite"
+
+@[code_action_provider]
+public meta def bindToDoProvider := Refactor.toCodeActionProvider (α := BindToDoMatch)
+
+meta initialize Refactor.register (α := BindToDoMatch)

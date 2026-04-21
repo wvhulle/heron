@@ -76,7 +76,6 @@ private meta def detectInlineAllConst (stx : Syntax) : CommandElabM (Array Inlin
       let repls ← findAndExpandUsages trees declRange? name
       return some { constName := name, usageReplacements := repls }
 
-@[refactor_rule]
 private meta instance : Refactor InlineAllConstMatch where
   name := `inlineAllConst
   detect := detectInlineAllConst
@@ -88,6 +87,11 @@ private meta instance : Refactor InlineAllConstMatch where
           newSyntax := newStx
           inlineViolationLabel := m! "Inline all usages of '{m.constName}'" }
   codeActionKind := "refactor.inline"
+
+@[code_action_provider]
+public meta def inlineAllConstProvider := Refactor.toCodeActionProvider (α := InlineAllConstMatch)
+
+meta initialize Refactor.register (α := InlineAllConstMatch)
 
 private meta def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
   let declIdStx ← findDeclId? stx
