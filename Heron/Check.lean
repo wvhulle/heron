@@ -101,13 +101,17 @@ meta def Check.activateLinter [Check α] : IO Unit :=
 meta def Check.activateTestRunner [Check α] : IO Unit :=
   Rule.activateTestRunner (α := α)
 
-meta def Check.registerAll [Check α] : IO Unit := do
-  Rule.registerLinterOption (α := α)
+meta def Check.activate [Check α] : IO Unit := do
   Check.activateTestRunner (α := α)
   Check.activateLinter (α := α)
 
+meta def Check.registerAll [Check α] (srcMod : Name) : IO Unit := do
+  Rule.registerLinterOption (α := α)
+  Check.activate (α := α)
+  Rule.registerSourceModule (α := α) srcMod
+
 private meta unsafe def checkRuleHandler :=
-  handleRuleAttribute "check_rule" ``Check.registerAll #[``Check.activateLinter, ``Check.activateTestRunner]
+  handleRuleAttribute "check_rule" ``Check.registerAll ``Check.activate
 
 meta initialize _checkRuleAttr : TagAttribute ←
   registerTagAttribute `check_rule "Register a Check instance as a heron linter rule." (validate :=

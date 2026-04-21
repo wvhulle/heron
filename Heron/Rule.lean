@@ -289,64 +289,41 @@ meta def Rule.activateTestRunner [Rule α] : IO Unit :=
 
 /-- Shared logic for `@[check_rule]` and `@[refactor_rule]` attribute handlers.
 
-Builds an `@[init]` aux decl calling `registerConst` (for import-time registration),
-then evaluates `immediateFnConsts` immediately so the rule is active in the current file.
-`extraSetup` is called last for any additional registration (e.g. code action providers). -/
-meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (immediateFnConsts : Array Name)
-    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ()) (declName : Name) : AttrM Unit := do
+Creates an `@[init]` aux decl calling `registerConst` (for import-time registration
+including `registerLinterOption`), then evaluates `activateConst` immediately so the
+rule is active in the defining file. `extraSetup` runs last for additional registration
+(e.g. code action providers). -/
+meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (activateConst : Name)
+    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ())
+    (declName : Name) : AttrM Unit := do
   let env ← getEnv
   let some info := env.find? declName |
-    throwError "@[{attrLabel }]: unknown declaration '{declName}'"
+    throwError "@[{attrLabel}]: unknown declaration '{declName}'"
   let some αExpr := info.type.getAppArgs[0]? |
     throwError "@[{attrLabel}]: expected type of the form `... α`"
   let inst := mkConst declName
   let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
   let buildApp (fnName : Name) : AttrM Expr :=
     Meta.MetaM.run' <| Meta.mkAppOptM fnName #[some αExpr, some inst]
-  -- Use the user-facing name for auxiliary declarations so that the
-  -- interpreter can resolve them across module boundaries.  Private
-  -- name mangling makes generated constants invisible to importers.
-  let auxBase := privateToUserName declName
-  let registerName := auxBase ++ `_rule_init
-  addAndCompile <|
-      .defnDecl
-        { name := registerName, levelParams := [], type := auxType
-          value := ← buildApp registerConst
-          hints := .opaque, safety := .unsafe }
+  -- @[init] decl: runs registerConst at import time (includes registerLinterOption)
+  let srcModExpr := toExpr (← getEnv).mainModule
+  let initValue ← Meta.MetaM.run' <|
+    Meta.mkAppOptM registerConst #[some αExpr, some inst, some srcModExpr]
+  let initName ← mkAuxDeclName (kind := `_rule_init)
+  addAndCompile <| .defnDecl
+    { name := initName, levelParams := [], type := auxType
+      value := initValue, hints := .opaque, safety := .unsafe }
   modifyEnv fun env =>
-      match regularInitAttr.setParam env registerName .anonymous with
-      | .ok env' => env'
-      | .error _ => env
-  for fnConst in immediateFnConsts do
-    let auxName := auxBase ++ (`_rule).append fnConst
-    addAndCompile <|
-        .defnDecl
-          { name := auxName, levelParams := [], type := auxType
-            value := ← buildApp fnConst
-            hints := .opaque, safety := .unsafe }
-    let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) { } auxName
-    fn
-  -- Record the source module of the rule so `ImportAnalysis` can treat
-  -- umbrella imports as used when their rules actually fire. Evaluated
-  -- immediately (for the current file) and also registered as `@[init]`
-  -- so importers trigger it at load time. The `Rule α` instance is left
-  -- to typeclass resolution so `Check α` (which extends `Rule α`) is accepted.
-  let sourceMod := (← getEnv).mainModule
-  let srcModExpr := toExpr sourceMod
-  let registerSourceName := auxBase ++ `_rule_source
-  let registerSourceValue ← Meta.MetaM.run' <|
-      Meta.mkAppOptM ``Rule.registerSourceModule #[some αExpr, none, some srcModExpr]
-  addAndCompile <|
-      .defnDecl
-        { name := registerSourceName, levelParams := [], type := auxType
-          value := registerSourceValue
-          hints := .opaque, safety := .unsafe }
-  modifyEnv fun env =>
-      match regularInitAttr.setParam env registerSourceName .anonymous with
-      | .ok env' => env'
-      | .error _ => env
-  let srcFn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) { } registerSourceName
-  srcFn
+    match regularInitAttr.setParam env initName .anonymous with
+    | .ok env' => env'
+    | .error _ => env
+  -- Activate immediately for the defining file (without registerLinterOption)
+  let activateName ← mkAuxDeclName (kind := `_rule_activate)
+  addAndCompile <| .defnDecl
+    { name := activateName, levelParams := [], type := auxType
+      value := ← buildApp activateConst, hints := .opaque, safety := .unsafe }
+  let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} activateName
+  fn
   extraSetup declName αExpr inst
 
 syntax (name := heronProfileCmd) "#heronProfile" : command

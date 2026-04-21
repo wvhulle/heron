@@ -16,9 +16,13 @@ class Refactor (α : Type) extends Rule α where
 meta def Refactor.activateTestRunner [Refactor α] : IO Unit :=
   Rule.activateTestRunner (α := α)
 
-meta def Refactor.registerAll [Refactor α] : IO Unit := do
-  Rule.registerLinterOption (α := α)
+meta def Refactor.activate [Refactor α] : IO Unit :=
   Refactor.activateTestRunner (α := α)
+
+meta def Refactor.registerAll [Refactor α] (srcMod : Name) : IO Unit := do
+  Rule.registerLinterOption (α := α)
+  Refactor.activate (α := α)
+  Rule.registerSourceModule (α := α) srcMod
 
 open Server RequestM Lsp in
 meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
@@ -65,9 +69,9 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
     return actions
 
 private meta unsafe def refactorRuleHandler :=
-  handleRuleAttribute "refactor_rule" ``Refactor.registerAll #[``Refactor.activateTestRunner]
+  handleRuleAttribute "refactor_rule" ``Refactor.registerAll ``Refactor.activate
     (extraSetup := fun declName αExpr inst => do
-      let providerName := privateToUserName declName ++ `_rule_provider
+      let providerName ← mkAuxDeclName (kind := `_rule_provider)
       let value ← Meta.MetaM.run' <|
         Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
       addAndCompile <| .defnDecl {
