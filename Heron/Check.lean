@@ -104,8 +104,8 @@ meta def Check.registerAll [Check α] (srcMod : Name) : IO Unit := do
   Check.activate (α := α)
   Rule.registerSourceModule (α := α) srcMod
 
-private meta unsafe def checkRuleHandler :=
-  handleRuleAttribute "check_rule" ``Check.registerAll ``Check.activate
+private meta unsafe def checkRuleHandler (declName : Name) : AttrM Unit :=
+  Meta.MetaM.run' <| handleRuleAttribute "check_rule" ``Check.registerAll ``Check.activate (declName := declName)
 
 meta initialize _checkRuleAttr : TagAttribute ←
   registerTagAttribute `check_rule "Register a Check instance as a heron linter rule." (validate :=

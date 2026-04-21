@@ -237,21 +237,19 @@ including `registerLinterOption`), then evaluates `activateConst` immediately so
 rule is active in the defining file. `extraSetup` runs last for additional registration
 (e.g. code action providers). -/
 meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) (activateConst : Name)
-    (extraSetup : Name → Expr → Expr → AttrM Unit := fun _ _ _ => pure ())
-    (declName : Name) : AttrM Unit := do
-  let env ← getEnv
-  let some info := env.find? declName |
+    (extraSetup : Name → Expr → Expr → Meta.MetaM Unit := fun _ _ _ => pure ())
+    (declName : Name) : Meta.MetaM Unit := do
+  let some info := (← getEnv).find? declName |
     throwError "@[{attrLabel}]: unknown declaration '{declName}'"
   let some αExpr := info.type.getAppArgs[0]? |
     throwError "@[{attrLabel}]: expected type of the form `... α`"
   let inst := mkConst declName
   let auxType := mkApp (mkConst ``IO) (mkConst ``Unit)
-  let buildApp (fnName : Name) : AttrM Expr :=
-    Meta.MetaM.run' <| Meta.mkAppOptM fnName #[some αExpr, some inst]
+  let mkApp (fnName : Name) (args : Array (Option Expr)) :=
+    Meta.mkAppOptM fnName args
   -- @[init] decl: runs registerConst at import time (includes registerLinterOption)
   let srcModExpr := toExpr (← getEnv).mainModule
-  let initValue ← Meta.MetaM.run' <|
-    Meta.mkAppOptM registerConst #[some αExpr, some inst, some srcModExpr]
+  let initValue ← mkApp registerConst #[some αExpr, some inst, some srcModExpr]
   let initName ← mkAuxDeclName (kind := `_rule_init)
   addAndCompile <| .defnDecl
     { name := initName, levelParams := [], type := auxType
@@ -261,10 +259,11 @@ meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) 
     | .ok env' => env'
     | .error _ => env
   -- Activate immediately for the defining file (without registerLinterOption)
+  let activateValue ← mkApp activateConst #[some αExpr, some inst]
   let activateName ← mkAuxDeclName (kind := `_rule_activate)
   addAndCompile <| .defnDecl
     { name := activateName, levelParams := [], type := auxType
-      value := ← buildApp activateConst, hints := .opaque, safety := .unsafe }
+      value := activateValue, hints := .opaque, safety := .unsafe }
   let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} activateName
   fn
   extraSetup declName αExpr inst

@@ -64,12 +64,11 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
         })
       }
 
-private meta unsafe def refactorRuleHandler :=
-  handleRuleAttribute "refactor_rule" ``Refactor.registerAll ``Refactor.activate
-    (extraSetup := fun declName αExpr inst => do
+private meta unsafe def refactorRuleHandler (declName : Name) : AttrM Unit :=
+  Meta.MetaM.run' <| handleRuleAttribute "refactor_rule" ``Refactor.registerAll ``Refactor.activate
+    (extraSetup := fun _declName αExpr inst => do
       let providerName ← mkAuxDeclName (kind := `_rule_provider)
-      let value ← Meta.MetaM.run' <|
-        Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
+      let value ← Meta.mkAppOptM ``Refactor.toCodeActionProvider #[some αExpr, some inst]
       addAndCompile <| .defnDecl {
         name := providerName, levelParams := []
         type := mkConst ``Server.CodeActionProvider
@@ -77,6 +76,7 @@ private meta unsafe def refactorRuleHandler :=
         hints := .opaque, safety := .unsafe
       }
       modifyEnv (Server.codeActionProviderExt.addEntry · providerName))
+    (declName := declName)
 
 meta initialize _refactorRuleAttr : TagAttribute ←
   registerTagAttribute `refactor_rule
