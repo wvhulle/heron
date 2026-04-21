@@ -13,11 +13,8 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
-meta def Refactor.activateTestRunner [Refactor α] : IO Unit :=
-  Rule.activateTestRunner (α := α)
-
 meta def Refactor.activate [Refactor α] : IO Unit :=
-  Refactor.activateTestRunner (α := α)
+  Rule.activateTestRunner (α := α)
 
 meta def Refactor.registerAll [Refactor α] (srcMod : Name) : IO Unit := do
   Rule.registerLinterOption (α := α)
@@ -50,15 +47,15 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             let textEdits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
             return (Rule.message (α := α) m, repls, textEdits)
     let results ← runCommandElabM snap detectAndReplace
-    let mut actions : Array LazyCodeAction := #[]
-    for (msg, repls, textEdits) in results do
-      unless repls.any (fun r => match r.emphasizedSyntax.getRange? with
-        | some range => range.start ≤ endPos && startPos ≤ range.stop
-        | none => false) do continue
-      let kind := Refactor.codeActionKind (α := α)
+    let kind := Refactor.codeActionKind (α := α)
+    let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with
+      | some range => range.start ≤ endPos && startPos ≤ range.stop
+      | none => false
+    results.filterMapM fun (msg, repls, textEdits) => do
+      unless repls.any overlaps do return none
+      if textEdits.isEmpty then return none
       let title := (← msg.format).pretty
-      if textEdits.isEmpty then continue
-      actions := actions.push {
+      return some {
         eager := { title, kind? := kind }
         lazy? := some (pure {
           title, kind? := kind
@@ -66,7 +63,6 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             { textDocument := doc.versionedIdentifier, edits := textEdits }
         })
       }
-    return actions
 
 private meta unsafe def refactorRuleHandler :=
   handleRuleAttribute "refactor_rule" ``Refactor.registerAll ``Refactor.activate

@@ -69,12 +69,9 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Cate
   let edits := Json.arr (editsArr.map toJson)
   trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
   let longFmt ← liftCoreM explanation.format
-  let mut bodyParts : Array String := #[]
-  if !longFmt.pretty.isEmpty then
-    bodyParts := bodyParts.push longFmt.pretty
-  if let some ref := reference then
-    bodyParts := bodyParts.push s! "Lean Reference ({ref.topic }): *{ref.url}*"
-  bodyParts := bodyParts.push s! "Disable with `set_option {optName} false`"
+  let bodyParts := #[longFmt.pretty].filter (!·.isEmpty)
+    |>.append (match reference with | some ref => #[s!"Lean Reference ({ref.topic}): *{ref.url}*"] | none => #[])
+    |>.push s!"Disable with `set_option {optName} false`"
   let data :=
     Lean.Json.mkObj
       [("title", .str shortFmt.pretty), ("edits", edits), ("hoverTitle", .str shortFmt.pretty),
@@ -98,11 +95,8 @@ meta def Check.activateLinter [Check α] : IO Unit :=
   let name := Rule.name (α := α)
   lintersRef.modify fun linters => (linters.filter (·.name != name)).push (Check.toLinter (α := α))
 
-meta def Check.activateTestRunner [Check α] : IO Unit :=
-  Rule.activateTestRunner (α := α)
-
 meta def Check.activate [Check α] : IO Unit := do
-  Check.activateTestRunner (α := α)
+  Rule.activateTestRunner (α := α)
   Check.activateLinter (α := α)
 
 meta def Check.registerAll [Check α] (srcMod : Name) : IO Unit := do
@@ -121,23 +115,14 @@ open Server RequestM Lsp in
 @[code_action_provider]
 meta def heronCheckFixProvider : CodeActionProvider := fun params _snap => do
   let doc ← readDoc
-  let mut actions : Array LazyCodeAction := #[]
-  for diag in params.context.diagnostics do
-    let some data := diag.data? |
-      continue
-    let some title := data.getObjValAs? String "title" |>.toOption |
-      continue
-    let some edits := data.getObjValAs? (Array TextEdit) "edits" |>.toOption |
-      continue
+  params.context.diagnostics.filterMapM fun diag => do
+    let some data := diag.data? | return none
+    let some title := data.getObjValAs? String "title" |>.toOption | return none
+    let some edits := data.getObjValAs? (Array TextEdit) "edits" |>.toOption | return none
     let fullAction : CodeAction :=
-      { title
-        kind? := "quickfix"
+      { title, kind? := "quickfix"
         edit? := some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits }
         diagnostics? := some #[diag] }
-    actions :=
-      actions.push
-        { eager := { fullAction with edit? := none }
-          lazy? := some (pure fullAction) }
-  return actions
+    return some { eager := { fullAction with edit? := none }, lazy? := some (pure fullAction) }
 
 end Heron

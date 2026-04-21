@@ -6,7 +6,7 @@ public meta import Lean.Compiler.InitAttr
 public meta import Lean.ExtraModUses
 public meta import Lean.PrettyPrinter
 public meta import Heron.ImplicitImports
-public meta import Heron.Summary
+public meta import Heron.Profiling
 public meta import Heron.TestRunner
 
 public section
@@ -46,19 +46,16 @@ structure Replacement where
 /-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
 to format the replacement text. Falls back to `reprint` if formatting fails. -/
 meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
-  let some range := r.oldSyntax.getRange? |
-    return none
+  let some range := r.oldSyntax.getRange? | return none
+  let lspRange := fileMap.utf8RangeToLspRange range
   if r.newSyntax.isMissing then
-    return some { range := fileMap.utf8RangeToLspRange range, newText := "" }
-  let text ←
-    try
-      let fmt ← PrettyPrinter.ppCategory r.category r.newSyntax
-      pure fmt.pretty
-    catch _ =>
-      let some text := r.newSyntax.reprint |
-        return none
-      pure text.trimAscii.toString
-  return some { range := fileMap.utf8RangeToLspRange range, newText := text }
+    return some { range := lspRange, newText := "" }
+  let newText ← try
+    pure (← PrettyPrinter.ppCategory r.category r.newSyntax).pretty
+  catch _ =>
+    let some text := r.newSyntax.reprint | return none
+    pure text.trimAscii.toString
+  return some { range := lspRange, newText }
 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
@@ -110,33 +107,6 @@ meta initialize
 meta initialize
   registerTraceClass `heron (inherited := true)
 
-/-- Accumulated per-rule profiling data. -/
-structure RuleProfile where
-  detectNs : Nat := 0
-  fixNs : Nat := 0
-  matchCount : Nat := 0
-  callCount : Nat := 0
-
-/-- Option to enable per-rule profiling accumulation (without trace output). -/
-private meta def Heron.profilingOption : Lean.Option Bool :=
-  { name := `heron.profile, defValue := false }
-
-meta initialize
-  Lean.registerOption `heron.profile
-      { defValue := .ofBool false
-        descr := "Accumulate per-rule profiling data for #heronProfile."
-        name := `heron }
-
-/-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
-meta initialize Heron.profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
-  IO.mkRef { }
-
-meta def Heron.profilingAccumulator.get : BaseIO (Std.HashMap Name RuleProfile) :=
-  ST.Ref.get Heron.profilingAccumulator
-
-meta def Heron.profilingAccumulator.set (map : Std.HashMap Name RuleProfile) : BaseIO Unit :=
-  ST.Ref.set Heron.profilingAccumulator map
-
 /-- Check whether the `heron.reelaborating` flag is set in the current options. -/
 meta def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
@@ -164,7 +134,7 @@ meta def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElab
     Heron.ruleUsedInFiles.modify fun map =>
       let entry := map.getD mainMod { }
       map.insert mainMod (entry.insert srcMod)
-  let profiling := Heron.profilingOption.get (← getOptions)
+  let profiling := Heron.isProfilingEnabled (← getOptions)
   let t0 ← IO.monoNanosNow
   let results ← Rule.detect (α := α) stx
   let t1 ← IO.monoNanosNow
@@ -172,16 +142,7 @@ meta def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElab
     handle m
   let t2 ← IO.monoNanosNow
   if profiling then
-    let map ← Heron.profilingAccumulator.get
-    let prev := Std.HashMap.getD map name { }
-    let map :=
-      Std.HashMap.insert map name
-        { prev with
-          detectNs := prev.detectNs + (t1 - t0)
-          fixNs := prev.fixNs + (t2 - t1)
-          matchCount := prev.matchCount + results.size
-          callCount := prev.callCount + 1 }
-    Heron.profilingAccumulator.set map
+    Heron.recordProfile name (t1 - t0) (t2 - t1) results.size
 
 /-- Re-elaborate a command collecting info trees.
 
@@ -195,28 +156,22 @@ meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := 
   setInfoState { enabled := true, trees := { } }
   try
     withoutModifyingEnv do
-        withScope
-            (fun scope =>
-              let opts := Heron.reelaboratingGuardOption.set (Elab.async.set scope.opts false) true
-              { scope with opts })
-            do
-            withReader ({ · with snap? := none }) do
-                elabCommand stx
-  catch _ =>
-    pure ()
+      withScope
+        (fun scope =>
+          { scope with opts := Heron.reelaboratingGuardOption.set (Elab.async.set scope.opts false) true })
+        do withReader ({ · with snap? := none }) (elabCommand stx)
+  catch _ => pure ()
   let trees := (← getInfoState).trees.toArray
   setInfoState savedInfoState
-  modify fun s => { s with messages := savedMessages }
-  pure trees
+  modify ({ · with messages := savedMessages })
+  return trees
 
 /-- Get existing info trees when available (LSP code action requests),
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/
 meta def collectInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let existing := (← getInfoState).trees
-  if existing.isEmpty then
-    collectElabInfoTrees stx
-  else
-    pure existing.toArray
+  if existing.isEmpty then collectElabInfoTrees stx
+  else return existing.toArray
 
 /-- Extract `(ContextInfo × TermInfo)` pairs from an info tree. -/
 meta def collectTermInfos (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
@@ -231,24 +186,19 @@ Lean's elaborator produces multiple `TermInfo` nodes for the same source
 position at different application depths (e.g. `f`, `f x`, `f x y`).
 This keeps only the most-applied version per position. -/
 meta def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
-  let map :=
-    infos.foldl (init := ({ } : Std.HashMap Nat (ContextInfo × TermInfo))) fun map (ci, ti) =>
-      match ti.stx.getPos? true with
-      | some pos =>
-        let key := pos.byteIdx
-        match map[key]? with
-        | some (_, old) => if ti.expr.getAppNumArgs > old.expr.getAppNumArgs then map.insert key (ci, ti) else map
-        | none => map.insert key (ci, ti)
-      | none => map
-  map.fold (init := #[]) fun acc _ v => acc.push v
+  let dominated (old new : TermInfo) := new.expr.getAppNumArgs > old.expr.getAppNumArgs
+  let map := infos.foldl (init := ({} : Std.HashMap Nat (ContextInfo × TermInfo))) fun map (ci, ti) =>
+    match ti.stx.getPos? true with
+    | some pos =>
+      match map[pos.byteIdx]? with
+      | some (_, old) => if dominated old ti then map.insert pos.byteIdx (ci, ti) else map
+      | none => map.insert pos.byteIdx (ci, ti)
+    | none => map
+  map.values.toArray
 
 /-- Run `MetaM` inside a `ContextInfo` context. -/
 meta def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
-  match ← (ci.runMetaM lctx x).toBaseIO with
-  | .ok a =>
-    pure a
-  | .error e =>
-    throwError "{e}"
+  IO.ofExcept (← (ci.runMetaM lctx x).toBaseIO)
 
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
@@ -256,8 +206,8 @@ meta partial def findDeclId? : Syntax → Option Syntax
   | _ => none
 
 /-- Get the source range of the `declId` in a command, if any. -/
-meta def getDeclIdRange? (stx : Syntax) : Option Syntax.Range :=
-  (findDeclId? stx).bind (·.getRange?)
+meta def getDeclIdRange? (stx : Syntax) : Option Syntax.Range := do
+  (← findDeclId? stx).getRange?
 
 /-- Check whether a `TermInfo` lies outside the declaration-id range. -/
 meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool :=
@@ -266,12 +216,9 @@ meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool
   | _, _ => true
 
 /-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
-meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) := do
-  try
-    let fmt ← runInfoMetaM ci lctx (ppExpr e)
-    return some s! "({fmt})"
-  catch _ =>
-    return none
+meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) :=
+  try return some s!"({← runInfoMetaM ci lctx (ppExpr e)})"
+  catch _ => return none
 
 /-- Register a type-erased runner for a `Rule` instance. -/
 meta def Rule.activateTestRunner [Rule α] : IO Unit :=
@@ -279,13 +226,9 @@ meta def Rule.activateTestRunner [Rule α] : IO Unit :=
     map.insert (Rule.name (α := α)) fun stx => do
       let fileMap ← getFileMap
       let results ← Rule.detect (α := α) stx
-      let mut edits : Array Lsp.TextEdit := #[]
-      for m in results do
+      results.flatMapM fun m => do
         let repls ← Rule.replacements (α := α) m
-        for r in repls do
-          if let some edit← liftCoreM <| r.toTextEdit fileMap then
-            edits := edits.push edit
-      pure edits
+        repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
 
 /-- Shared logic for `@[check_rule]` and `@[refactor_rule]` attribute handlers.
 
@@ -325,35 +268,5 @@ meta unsafe def handleRuleAttribute (attrLabel : String) (registerConst : Name) 
   let fn ← IO.ofExcept <| (← getEnv).evalConst (IO Unit) {} activateName
   fn
   extraSetup declName αExpr inst
-
-syntax (name := heronProfileCmd) "#heronProfile" : command
-
-@[command_elab heronProfileCmd]
-meta def elabHeronProfile : CommandElab
-  | stx => do
-    let map ← Heron.profilingAccumulator.get
-    if map.isEmpty then
-      logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
-      return
-    let entries := Std.HashMap.fold (init := #[]) (fun acc name profile => acc.push (name, profile)) map
-    let sorted := entries.qsort fun a b => a.2.detectNs + a.2.fixNs > b.2.detectNs + b.2.fixNs
-    let columns : Array Column :=
-      #[⟨"Rule", '─'⟩, ⟨"Detect", '─'⟩, ⟨"Fix", '─'⟩, ⟨"Total", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
-    let fmtMs (ns : Nat) : String :=
-      let us :=
-        (ns + 500) /
-          1000 -- round to nearest microsecond
-
-      let ms := us / 1000
-      let frac := us % 1000
-      let fracStr := toString frac
-      let padded := String.ofList (List.replicate (3 - fracStr.length) '0') ++ fracStr
-      s! "{ms }.{padded}ms"
-    let rows :=
-      sorted.map fun (name, p) =>
-        #[toString name, fmtMs p.detectNs, fmtMs p.fixNs, fmtMs (p.detectNs + p.fixNs), toString p.matchCount,
-          toString p.callCount]
-    logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable columns rows)
-    Heron.profilingAccumulator.set { }
 
 end Heron
