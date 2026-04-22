@@ -2,10 +2,24 @@ module
 
 public meta import Heron.Rule
 public meta import Lean.Server.CodeActions.Basic
+meta import Lean.Elab.Term.TermElabM
 
 public section
 
 open Lean Elab Command Meta
+
+open Lean Elab Term Meta in
+/-- Try to set a struct field that may only exist in a fork of Lean.
+Elaborates `{ msg with field := val }`; returns `msg` unchanged on standard Lean. -/
+elab "tryStructUpdate(" msg:term ", " field:ident ", " val:term ")" : term => do
+  let msgExpr ← elabTerm msg none
+  let msgType ← whnf (← inferType msgExpr)
+  let structName := msgType.getAppFn.constName?.getD .anonymous
+  let env ← getEnv
+  if isStructure env structName && (getStructureFields env structName).contains field.getId then
+    elabTerm (← `({ $msg with $field:ident := $val })) none
+  else
+    return msgExpr
 
 namespace Heron
 
@@ -62,8 +76,8 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Cate
       endPos := fileMap.toPosition endPos
       keepFullRange := true
       data := msgData
-      severity
-      diagnosticTags := tags }
+      severity }
+  let msg := tryStructUpdate(msg, diagnosticTags, tags)
   let shortFmt ← liftCoreM message.format
   let editsArr ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
   let edits := Json.arr (editsArr.map toJson)
@@ -77,7 +91,7 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Cate
       [("title", .str shortFmt.pretty), ("edits", edits), ("hoverTitle", .str shortFmt.pretty),
         ("hoverTags", Json.arr #[toJson (toString category)]),
         ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))]
-  let msg := { msg with diagnosticData? := some data.compress }
+  let msg := tryStructUpdate(msg, diagnosticData?, some data.compress)
   logMessage msg
 
 meta def Check.toLinter [Check α] : Linter where

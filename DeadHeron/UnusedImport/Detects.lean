@@ -1,6 +1,6 @@
 module
 
-meta import Heron.Assert
+meta import DeadHeron.Assert
 -- A rule-providing module with its linter NOT enabled — the import
 -- is genuinely unused and must still be flagged.
 meta import Heron.Check.BoolMatchToIf

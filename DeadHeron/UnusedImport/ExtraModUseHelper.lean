@@ -16,8 +16,7 @@ public section
 open Lean Elab Command
 
 /-- `#recordExtra Mod` records `Mod` as an extra import dependency of the
-current file via Lean's standard `recordExtraModUse`. No Heron machinery
-involved — stands in for arbitrary third-party metaprogramming. -/
+current file via Lean's standard `recordExtraModUse`. -/
 syntax (name := recordExtraCmd) "#recordExtra " ident : command
 
 @[command_elab recordExtraCmd] meta def elabRecordExtra : CommandElab

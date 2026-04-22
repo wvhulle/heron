@@ -11,6 +11,7 @@ module
 
 public import Lean.Elab.Command
 public import Lean.Parser.Module
+meta import Lean.Parser.Module
 public import Lean.ExtraModUses
 public import Lean.ResolveName
 
@@ -166,9 +167,6 @@ def computeNeeds (env : Environment) (_transDeps : Array Needs) : Needs := Id.ru
         if pubCI?.any (·.hasValue (allowOpaque := true)) then .pub else .priv
       visitExpr env reservedNames indirectModUses k e needs
     | none => needs) needs
-  -- TODO: include ExtraModUses stage-2 entries once we can access
-  -- Lean.extraModUses from non-builtin code. These handle implicit deps
-  -- from syntax extensions, attributes, etc.
   return needs
 where
   visitExpr (env : Environment) (reservedNames : Std.HashSet Name)
@@ -281,7 +279,7 @@ where
       if let some initIdx := env.getModuleIdx? `Init then
         deps := deps.union .pub {initIdx}
     -- Merge implicit dependencies from `Lean.getExtraModUsesInEnv`
-    -- (`recordExtraModUse` from macros/attributes/`@[init]` side effects).
+    --    (`recordExtraModUse` from macros/attributes/`@[init]` side effects).
     for extra in Lean.getExtraModUsesInEnv env do
       if let some eIdx := env.getModuleIdx? extra.module then
         let k : NeedsKind := { isExported := extra.isExported, isMeta := extra.isMeta }

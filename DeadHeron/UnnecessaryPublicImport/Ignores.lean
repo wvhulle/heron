@@ -1,6 +1,6 @@
 module
 
-import Heron.Assert
+import DeadHeron.Assert
 public import Lean.Data.Lsp.Capabilities
 
 -- Reference `ClientCapabilities` in a public declaration — `public` on the

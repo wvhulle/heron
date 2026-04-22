@@ -13,11 +13,21 @@ The `Id.run` check in action.
 
 ## Usage
 
-Add an import of Heron and enable all rules:
+Add an import and enable all rules:
 
 ```lean
-import Heron.Rules
+import Heron
 set_option linter.heron true
+```
+
+See [`Heron/Check/`](./Heron/Check) for all available checks and [`Heron/Refactor/`](./Heron/Refactor) for refactors.
+
+### DeadHeron
+
+Import analysis rules (unused imports, unnecessary `public`/`meta` qualifiers) require a [patched Lean fork](https://github.com/wvhulle/lean4). Import them separately:
+
+```lean
+import DeadHeron
 ```
 
 ### Checks
@@ -26,27 +36,31 @@ Checks show up automatically as underlined diagnostics around anti-patterns.
 
 - Move your cursor to the underline to see a short message.
 - Enable inline diagnostics in your editor settings to see inline labels.
-
-See [`Heron/Check/`](./Heron/Check) for all available checks.
-
-Less essential but still useful:
-
-- Checks for deprecated patterns are shown with strike-through in supported editors
-- Checks for unused patterns are shown dimmed.
 - Click the light-bulb to apply the suggested fix.
 - Hover to open a popup with detailed explanation.
-- Detailed explanation may contain clickable URL link to the reference.
+- Checks for unused patterns are shown dimmed; deprecated patterns with strike-through.
 
 ### Refactors
 
-Refactors are invisible until you explicitly request them via the code action menu on a selection. They are intended for offering an easy way to users to rewrite between equally acceptable styles. Use checks for showing a clear diagnostic to the user that indicates a piece of code that represents an anti-pattern (or is unidiomatic as they would say in Rust).
-
-See [`Heron/Refactor/`](./Heron/Refactor) for all available refactors.
+Refactors are invisible until you explicitly request them via the code action menu on a selection. They are intended for offering an easy way to users to rewrite between equally acceptable styles. Use checks for showing a clear diagnostic to the user that indicates a piece of code that represents an anti-pattern.
 
 ### Disabling a Rule
 
 ```lean
 set_option linter.mergeIntros false
+```
+
+## Installation
+
+The core `Heron` library works with standard Lean 4. `DeadHeron` (import analysis rules) requires the [patched Lean fork](https://github.com/wvhulle/lean4).
+
+Add the Lake dependency:
+
+```toml
+[[require]]
+name = "heron"
+git = "https://codeberg.org/wvhulle/heron"
+rev = "main"
 ```
 
 ## Development
@@ -89,26 +103,4 @@ becomes `(example : Nat := (42))
 ```lean
 #assertIgnore rflToExactRfl in
 example (a : Nat) : a = a + 0 := by simp
-```
-
-## Installation
-
-At the moment of writing, you need to use a patched Lean (for now): [`github:wvhulle/lean4`](https://github.com/wvhulle/lean4).
-
-- For Nix users: Configure your Nix flake to use the patched Lean. You will need to add the repo as input to your flake and then reference the `lean` or `lake` package exported by it.
-- For other users:
-  1. Clone the patched Lean into `../lean4`
-  1. Build with `cmake` as documented in its `README.md`
-  1. Add `lake` to your path:
-     ```bash
-     export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
-     ```
-
-Then add the Lake dependency:
-
-```toml
-[[require]]
-name = "heron"
-git = "https://codeberg.org/wvhulle/heron"
-rev = "main"
 ```

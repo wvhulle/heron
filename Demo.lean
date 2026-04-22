@@ -1,4 +1,4 @@
-import Heron.Rules
+import Heron
 -- UnusedImport demo: these three modules are imported but nothing from them
 -- is referenced below, so the `unusedImport` linter should flag all three.
 -- (`public import` / `meta import` variants for `unnecessaryPublicImport` /
@@ -123,7 +123,7 @@ example : Nat :=
 
 -- ElsePureUnit: should inform (redundant else pure ())
 example : IO Unit := do
-  if true then 
+  if true then
     IO.println "done"
   else
     pure

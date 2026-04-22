@@ -1,7 +1,7 @@
 module
 
 public meta import Heron.Check
-public meta import Heron.ImportAnalysis
+public meta import DeadHeron.ImportAnalysis
 
 open Lean Elab Command Heron
 
