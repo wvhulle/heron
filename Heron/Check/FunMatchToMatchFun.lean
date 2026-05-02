@@ -11,8 +11,8 @@ private structure FunMatchToMatchFunMatch where
 /-- Detect `fun x => match x with | ...` where x is the sole parameter
 and the body is immediately a match on exactly that parameter. -/
 private meta def detectFunMatch? : Syntax → Option FunMatchToMatchFunMatch
-  | stx@`(fun $x:ident => match $discr:term with $alts:matchAlts) =>
-    if discr.raw.isIdent && discr.raw.getId == x.getId then
+  | stx@`(fun $x:ident => match $discr:ident with $alts:matchAlts) =>
+    if discr.getId == x.getId then
       some { funStx := stx, matchAlts := alts }
     else none
   | _ => none
