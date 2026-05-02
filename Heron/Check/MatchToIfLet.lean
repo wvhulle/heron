@@ -26,7 +26,7 @@ private meta def isWildcardAlt? (alt : Syntax) : Option Syntax :=
       else none
 
 private meta def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
-  | stx@`(match $discr:term with $alts:matchAlt*) => do
+  | stx@`(match%$matchKw $discr:term with $alts:matchAlt*) => do
     guard (alts.size == 2)
     let a0 := alts[0]!.raw
     let a1 := alts[1]!.raw
@@ -36,7 +36,7 @@ private meta def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
       | _, _ => none
     return {
       matchStx := stx
-      matchKw := stx[0]!
+      matchKw := matchKw
       pat := patAlt[1]![0]![0]!
       discr := discr.raw
       thenRhs := patAlt[3]!

@@ -14,18 +14,19 @@ private structure BoolMatchToIfMatch where
 private meta def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
   Syntax.collectAll fun
     |
-    stx@`(match $discr:term with
+    stx@`(match%$matchKw $discr:term with
           | true => $rhs1:term
           | false => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := stx[0]!, discr, trueRhs := rhs1, falseRhs := rhs2 }]
+      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs1, falseRhs := rhs2 }]
     |
-    stx@`(match $discr:term with
+    stx@`(match%$matchKw $discr:term with
           | false => $rhs1:term
           | true => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := stx[0]!, discr, trueRhs := rhs2, falseRhs := rhs1 }]
+      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs2, falseRhs := rhs1 }]
     | _ => #[]
 
-private meta instance : Check BoolMatchToIfMatch where
+private meta instance : Check BoolMatchToIfMatch
+    where
   name := `boolMatchToIf
   severity := .warning
   category := .simplification
@@ -47,4 +48,5 @@ private meta instance : Check BoolMatchToIfMatch where
           newSyntax := repl
           inlineViolationLabel := m!"bool match" }]
 
-meta initialize Check.register (α := BoolMatchToIfMatch)
+meta initialize
+  Check.register (α := BoolMatchToIfMatch)

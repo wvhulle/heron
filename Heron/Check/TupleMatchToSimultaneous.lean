@@ -67,7 +67,7 @@ private meta def reprintAlt (alt : Syntax) : String :=
 private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultaneousMatch :=
   Syntax.collectAll fun
     |
-    stx@`(match $discr:term with
+    stx@`(match%$matchKw $discr:term with
           $alts:matchAlt*) =>
       Id.run
         (do
@@ -76,7 +76,7 @@ private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSim
           let altsArr : Array Syntax := alts.map (·.raw)
           if !altsArr.all (isCompatibleAlt · discrElems.size) then
             return #[]
-          return #[{ matchStx := stx, matchKw := stx[0]!, discrElems, altsArr }])
+          return #[{ matchStx := stx, matchKw := matchKw, discrElems, altsArr }])
     | _ => #[]
 
 private meta instance : Check TupleMatchToSimultaneousMatch where
