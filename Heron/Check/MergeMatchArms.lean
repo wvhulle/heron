@@ -4,46 +4,38 @@ public meta import Heron.Check
 
 open Lean Elab Command Parser Heron
 
-/-- Create a `Syntax` spanning two syntax nodes. -/
-private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
-  let r1 ← stx1.getRange?
-  let r2 ← stx2.getRange?
-  return Syntax.ofRange ⟨r1.start, r2.stop⟩
-
-private structure ConsecutiveAltsToOrPatternMatch where
+private structure MergeMatchArmsMatch where
   secondArm : Syntax
+  /-- A null node wrapping `firstAlt` and `secondAlt`; its `getRange?` covers the span. -/
   fullRange : Syntax
   firstAlt : Syntax
   secondAlt : Syntax
 
-private meta def matchConsecutivePair? (prev next : Syntax) : Option ConsecutiveAltsToOrPatternMatch := do
+private meta def pairWithSharedRhs? (prev next : Syntax) : Option MergeMatchArmsMatch := do
   let `(Term.matchAltExpr| | $_ => $rhs1) := prev | none
   let `(Term.matchAltExpr| | $_ => $rhs2) := next | none
   guard (rhs1 == rhs2)
-  let fullRange ← mkSpan prev next
-  return { secondArm := next, fullRange, firstAlt := prev, secondAlt := next }
+  return {
+    secondArm := next
+    fullRange := mkNullNode #[prev, next]
+    firstAlt := prev
+    secondAlt := next
+  }
 
-private meta def findConsecutiveAltsToOrPatternInAlts : List Syntax → Array ConsecutiveAltsToOrPatternMatch
-  | prev :: next :: rest =>
-    let acc := findConsecutiveAltsToOrPatternInAlts (next :: rest)
-    match matchConsecutivePair? prev next with
-    | some m => acc.push m
-    | none => acc
-  | _ => #[]
-
-private meta def findConsecutiveAltsToOrPattern : Syntax → Array ConsecutiveAltsToOrPatternMatch :=
+private meta def findMergeMatchArms : Syntax → Array MergeMatchArmsMatch :=
   Syntax.collectAll fun
     |
     `(match $_:term with
         $alts:matchAlt*) =>
-      findConsecutiveAltsToOrPatternInAlts (alts.map (·.raw) |>.toList)
+      let l := (alts.map (·.raw)).toList
+      ((l.zip l.tail).filterMap fun (a, b) => pairWithSharedRhs? a b).toArray
     | _ => #[]
 
-private meta instance : Check ConsecutiveAltsToOrPatternMatch where
-  name := `consecutiveAltsToOrPattern
+private meta instance : Check MergeMatchArmsMatch where
+  name := `mergeMatchArms
   severity := .information
   category := .simplification
-  detect := fun stx => return findConsecutiveAltsToOrPattern stx
+  detect := fun stx => return findMergeMatchArms stx
   message := fun _ => m!"Merge match arms with identical right-hand sides"
   emphasize := fun m => m.fullRange
   tags := #[.unnecessary]
@@ -61,4 +53,4 @@ private meta instance : Check ConsecutiveAltsToOrPatternMatch where
       category := `matchAlt
     }]
 
-meta initialize Check.register (α := ConsecutiveAltsToOrPatternMatch)
+meta initialize Check.register (α := MergeMatchArmsMatch)
