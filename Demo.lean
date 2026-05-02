@@ -1,10 +1,6 @@
 import Heron
--- UnusedImport demo: these three modules are imported but nothing from them
--- is referenced below, so the `unusedImport` linter should flag all three.
--- (`public import` / `meta import` variants for `unnecessaryPublicImport` /
--- `unnecessaryMetaImport` require `module` mode, which in turn requires every
--- imported file to be a module — `Heron.Rules` is legacy, so we can't demo
--- those two checks here.)
+-- The three modules below are imported but nothing from them is referenced —
+-- they should each be flagged as unused.
 import Lean.Data.Json.Parser
 import Init.System.FilePath
 import Lean.Data.Lsp.Capabilities
@@ -12,50 +8,78 @@ import Lean.Data.Lsp.Capabilities
 set_option linter.heron true
 set_option heron.profile true
 
+section Inlining
+-- Definitions stay next to their usages so both the per-use-site refactor and
+-- the def-site bulk refactor are visible without scrolling.
+
+def greeting :=
+  "hello"
+
+example : String :=
+  greeting
+
+def add1 (n : Nat) :=
+  n + 1
+
+example : Nat :=
+  add1 7
+
+example : Nat :=
+  add1 3 +
+    add1 5
+
+end Inlining
+
+section RflProof
+
 example (n : Nat) : n = n := by rfl
 
-example (a b : Nat) (_ : a = b) : a = a := by
-  rfl
+end RflProof
 
--- set_option linter.mergeIntros false in
+section TacticIntros
+
 example : Nat → Nat → Nat → True := by
   intro a
   intro b
   intro c
   exact trivial
 
-def greeting :=
-  "hello"
+end TacticIntros
 
-def add1 (n : Nat) :=
-  n + 1
+section FunctionBinders
 
-example : String :=
-  greeting
+def addNats (x : Nat) (y : Nat) :=
+  x + y
 
-example : Nat :=
-  add1 7
+end FunctionBinders
 
-example : String :=
-  let a := false
-  if !a then "No a"
-  else
-    "Yes a"
+section MonadicIfNot
 
--- IdRunTrivial: should warn (trivial Id.run do)
+example : IO Unit := do
+  if !true then
+    IO.println
+      "hello"
+
+end MonadicIfNot
+
+section TrivialIdRun
+
 example : Nat :=
   Id.run
     (do
       return 42)
 
--- UnusedMut: should warn (x is never reassigned)
+end TrivialIdRun
+
+section MutableLocals
+
 example : Nat :=
   Id.run
     (do
       let mut x := 5
       return x + 1)
 
--- No warning: legitimate imperative code
+-- Counterexample: legitimate imperative `mut`, no warning.
 example : Nat :=
   Id.run
     (do
@@ -64,49 +88,81 @@ example : Nat :=
         x := x + 1
       return x)
 
--- BoolMatch: should warn (match on true/false)
+end MutableLocals
+
+section BooleanMatch
+
 def boolToNat (b : Bool) : Nat :=
   match b with
   | true => 1
   | false =>
     0
 
--- OrPattern: should inform (duplicate RHS)
-def orPatternDemo (x : Bool) : Nat :=
-  match x with
-  | true => 42
-  | false =>
-    42
+end BooleanMatch
 
--- SharedBinder: should inform (same type)
-def addNats (x : Nat) (y : Nat) :=
-  x + y
+section MatchArmsWithSharedBody
+-- Edge case: only the consecutive pair sharing a body (`1 => 0`, `2 => 0`) is
+-- merged; the wildcard arm has a different body and is left alone.
 
--- BindToDo: refactor available (>>= to do)
-def bindDemo :=
-  Option.some 1 >>= fun x =>
-    Option.some
-      (x + 1)
+def mergeArmsDemo (n : Nat) : Nat :=
+  match n with
+  | 0 => 1
+  | 1 => 0
+  | 2 => 0
+  | _ =>
+    99
 
--- LetWildcard: should inform (redundant let _ ←)
-example : IO Unit := do
-  let _ ← IO.println "hello"
-  pure
-      ()
+end MatchArmsWithSharedBody
 
--- TupleMatch: should warn (match on tuple discriminant)
-def addPair (x y : Nat) : Nat :=
-  match (x, y) with
-  | (a, b) => a + b
+section OptionMatch
 
--- MatchToIfLet: should inform (two-arm match with wildcard)
 def fromOption (x : Option Nat) : Nat :=
   match x with
   | some v => v
   | _ =>
     0
 
--- GetSet: should warn (get/set → modify)
+end OptionMatch
+
+section TupleDiscriminant
+
+def addPair (x y : Nat) : Nat :=
+  match (x, y) with
+  | (a, b) => a + b
+
+end TupleDiscriminant
+
+section MonadicBind
+
+def bindDemo :=
+  Option.some 1 >>= fun x =>
+    Option.some
+      (x + 1)
+
+end MonadicBind
+
+section LetWildcardArrow
+
+example : IO Unit := do
+  let _ ← IO.println "hello"
+  pure
+      ()
+
+end LetWildcardArrow
+
+section IfElsePure
+
+example : IO Unit := do
+  if true then
+    IO.println "done"
+  else
+    pure
+        ()
+
+end IfElsePure
+
+section StateGetSet
+
 private structure DemoState where
   count : Nat
 
@@ -115,22 +171,6 @@ def increment : StateM DemoState Unit := do
   set
       { s with count := s.count + 1 }
 
--- InlineAllConst: refactor available (inline all usages of add1 from definition site)
-example : Nat :=
-  add1 3 +
-    add1
-      5
-
--- ElsePureUnit: should inform (redundant else pure ())
-example : IO Unit := do
-  if true then
-    IO.println "done"
-  else
-    pure
-        ()
-
--- UnusedImport: this check detects unused imports at file level.
--- In this file, `Heron.Rules` is used (it provides the linter rules), so it won't be flagged.
--- To test: create a file that imports a module but doesn't use anything from it.
+end StateGetSet
 
 #heronProfile
