@@ -9,8 +9,8 @@ observe a uniquely-covering umbrella in the generic test.
 
 public section
 
-namespace DeadHeron.UnusedImport.ExtraModUseLeaf
+namespace Heron.Check.UnusedImport.ExtraModUseLeaf
 
 def marker : Nat := 42
 
-end DeadHeron.UnusedImport.ExtraModUseLeaf
+end Heron.Check.UnusedImport.ExtraModUseLeaf

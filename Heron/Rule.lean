@@ -55,7 +55,9 @@ class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   name : Name
   /-- Syntax kinds at which this rule fires. The harness only invokes `detect`
-  on nodes whose `getKind` is in this array. -/
+  on nodes whose `getKind` is in this array. An empty array is a special case:
+  the rule fires once at the root of each command (no descent), useful for
+  rules that analyse the file holistically (e.g. import-usage checks). -/
   kinds : Array SyntaxNodeKind
   /-- Per-node detector. Receives a node whose kind is one of `kinds`; returns
   matches that originate at this node. -/
@@ -64,10 +66,11 @@ class Rule (α : Type) where
   message : α → MessageData
   /-- Per-edit replacement data. -/
   replacements : α → CommandElabM (Array Replacement)
-  /-- Optional post-processing of matches accumulated across the whole walk;
-  default is identity. Use this for rule-specific dedup (e.g. removing matches
-  whose range is strictly contained in another's). -/
-  postProcess : Array α → Array α := id
+  /-- When `true`, the walker stops descending into a node's children whenever
+  `detect` produces matches at that node. Use this for rules that emit at every
+  level of a nested chain and want only the outermost match (e.g. `Expr.app`
+  chains, `>>=` chains). -/
+  consumesSubtree : Bool := false
 
 /-- Master option that enables all Heron linter rules at once. -/
 meta def Heron.allRulesLinterOption : Lean.Option Bool :=
@@ -111,31 +114,26 @@ meta initialize
 meta def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
 
-/-- Walk a syntax tree once, applying `detect` only at nodes whose kind is in
-`kinds`. Used by `Rule.detectAll` and by the master linter handler. -/
-private meta partial def walkKinds (kinds : Array SyntaxNodeKind) (detect : Syntax → CommandElabM (Array α))
-    (stx : Syntax) : CommandElabM (Array α) := do
+/-- Walk a syntax tree top-down, applying `detect` only at nodes whose kind is
+in `kinds`. When `consumesSubtree` is `true` and `detect` returns a non-empty
+array at a node, descendants of that node are not visited. Used by
+`Rule.detectAll`; the master linter implements the same shape against the
+shared dispatch walk via per-rule consumed-range tracking. -/
+private meta partial def walkKinds (kinds : Array SyntaxNodeKind) (consumesSubtree : Bool)
+    (detect : Syntax → CommandElabM (Array α)) (stx : Syntax) : CommandElabM (Array α) := do
   let here ← if kinds.contains stx.getKind then detect stx else pure #[]
+  if consumesSubtree && !here.isEmpty then return here
   stx.getArgs.foldlM (init := here) fun acc child => do
-    return acc ++ (← walkKinds kinds detect child)
+    return acc ++ (← walkKinds kinds consumesSubtree detect child)
 
-/-- Run a rule across a whole command's syntax: walk once via kind-keyed
-dispatch, then apply `postProcess`. Used by the test runner and code-action
-provider — the master linter inlines the same shape so it can share the walk
-across all rules. -/
-meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) := do
-  let raw ← walkKinds (Rule.kinds (α := α)) (Rule.detect (α := α)) stx
-  return Rule.postProcess (α := α) raw
-
-/-- Drop matches whose syntactic range is strictly contained in another match's
-range. Useful as a `postProcess` for rules that emit at every node of a nested
-chain (e.g. `Expr.app` chains) and want only the outermost occurrence. -/
-meta def Rule.dedupContainedRanges (rangeOf : α → Option Lean.Syntax.Range) (input : Array α) : Array α :=
-  let withRanges := input.filterMap fun m => rangeOf m |>.map (m, ·)
-  withRanges.filterMap fun (m, r) =>
-    let strictlyContained := withRanges.any fun (_, r') =>
-      r'.start ≤ r.start ∧ r.stop ≤ r'.stop ∧ (r'.start < r.start ∨ r.stop < r'.stop)
-    if strictlyContained then none else some m
+/-- Run a rule across a whole command's syntax. Used by the test runner and
+code-action provider; the master linter inlines the same shape so it can share
+the walk across all rules. Empty `kinds` means "fire once at the command
+root", so the walk is skipped entirely. -/
+meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) :=
+  let kinds := Rule.kinds (α := α)
+  if kinds.isEmpty then Rule.detect (α := α) stx
+  else walkKinds kinds (Rule.consumesSubtree (α := α)) (Rule.detect (α := α)) stx
 
 /-- Re-elaborate a command collecting info trees.
 

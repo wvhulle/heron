@@ -8,9 +8,9 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     lean4 = {
 
-      # url = "github:wvhulle/lean4";
+      url = "github:wvhulle/lean4";
 
-      url = "git+file:/home/wvhulle/Code/lean4";
+      # url = "git+file:/home/wvhulle/Code/lean4";
     };
     lean4-nix.url = "github:lenianiva/lean4-nix";
   };
@@ -42,18 +42,11 @@
         inherit lakeDeps;
         installArtifacts = true;
       };
-
-      deadheron = lake2nix.mkPackage {
-        name = "DeadHeron";
-        src = ./.;
-        inherit lakeDeps;
-        lakeArtifacts = heron;
-      };
     in
     {
       packages.${system} = {
-        inherit heron deadheron;
-        default = deadheron;
+        inherit heron;
+        default = heron;
       };
 
       devShells.${system} = rec {
@@ -85,7 +78,7 @@
           '';
         };
 
-        default = unmanaged-fork;
+        default = managed-fork;
       };
     };
 }

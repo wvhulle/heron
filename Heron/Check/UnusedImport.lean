@@ -1,7 +1,7 @@
 module
 
 public meta import Heron.Check
-public meta import DeadHeron.ImportAnalysis
+public meta import Heron.ImportAnalysis
 
 open Lean Elab Command Heron
 
@@ -19,6 +19,7 @@ private meta def detectUnusedImports (stx : Syntax) : CommandElabM (Array Unused
 
 private meta instance : Check UnusedImportMatch where
   name := `unusedImport
+  kinds := #[]
   severity := .warning
   category := .simplification
   detect := detectUnusedImports

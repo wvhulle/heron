@@ -44,7 +44,7 @@ private meta instance : Refactor BindToDoMatch where
       let (bindings, finalBody) := collectBindChain stx
       if bindings.isEmpty then #[] else #[{ fullStx := stx, bindings, finalBody }]
     | none => #[]
-  postProcess := Rule.dedupContainedRanges (fun m => m.fullStx.getRange?)
+  consumesSubtree := true
   message := fun _ => m!"Convert `>>=` to do-notation"
   replacements := fun m => do
     -- Build doSeqItems: one `let v ← lhs` per binding, then final body

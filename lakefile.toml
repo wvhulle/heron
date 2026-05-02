@@ -7,10 +7,6 @@ name = "Heron"
 globs = ["Heron.*"]
 
 [[lean_lib]]
-name = "DeadHeron"
-globs = ["DeadHeron.*"]
-
-[[lean_lib]]
 name = "Demo"
 globs = ["Demo"]
 

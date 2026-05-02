@@ -23,16 +23,17 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1777733311,
-        "narHash": "sha256-ccxnjg+thyXUbJE/k+OqLd4qcRZaVg2a5wvyOgBeOOU=",
-        "rev": "e7d7f4c87fb298175e53c5b91e81eee88fb81556",
-        "revCount": 39722,
-        "type": "git",
-        "url": "file:/home/wvhulle/Code/lean4"
+        "lastModified": 1777734344,
+        "narHash": "sha256-YoQl5R0DrtmYVa2ndk7kdLdy6ZVwSEstqjtWR4unapQ=",
+        "owner": "wvhulle",
+        "repo": "lean4",
+        "rev": "2815c4e6f5073417a47fb15755b5370e376e4e8d",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:/home/wvhulle/Code/lean4"
+        "owner": "wvhulle",
+        "repo": "lean4",
+        "type": "github"
       }
     },
     "lean4-nix": {

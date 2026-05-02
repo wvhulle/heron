@@ -1,7 +1,7 @@
 module
 
-meta import DeadHeron.Assert
-meta import DeadHeron.UnusedImport
+meta import Heron.Assert
+meta import Heron.Check.UnusedImport
 
 -- The `unusedImport` rule operates at file-import scope, not at command
 -- scope.  `#assertIgnore` re-elaborates a single command, so it cannot

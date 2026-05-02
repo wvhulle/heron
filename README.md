@@ -22,14 +22,6 @@ set_option linter.heron true
 
 See [`Heron/Check/`](./Heron/Check) for all available checks and [`Heron/Refactor/`](./Heron/Refactor) for refactors.
 
-### DeadHeron
-
-Import analysis rules (unused imports, unnecessary `public`/`meta` qualifiers) require a [patched Lean fork](https://github.com/wvhulle/lean4). Import them separately:
-
-```lean
-import DeadHeron
-```
-
 ### Checks
 
 Checks show up automatically as underlined diagnostics around anti-patterns.
@@ -52,7 +44,7 @@ set_option linter.mergeIntros false
 
 ## Installation
 
-The core `Heron` library works with standard Lean 4. `DeadHeron` (import analysis rules) requires the [patched Lean fork](https://github.com/wvhulle/lean4).
+Heron requires the [patched Lean fork](https://github.com/wvhulle/lean4) — a few rules (notably the import-analysis checks) and the diagnostic-data wiring rely on fork-only extensions.
 
 Add the Lake dependency:
 

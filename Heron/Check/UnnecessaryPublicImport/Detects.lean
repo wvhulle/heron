@@ -1,6 +1,6 @@
 module
 
-import DeadHeron.Assert
+import Heron.Assert
 public import Lean.Data.Lsp.Capabilities
 
 -- Reference `ClientCapabilities` privately so `Lean.Data.Lsp.Capabilities`

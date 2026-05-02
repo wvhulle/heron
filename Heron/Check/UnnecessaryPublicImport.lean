@@ -1,7 +1,7 @@
 module
 
 public meta import Heron.Check
-public meta import DeadHeron.ImportAnalysis
+public meta import Heron.ImportAnalysis
 
 open Lean Elab Command Heron
 
@@ -24,6 +24,7 @@ private meta def detectUnnecessaryPublicImports (stx : Syntax) :
 
 private meta instance : Check UnnecessaryPublicImportMatch where
   name := `unnecessaryPublicImport
+  kinds := #[]
   severity := .warning
   category := .simplification
   detect := detectUnnecessaryPublicImports

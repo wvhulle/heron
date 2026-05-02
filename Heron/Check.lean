@@ -89,8 +89,7 @@ structure RuleHandler where
   /-- Called once per matching node during the master walk; accumulates matches
   in handler-private state. -/
   visit : Syntax → CommandElabM Unit
-  /-- Called once after the walk; applies the rule's `postProcess` and emits one
-  diagnostic per surviving match. -/
+  /-- Called once after the walk; emits one diagnostic per accumulated match. -/
   emit : CommandElabM Unit
 
 /-- A type-erased registration. The registry stores `setup` thunks that build a
@@ -103,22 +102,37 @@ structure RuleEntry where
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 
-/-- Build a fresh `RuleHandler` for one `Check` rule for one command. -/
+/-- Build a fresh `RuleHandler` for one `Check` rule for one command.
+
+When `Rule.consumesSubtree` is `true`, the visit closure tracks ranges of
+nodes where `detect` produced matches and short-circuits at any descendant of
+those ranges. Because the shared dispatch walk is preorder, ancestors are
+always visited before their descendants, so a flat array of consumed ranges
+filters descendants without a second pass. -/
 private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
-  let ref ← IO.mkRef (#[] : Array α)
+  let matchesRef ← IO.mkRef (#[] : Array α)
+  let consumedRef ← IO.mkRef (#[] : Array Lean.Syntax.Range)
+  let consumes := Rule.consumesSubtree (α := α)
   let name := Rule.name (α := α)
   let profiling := Heron.isProfilingEnabled (← getOptions)
   let walkStart ← IO.monoNanosNow
   return {
     kinds := Rule.kinds (α := α)
     visit := fun node => do
+      if consumes then
+        if let some r := node.getRange? then
+          if (← consumedRef.get).any fun c => c.start ≤ r.start ∧ r.stop ≤ c.stop then
+            return
       let found ← Rule.detect (α := α) node
-      if !found.isEmpty then ref.modify (· ++ found)
+      if found.isEmpty then return
+      matchesRef.modify (· ++ found)
+      if consumes then
+        if let some r := node.getRange? then
+          consumedRef.modify (·.push r)
     emit := do
-      let raw ← ref.get
+      let collected ← matchesRef.get
       let detectEnd ← IO.monoNanosNow
-      let processed := Rule.postProcess (α := α) raw
-      for m in processed do
+      for m in collected do
         let repls ← Rule.replacements (α := α) m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (category := Check.category (α := α)) (tags := Check.tags (α := α))
@@ -127,7 +141,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
             (repls := repls) (reference := Check.reference (α := α))
       let emitEnd ← IO.monoNanosNow
       if profiling then
-        Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) processed.size
+        Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) collected.size
   }
 
 /-- Walk `stx` once, dispatching each node to every handler that registered for
@@ -148,7 +162,8 @@ private meta def buildDispatchTable (handlers : Array RuleHandler) :
 
 /-- The single linter Heron registers with Lean. It activates every enabled
 rule, builds one handler per rule, walks the command syntax once via kind-keyed
-dispatch, then runs each handler's emit phase. -/
+dispatch, then runs each handler's emit phase. Handlers with empty `kinds`
+fire once at the command root (file-level analyses like import checks). -/
 meta def heronMasterLinter : Linter where
   name := `heron
   run := withSetOptionIn fun stx => do
@@ -158,6 +173,8 @@ meta def heronMasterLinter : Linter where
     let active := entries.filter (·.isEnabled opts)
     if active.isEmpty then return
     let handlers ← active.mapM (·.setup)
+    for h in handlers do
+      if h.kinds.isEmpty then h.visit stx
     walkDispatch (buildDispatchTable handlers) stx
     for h in handlers do h.emit
 

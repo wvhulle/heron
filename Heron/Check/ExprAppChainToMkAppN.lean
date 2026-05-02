@@ -50,7 +50,7 @@ private meta instance : Check ExprAppChainToMkAppNMatch
     | some { innermostFn, args } =>
       if args.size >= 2 then #[{ fullStx := stx, fn := innermostFn, args }] else #[]
     | none => #[]
-  postProcess := Rule.dedupContainedRanges (fun m => m.fullStx.getRange?)
+  consumesSubtree := true
   message := fun _ => m!"Use `mkAppN` instead of nested `Expr.app`"
   emphasize := fun m => m.fullStx
   reference :=

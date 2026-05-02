@@ -1,6 +1,6 @@
 module
 
-import DeadHeron.Assert
+import Heron.Assert
 meta import Lean.Data.Lsp.Capabilities
 
 -- Reference `ClientCapabilities` in meta code — `meta` on the Capabilities
