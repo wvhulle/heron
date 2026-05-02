@@ -7,16 +7,15 @@ open Lean Elab Command Heron
 private structure RflToExactRflMatch where
   rflStx : Syntax
 
-private meta def findRflTactics : Syntax → Array Syntax :=
-  Syntax.collectAll fun
-    | stx@`(tactic| rfl) => #[stx]
-    | _ => #[]
-
 private meta instance : Check RflToExactRflMatch where
   name := `rflToExactRfl
+  kinds := #[``Lean.Parser.Tactic.tacticRfl]
   severity := .information
   category := .style
-  find := fun stx => (findRflTactics stx).map fun s => { rflStx := s }
+  detect := fun stx => pure <|
+    match stx with
+    | `(tactic| rfl) => #[{ rflStx := stx }]
+    | _ => #[]
   message := fun _ => m!"Use `exact rfl`"
   emphasize := fun m => m.rflStx
   reference := some { topic := "`rfl`", url := "https://lean-lang.org/theorem_proving_in_lean4/quantifiers_and_equality.html#equality" }

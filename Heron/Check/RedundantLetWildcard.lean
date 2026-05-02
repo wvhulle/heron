@@ -14,24 +14,20 @@ private meta def isWildcardLetArrow? : Syntax → Option (Syntax × Syntax)
   | elem@`(doElem| let _ ← $rhs) => some (elem[0]!, rhs)
   | _ => none
 
-/-- Find `let _ ← action` in do-blocks. -/
-private meta def findRedundantLetWildcards (stx : Syntax) : Array RedundantLetWildcardMatch :=
-  let doSeqs := Syntax.collectAll (fun s =>
-    if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
-    else #[]) stx
-  doSeqs.flatMap fun doSeq =>
-    let elems := getDoElems doSeq
-    elems.filterMap fun elem =>
-      match isWildcardLetArrow? elem with
-      | some (letKw, rhs) =>
-        some { doLetStx := elem, letKeyword := letKw, rhs }
-      | none => none
+private meta def detectRedundantLetWildcards (doSeq : Syntax) : Array RedundantLetWildcardMatch :=
+  let elems := getDoElems doSeq
+  elems.filterMap fun elem =>
+    match isWildcardLetArrow? elem with
+    | some (letKw, rhs) =>
+      some { doLetStx := elem, letKeyword := letKw, rhs }
+    | none => none
 
 private meta instance : Check RedundantLetWildcardMatch where
   name := `redundantLetWildcard
+  kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .information
   category := .simplification
-  find := findRedundantLetWildcards
+  detect := fun stx => pure (detectRedundantLetWildcards stx)
   message := fun _ => m!"Redundant `let _ ←`"
   emphasize := fun m => m.letKeyword
   tags := #[.unnecessary]

@@ -35,23 +35,16 @@ private meta partial def collectBindChain (stx : Syntax) : Array (Syntax × Synt
     let (rest, finalBody) := collectBindChain body
     (#[(lhs, varName)] ++ rest, finalBody)
 
-/-- Walk the syntax tree, matching outermost `>>=` chains only.
-After matching a chain, skip its children to avoid duplicate inner matches. -/
-private meta partial def findBindToDoAux (stx : Syntax) : Array BindToDoMatch :=
-  match decomposeBind? stx with
-  | some _ =>
-    let (bindings, finalBody) := collectBindChain stx
-    if bindings.isEmpty then stx.getArgs.flatMap findBindToDoAux
-    else
-      -- Only recurse into the LHS expressions, not the consumed chain body
-      let lhsResults := bindings.flatMap fun (lhs, _) => findBindToDoAux lhs
-      let bodyResults := findBindToDoAux finalBody
-      #[{ fullStx := stx, bindings, finalBody }] ++ lhsResults ++ bodyResults
-  | none => stx.getArgs.flatMap findBindToDoAux
-
 private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
-  detect := fun stx => return findBindToDoAux stx
+  kinds := #[`«term_>>=_»]
+  detect := fun stx => pure <|
+    match decomposeBind? stx with
+    | some _ =>
+      let (bindings, finalBody) := collectBindChain stx
+      if bindings.isEmpty then #[] else #[{ fullStx := stx, bindings, finalBody }]
+    | none => #[]
+  postProcess := Rule.dedupContainedRanges (fun m => m.fullStx.getRange?)
   message := fun _ => m!"Convert `>>=` to do-notation"
   replacements := fun m => do
     -- Build doSeqItems: one `let v ← lhs` per binding, then final body

@@ -6,7 +6,12 @@
   };
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    lean4.url = "github:wvhulle/lean4";
+    lean4 = {
+
+      # url = "github:wvhulle/lean4";
+
+      url = "git+file:/home/wvhulle/Code/lean4";
+    };
     lean4-nix.url = "github:lenianiva/lean4-nix";
   };
 
@@ -67,7 +72,7 @@
         };
 
         # Use locally-built lean4 — no flake rebuild on source changes.
-        # Requires: make -j -C ../lean4/build/release
+        # Requires: cd ../lean4 && cmake --preset release && make -C build/release
         unmanaged-fork = pkgs.mkShell {
           packages = with pkgs; [
             gcc
@@ -75,11 +80,12 @@
           ];
 
           shellHook = ''
-            export PATH="$PWD/../lean4/build/release/stage1/bin:$PATH"
+            export ELAN=""
+            export PATH="$PWD/../lean4/build/release/bin:$PATH"
           '';
         };
 
-        default = managed-fork;
+        default = unmanaged-fork;
       };
     };
 }

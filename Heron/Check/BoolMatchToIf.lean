@@ -11,26 +11,23 @@ private structure BoolMatchToIfMatch where
   trueRhs : Syntax
   falseRhs : Syntax
 
-private meta def findBoolMatchToIf : Syntax → Array BoolMatchToIfMatch :=
-  Syntax.collectAll fun
-    |
-    stx@`(match%$matchKw $discr:term with
-          | true => $rhs1:term
-          | false => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs1, falseRhs := rhs2 }]
-    |
-    stx@`(match%$matchKw $discr:term with
-          | false => $rhs1:term
-          | true => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs2, falseRhs := rhs1 }]
-    | _ => #[]
-
 private meta instance : Check BoolMatchToIfMatch
     where
   name := `boolMatchToIf
+  kinds := #[``Term.match]
   severity := .warning
   category := .simplification
-  detect := fun stx => return findBoolMatchToIf stx
+  detect := fun stx => pure <|
+    match stx with
+    | `(match%$matchKw $discr:term with
+        | true => $rhs1:term
+        | false => $rhs2:term) =>
+      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs1, falseRhs := rhs2 }]
+    | `(match%$matchKw $discr:term with
+        | false => $rhs1:term
+        | true => $rhs2:term) =>
+      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs2, falseRhs := rhs1 }]
+    | _ => #[]
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]

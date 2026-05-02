@@ -64,10 +64,14 @@ private meta def reprintAlt (alt : Syntax) : String :=
       | none => reprintTrimmed alt[1]!
   s! "| {patText } => {reprintTrimmed alt[3]!}"
 
-private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSimultaneousMatch :=
-  Syntax.collectAll fun
-    |
-    stx@`(match%$matchKw $discr:term with
+private meta instance : Check TupleMatchToSimultaneousMatch where
+  name := `tupleMatchToSimultaneous
+  kinds := #[``Term.match]
+  severity := .warning
+  category := .simplification
+  detect := fun stx => pure <|
+    match stx with
+    | `(match%$matchKw $discr:term with
           $alts:matchAlt*) =>
       Id.run
         (do
@@ -78,12 +82,6 @@ private meta def findTupleMatchToSimultaneous : Syntax → Array TupleMatchToSim
             return #[]
           return #[{ matchStx := stx, matchKw := matchKw, discrElems, altsArr }])
     | _ => #[]
-
-private meta instance : Check TupleMatchToSimultaneousMatch where
-  name := `tupleMatchToSimultaneous
-  severity := .warning
-  category := .simplification
-  find := findTupleMatchToSimultaneous
   message := fun _ => m!"Use simultaneous matching instead of matching on a tuple"
   emphasize := fun m => m.matchStx
   reference := some { topic := "Simultaneous matching", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }

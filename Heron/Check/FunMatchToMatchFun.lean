@@ -8,28 +8,17 @@ private structure FunMatchToMatchFunMatch where
   funStx : Syntax
   matchAlts : Syntax
 
-/-- Detect `fun x => match x with | ...` where x is the sole parameter
-and the body is immediately a match on exactly that parameter. -/
-private meta def detectFunMatch? : Syntax → Option FunMatchToMatchFunMatch
-  | stx@`(fun $x:ident => match $discr:ident with $alts:matchAlts) =>
-    if discr.getId == x.getId then
-      some { funStx := stx, matchAlts := alts }
-    else none
-  | _ => none
-
-private meta def findFunMatchToMatchFun (stx : Syntax) : Array FunMatchToMatchFunMatch :=
-  Syntax.collectAll
-    (fun s =>
-      match detectFunMatch? s with
-      | some m => #[m]
-      | none => #[])
-    stx
-
 private meta instance : Check FunMatchToMatchFunMatch where
   name := `funMatchToMatchFun
+  kinds := #[``Term.fun]
   severity := .information
   category := .simplification
-  find := findFunMatchToMatchFun
+  detect := fun stx => pure <|
+    match stx with
+    | `(fun $x:ident => match $discr:ident with $alts:matchAlts) =>
+      if discr.getId == x.getId then #[{ funStx := stx, matchAlts := alts }]
+      else #[]
+    | _ => #[]
   message := fun _ => m!"Use `fun | ...` pattern matching syntax"
   emphasize := fun m => m.funStx
   reference :=

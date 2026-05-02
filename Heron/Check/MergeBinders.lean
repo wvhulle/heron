@@ -51,19 +51,14 @@ private meta def findMergeableInBinders (binders : Array Syntax) : Array MergeBi
           else acc
         | _, _ => acc
 
-private meta def findMergeBinders : Syntax → Array MergeBindersMatch :=
-  Syntax.collectAll fun stx =>
-    let k := stx.getKind
-    if k == ``Command.optDeclSig || k == ``Command.declSig then
-      let binderSeq := stx[0]!  -- null-node of binder nodes
-      findMergeableInBinders binderSeq.getArgs
-    else #[]
-
 private meta instance : Check MergeBindersMatch where
   name := `mergeBinders
+  kinds := #[``Command.optDeclSig, ``Command.declSig]
   severity := .information
   category := .style
-  detect := fun stx => return findMergeBinders stx
+  detect := fun stx => pure <|
+    let binderSeq := stx[0]!
+    findMergeableInBinders binderSeq.getArgs
   message := fun _ => m!"Merge binders with the same type"
   emphasize := fun m => m.secondBinder
   reference := some { topic := "Shared binders", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }

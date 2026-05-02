@@ -101,21 +101,17 @@ private structure UnnecessaryIdRunMatch where
   idRunDoSpan : Syntax
   elems : Array Syntax
 
-private meta def findUnnecessaryIdRun : Syntax → Array UnnecessaryIdRunMatch :=
-  Syntax.collectAll fun stx =>
+private meta instance : Check UnnecessaryIdRunMatch where
+  name := `unnecessaryIdRun
+  kinds := #[``Term.app]
+  severity := .warning
+  category := .simplification
+  detect := fun stx => pure <|
     match isIdRunDo? stx with
     | some (fullStx, idRunDoSpan, doSeq) =>
       let elems := getDoElems doSeq
-      if isPureDoSeq elems then
-        #[{ fullStx, idRunDoSpan, elems }]
-      else #[]
+      if isPureDoSeq elems then #[{ fullStx, idRunDoSpan, elems }] else #[]
     | none => #[]
-
-private meta instance : Check UnnecessaryIdRunMatch where
-  name := `unnecessaryIdRun
-  severity := .warning
-  category := .simplification
-  find := findUnnecessaryIdRun
   message := fun _ => m!"Remove unnecessary `Id.run do`"
   emphasize := fun m => m.idRunDoSpan
   reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }

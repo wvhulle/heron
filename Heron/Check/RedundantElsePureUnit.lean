@@ -16,27 +16,23 @@ private meta def isPureUnit : Syntax → Bool
   | `(pure Unit.unit) => true
   | _ => false
 
-/-- Find `if cond then ... else pure ()` in do-blocks. -/
-private meta def detectRedundantElsePureUnit : Syntax → Array RedundantElsePureUnitMatch
-  | s@`(doElem| if $cond then $thenBody else $elseBody) =>
-    let elseElems := getDoElems elseBody
-    if elseElems.size != 1 then #[]
-    else
-    let elem := elseElems[0]!
-    let body := if elem.getKind == ``Term.doExpr then elem[0]! else elem
-    if !isPureUnit body then #[]
-    else
-      #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
-  | _ => #[]
-
-private meta def findRedundantElsePureUnit (stx : Syntax) : Array RedundantElsePureUnitMatch :=
-  Syntax.collectAll detectRedundantElsePureUnit stx
-
 private meta instance : Check RedundantElsePureUnitMatch where
   name := `redundantElsePureUnit
+  kinds := #[``Term.doIf]
   severity := .information
   category := .simplification
-  find := findRedundantElsePureUnit
+  detect := fun stx => pure <|
+    match stx with
+    | s@`(doElem| if $cond then $thenBody else $elseBody) =>
+      let elseElems := getDoElems elseBody
+      if elseElems.size != 1 then #[]
+      else
+      let elem := elseElems[0]!
+      let body := if elem.getKind == ``Term.doExpr then elem[0]! else elem
+      if !isPureUnit body then #[]
+      else
+        #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
+    | _ => #[]
   message := fun _ => m!"Redundant `else pure ()`"
   emphasize := fun m => m.elseBranch
   tags := #[.unnecessary]

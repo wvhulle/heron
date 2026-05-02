@@ -44,17 +44,15 @@ private meta def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
     }
   | _ => none
 
-private meta def findMatchToIfLet : Syntax → Array MatchToIfLetMatch :=
-  Syntax.collectAll fun stx =>
+private meta instance : Check MatchToIfLetMatch where
+  name := `matchToIfLet
+  kinds := #[``Term.match]
+  severity := .information
+  category := .style
+  detect := fun stx => pure <|
     match detectMatchToIfLet? stx with
     | some m => #[m]
     | none => #[]
-
-private meta instance : Check MatchToIfLetMatch where
-  name := `matchToIfLet
-  severity := .information
-  category := .style
-  find := findMatchToIfLet
   message := fun _ => m!"Use `if let` instead of two-arm `match` with wildcard"
   emphasize := fun m => m.matchStx
   reference := some { topic := "if let", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }

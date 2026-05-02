@@ -10,12 +10,6 @@ public section
 
 open Lean Elab Command Meta
 
-/-- Recursively collect results from a syntax tree.
-`f` is applied at each node; its results are concatenated
-with results from all children. -/
-partial def Lean.Syntax.collectAll (f : Syntax → Array α) (stx : Syntax) : Array α :=
-  f stx ++ stx.getArgs.flatMap (Syntax.collectAll f)
-
 namespace Heron
 
 /-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
@@ -54,17 +48,26 @@ meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (O
     pure text.trimAscii.toString
   return some { range := lspRange, newText }
 
+/-- Core rule typeclass. The harness walks each command syntax tree once and
+calls `detect` only at nodes whose kind is in `kinds`. Both `kinds` and `detect`
+are required: missing either is a compile-time error, ruling out silent no-ops. -/
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   name : Name
-  /-- Pure detection — set this for rules that don't need `CommandElabM`. -/
-  find : Syntax → Array α := fun _ => #[]
-  /-- Detect matches, returning typed match data. -/
-  detect : Syntax → CommandElabM (Array α) := fun stx => pure (find stx)
+  /-- Syntax kinds at which this rule fires. The harness only invokes `detect`
+  on nodes whose `getKind` is in this array. -/
+  kinds : Array SyntaxNodeKind
+  /-- Per-node detector. Receives a node whose kind is one of `kinds`; returns
+  matches that originate at this node. -/
+  detect : Syntax → CommandElabM (Array α)
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
   /-- Per-edit replacement data. -/
   replacements : α → CommandElabM (Array Replacement)
+  /-- Optional post-processing of matches accumulated across the whole walk;
+  default is identity. Use this for rule-specific dedup (e.g. removing matches
+  whose range is strictly contained in another's). -/
+  postProcess : Array α → Array α := id
 
 /-- Master option that enables all Heron linter rules at once. -/
 meta def Heron.allRulesLinterOption : Lean.Option Bool :=
@@ -108,20 +111,31 @@ meta initialize
 meta def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
 
-/-- Run a rule if enabled and not re-elaborating, calling `handle`
-for each detected match. -/
-meta def Rule.runIfEnabled [Rule α] (stx : Syntax) (handle : α → CommandElabM Unit) : CommandElabM Unit := do
-  unless Rule.isEnabled (α := α) (← getOptions) do return
-  if Heron.isReelaboratingGuardSet (← getOptions) then return
-  let name := Rule.name (α := α)
-  let profiling := Heron.isProfilingEnabled (← getOptions)
-  let t0 ← IO.monoNanosNow
-  let results ← Rule.detect (α := α) stx
-  let t1 ← IO.monoNanosNow
-  for m in results do handle m
-  let t2 ← IO.monoNanosNow
-  if profiling then
-    Heron.recordProfile name (t1 - t0) (t2 - t1) results.size
+/-- Walk a syntax tree once, applying `detect` only at nodes whose kind is in
+`kinds`. Used by `Rule.detectAll` and by the master linter handler. -/
+private meta partial def walkKinds (kinds : Array SyntaxNodeKind) (detect : Syntax → CommandElabM (Array α))
+    (stx : Syntax) : CommandElabM (Array α) := do
+  let here ← if kinds.contains stx.getKind then detect stx else pure #[]
+  stx.getArgs.foldlM (init := here) fun acc child => do
+    return acc ++ (← walkKinds kinds detect child)
+
+/-- Run a rule across a whole command's syntax: walk once via kind-keyed
+dispatch, then apply `postProcess`. Used by the test runner and code-action
+provider — the master linter inlines the same shape so it can share the walk
+across all rules. -/
+meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) := do
+  let raw ← walkKinds (Rule.kinds (α := α)) (Rule.detect (α := α)) stx
+  return Rule.postProcess (α := α) raw
+
+/-- Drop matches whose syntactic range is strictly contained in another match's
+range. Useful as a `postProcess` for rules that emit at every node of a nested
+chain (e.g. `Expr.app` chains) and want only the outermost occurrence. -/
+meta def Rule.dedupContainedRanges (rangeOf : α → Option Lean.Syntax.Range) (input : Array α) : Array α :=
+  let withRanges := input.filterMap fun m => rangeOf m |>.map (m, ·)
+  withRanges.filterMap fun (m, r) =>
+    let strictlyContained := withRanges.any fun (_, r') =>
+      r'.start ≤ r.start ∧ r.stop ≤ r'.stop ∧ (r'.start < r.start ∨ r.stop < r'.stop)
+    if strictlyContained then none else some m
 
 /-- Re-elaborate a command collecting info trees.
 
@@ -202,7 +216,7 @@ meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : Comman
 /-- Build a type-erased test runner for a `Rule` instance. -/
 meta def Rule.buildTestRunner [Rule α] : Rule.TestRunner := fun stx => do
   let fileMap ← getFileMap
-  let results ← Rule.detect (α := α) stx
+  let results ← Rule.detectAll (α := α) stx
   results.flatMapM fun m => do
     let repls ← Rule.replacements (α := α) m
     repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)

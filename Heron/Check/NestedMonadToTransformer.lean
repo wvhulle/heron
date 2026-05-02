@@ -74,13 +74,6 @@ private meta def detectCandidate? : Syntax → Option Candidate
     }
   | _ => none
 
-/-- Find syntactic candidates across the whole syntax tree. -/
-private meta def findCandidates : Syntax → Array Candidate :=
-  Syntax.collectAll fun stx =>
-    match detectCandidate? stx with
-    | some c => #[c]
-    | none => #[]
-
 /-- Check if the outer part of an expression (everything except the last arg) has a Monad instance. -/
 private meta def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   let args := e.getAppArgs
@@ -95,46 +88,34 @@ private meta def outerHasMonadInstance (e : Expr) : MetaM Bool := do
   catch _ =>
     return false
 
-private meta def detectNestedMonadToTransformer (stx : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
-  let candidates := findCandidates stx
-  if candidates.isEmpty then
-    return #[]
+private meta def detectAtNode (stx : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
+  let some cand := detectCandidate? stx | return #[]
   let trees ← collectInfoTrees stx
   let infos := trees.flatMap collectTermInfos
   let deduped := deduplicateTermInfos infos
-  let posMap :=
-    deduped.foldl (init := ({ } : Std.HashMap Nat (ContextInfo × TermInfo))) fun map (ci, ti) =>
-      match ti.stx.getPos? true with
-      | some pos => map.insert pos.byteIdx (ci, ti)
-      | none => map
-  let mut results : Array NestedMonadToTransformerMatch := #[]
-  for cand in candidates do
-    match cand.fullStx.getPos? true with
-    | some pos =>
-      match posMap[pos.byteIdx]? with
-      | some (ci, ti) =>
-        let hasMonad ← runInfoMetaM ci ti.lctx (outerHasMonadInstance ti.expr)
-        if hasMonad then
-          results :=
-            results.push
-              { stx := cand.fullStx
-                transformerName := cand.transformerName
-                outerFn := cand.outerFn
-                outerArgs := cand.outerArgs
-                innerFn := cand.innerFn
-                innerArgs := cand.innerArgs }
-      | none =>
-        pure ()
-    | none =>
-      pure ()
-  return results
+  let some pos := cand.fullStx.getPos? true | return #[]
+  let entry? := deduped.findSome? fun (ci, ti) =>
+    match ti.stx.getPos? true with
+    | some p => if p.byteIdx == pos.byteIdx then some (ci, ti) else none
+    | none => none
+  let some (ci, ti) := entry? | return #[]
+  let hasMonad ← runInfoMetaM ci ti.lctx (outerHasMonadInstance ti.expr)
+  if hasMonad then
+    return #[{ stx := cand.fullStx
+               transformerName := cand.transformerName
+               outerFn := cand.outerFn
+               outerArgs := cand.outerArgs
+               innerFn := cand.innerFn
+               innerArgs := cand.innerArgs }]
+  else return #[]
 
 private meta instance : Check NestedMonadToTransformerMatch
     where
   name := `nestedMonadToTransformer
+  kinds := #[``Term.app]
   severity := .information
   category := .style
-  detect := detectNestedMonadToTransformer
+  detect := detectAtNode
   message := fun m => m! "Consider using `{m.transformerName}` instead of nesting"
   emphasize := fun m => m.stx
   tags := #[]

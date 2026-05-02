@@ -68,23 +68,19 @@ private meta def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Synta
     else none
   go (i + 1)
 
-/-- Find `let s ← get; set \{s with ...}` patterns. -/
-private meta def findGetSetToModify (stx : Syntax) : Array GetSetToModifyMatch :=
-  let doSeqs := Syntax.collectAll (fun s =>
-    if s.isOfKind ``Term.doSeqIndent || s.isOfKind ``Term.doSeqBracketed then #[s]
-    else #[]) stx
-  doSeqs.flatMap fun doSeq =>
-    let elems := getDoElems doSeq
-    (Array.range elems.size).filterMap fun i =>
-      match isGetBinding? elems[i]! with
-      | some (getElem, varName) => findSetForGet elems i getElem varName
-      | none => none
+private meta def detectGetSetToModify (doSeq : Syntax) : Array GetSetToModifyMatch :=
+  let elems := getDoElems doSeq
+  (Array.range elems.size).filterMap fun i =>
+    match isGetBinding? elems[i]! with
+    | some (getElem, varName) => findSetForGet elems i getElem varName
+    | none => none
 
 private meta instance : Check GetSetToModifyMatch where
   name := `getSetToModify
+  kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .warning
   category := .simplification
-  find := findGetSetToModify
+  detect := fun stx => pure (detectGetSetToModify stx)
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
   emphasize := fun m => m.fullRange
   reference := some { topic := "modify", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }

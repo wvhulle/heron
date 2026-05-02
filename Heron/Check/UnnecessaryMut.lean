@@ -22,11 +22,11 @@ private meta def getDoLetVarName? (doLet : Syntax) : Option Name :=
 private meta def hasMut (doLet : Syntax) : Bool :=
   doLet.getKind == ``Term.doLet && !doLet[1]!.getArgs.isEmpty
 
-/-- Get the variable name from a doReassign's letIdDecl. -/
+/-- Get the variable name from a doReassign's letIdDeclNoBinders. -/
 private meta def getReassignVarName? (elem : Syntax) : Option Name :=
   if elem.getKind == ``Term.doReassign then
     let letIdDecl := elem[0]!
-    if letIdDecl.getKind == ``Term.letIdDecl then
+    if letIdDecl.getKind == ``Term.letIdDeclNoBinders then
       let letId := letIdDecl[0]!
       if letId.getKind == ``Term.letId then
         let ident := letId[0]!
@@ -55,35 +55,30 @@ private structure UnnecessaryMutMatch where
   ident : TSyntax `ident
   valStx : TSyntax `term
 
-/-- Find `let mut x := e` where x is never reassigned in the subsequent do-elements. -/
-private meta def findUnnecessaryMuts (stx : Syntax) : Array UnnecessaryMutMatch :=
-  -- Find all do blocks first
-  let doSeqs := Syntax.collectAll (fun s =>
-    if s.getKind == ``Term.doSeqIndent || s.getKind == ``Term.doSeqBracketed then #[s]
-    else #[]) stx  -- collectAll concatenates results; #[] for non-matches is correct
-  doSeqs.flatMap fun doSeq =>
-    let elems := getDoElems doSeq
-    let reassigned := collectReassignedVars elems
-    elems.filterMap fun elem =>
-      if hasMut elem then
-        match getDoLetVarName? elem with
-        | some name =>
-          if !reassigned.contains name then
-            let mutKw := elem[1]![0]!
-            -- Extract ident and value from letIdDecl
-            let letDecl := elem[2]![0]!  -- letIdDecl
-            let ident : TSyntax `ident := ⟨letDecl[0]![0]!⟩
-            let valStx : TSyntax `term := ⟨letDecl[4]!⟩
-            some { doLetStx := elem, mutKeyword := mutKw, ident, valStx }
-          else none
-        | none => none
-      else none
+/-- Detect `let mut x := e` where x is never reassigned in `doSeq`. -/
+private meta def detectUnnecessaryMuts (doSeq : Syntax) : Array UnnecessaryMutMatch :=
+  let elems := getDoElems doSeq
+  let reassigned := collectReassignedVars elems
+  elems.filterMap fun elem =>
+    if hasMut elem then
+      match getDoLetVarName? elem with
+      | some name =>
+        if !reassigned.contains name then
+          let mutKw := elem[1]![0]!
+          let letDecl := elem[2]![0]!
+          let ident : TSyntax `ident := ⟨letDecl[0]![0]!⟩
+          let valStx : TSyntax `term := ⟨letDecl[4]!⟩
+          some { doLetStx := elem, mutKeyword := mutKw, ident, valStx }
+        else none
+      | none => none
+    else none
 
 private meta instance : Check UnnecessaryMutMatch where
   name := `unnecessaryMut
+  kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .warning
   category := .simplification
-  find := findUnnecessaryMuts
+  detect := fun stx => pure (detectUnnecessaryMuts stx)
   message := fun _ => m!"Remove unnecessary `mut`"
   emphasize := fun m => m.mutKeyword
   reference := some { topic := "`let mut`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }

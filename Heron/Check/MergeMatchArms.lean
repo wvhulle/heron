@@ -22,20 +22,18 @@ private meta def pairWithSharedRhs? (prev next : Syntax) : Option MergeMatchArms
     secondAlt := next
   }
 
-private meta def findMergeMatchArms : Syntax → Array MergeMatchArmsMatch :=
-  Syntax.collectAll fun
-    |
-    `(match $_:term with
-        $alts:matchAlt*) =>
+private meta instance : Check MergeMatchArmsMatch where
+  name := `mergeMatchArms
+  kinds := #[``Term.match]
+  severity := .information
+  category := .simplification
+  detect := fun stx => pure <|
+    match stx with
+    | `(match $_:term with
+          $alts:matchAlt*) =>
       let l := (alts.map (·.raw)).toList
       ((l.zip l.tail).filterMap fun (a, b) => pairWithSharedRhs? a b).toArray
     | _ => #[]
-
-private meta instance : Check MergeMatchArmsMatch where
-  name := `mergeMatchArms
-  severity := .information
-  category := .simplification
-  detect := fun stx => return findMergeMatchArms stx
   message := fun _ => m!"Merge match arms with identical right-hand sides"
   emphasize := fun m => m.fullRange
   tags := #[.unnecessary]

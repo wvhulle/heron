@@ -27,20 +27,19 @@ private meta partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideP
         return n + m
     | _ => some 0
 
-private meta def findFunToCdot : Syntax → Array FunToCdotMatch :=
-  Syntax.collectAll fun
-    | stx@`(fun $x:ident => $body) =>
+private meta instance : Check FunToCdotMatch where
+  name := `funToCdot
+  kinds := #[``Term.fun]
+  severity := .information
+  category := .simplification
+  detect := fun stx => pure <|
+    match stx with
+    | `(fun $x:ident => $body) =>
       if body.raw.isIdent then #[]
       else match cdotEligibleCount x.getId body with
         | some 1 => #[{ funStx := stx, body, paramName := x.getId }]
         | _ => #[]
     | _ => #[]
-
-private meta instance : Check FunToCdotMatch where
-  name := `funToCdot
-  severity := .information
-  category := .simplification
-  find := findFunToCdot
   message := fun _ => m!"Use `·` (term-level hole) instead of explicit lambda"
   emphasize := fun m => m.funStx
   reference :=

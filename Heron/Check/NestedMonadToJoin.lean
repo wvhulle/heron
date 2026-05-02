@@ -9,11 +9,14 @@ private structure NestedMonadToJoinMatch where
   inner : Syntax
   monadName : String
 
-/-- Detect `m (m α …)` patterns where the outer and inner constructor match.
-For multi-arg constructors like `Except ε`, also verifies the leading args match. -/
-private meta def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch :=
-  Syntax.collectAll fun
-    | stx@`($fn $args*) =>
+private meta instance : Check NestedMonadToJoinMatch where
+  name := `nestedMonadToJoin
+  kinds := #[``Term.app]
+  severity := .warning
+  category := .simplification
+  detect := fun stx => pure <|
+    match stx with
+    | `($fn $args*) =>
       if !fn.raw.isIdent || args.size == 0 then #[]
       else
         let outerName := reprintTrimmed fn
@@ -31,12 +34,6 @@ private meta def findNestedMonadToJoin : Syntax → Array NestedMonadToJoinMatch
               #[{ outerStx := stx, inner, monadName := outerName }]
         | _ => #[]
     | _ => #[]
-
-private meta instance : Check NestedMonadToJoinMatch where
-  name := `nestedMonadToJoin
-  severity := .warning
-  category := .simplification
-  find := findNestedMonadToJoin
   message := fun m => m! "Nested `{m.monadName}` can be flattened with `join`"
   emphasize := fun m => m.outerStx
   tags := #[.unnecessary]

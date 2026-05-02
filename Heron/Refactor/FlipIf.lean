@@ -10,18 +10,17 @@ private structure FlipIfMatch where
   thenBranch : Syntax
   elseBranch : Syntax
 
-private meta def findFlipIfCandidates : Syntax → Array FlipIfMatch :=
-  Syntax.collectAll fun
+private meta instance : Refactor FlipIfMatch where
+  name := `flipIf
+  kinds := #[``termIfThenElse]
+  detect := fun stx => pure <|
+    match stx with
     | `(if $cond then $thenBr else $elseBr) =>
       match cond with
       | `(!$inner) => #[{ negCondStx := cond, innerCond := inner,
                            thenBranch := thenBr, elseBranch := elseBr }]
       | _ => #[]
     | _ => #[]
-
-private meta instance : Refactor FlipIfMatch where
-  name := `flipIf
-  find := findFlipIfCandidates
   message := fun _ => m!"Flip `if` branches"
   replacements := fun m => return #[
     { emphasizedSyntax := m.negCondStx

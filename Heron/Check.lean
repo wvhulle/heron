@@ -2,24 +2,10 @@ module
 
 public meta import Heron.Rule
 public meta import Lean.Server.CodeActions.Basic
-meta import Lean.Elab.Term.TermElabM
 
 public section
 
 open Lean Elab Command Meta
-
-open Lean Elab Term Meta in
-/-- Try to set a struct field that may only exist in a fork of Lean.
-Elaborates `{ msg with field := val }`; returns `msg` unchanged on standard Lean. -/
-elab "tryStructUpdate(" msg:term ", " field:ident ", " val:term ")" : term => do
-  let msgExpr ← elabTerm msg none
-  let msgType ← whnf (← inferType msgExpr)
-  let structName := msgType.getAppFn.constName?.getD .anonymous
-  let env ← getEnv
-  if isStructure env structName && (getStructureFields env structName).contains field.getId then
-    elabTerm (← `({ $msg with $field:ident := $val })) none
-  else
-    return msgExpr
 
 namespace Heron
 
@@ -70,14 +56,6 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Cate
   let fileMap ← getFileMap
   let msgData ← addMessageContext taggedMsg
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
-  let msg : Message :=
-    { fileName := ← getFileName
-      pos := fileMap.toPosition pos
-      endPos := fileMap.toPosition endPos
-      keepFullRange := true
-      data := msgData
-      severity }
-  let msg := tryStructUpdate(msg, diagnosticTags, tags)
   let shortFmt ← liftCoreM message.format
   let editsArr ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
   let edits := Json.arr (editsArr.map toJson)
@@ -91,26 +69,109 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Cate
       [("title", .str shortFmt.pretty), ("edits", edits), ("hoverTitle", .str shortFmt.pretty),
         ("hoverTags", Json.arr #[toJson (toString category)]),
         ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))]
-  let msg := tryStructUpdate(msg, diagnosticData?, some data.compress)
+  let msg : Message :=
+    { fileName := ← getFileName
+      pos := fileMap.toPosition pos
+      endPos := fileMap.toPosition endPos
+      keepFullRange := true
+      data := msgData
+      severity
+      diagnosticTags := tags
+      diagnosticData? := some data.compress }
   logMessage msg
 
-meta def Check.toLinter [Check α] : Linter where
-  name := Rule.name (α := α)
-  run :=
-    withSetOptionIn fun stx =>
-      Rule.runIfEnabled (α := α) stx fun m => do
-        let repls ← Rule.replacements m
-        emitCheck (node := emphasize m) (severity := Check.severity (α := α)) (category := Check.category (α := α))
-            (tags := Check.tags (α := α)) (ruleName := Rule.name (α := α))
-            (optName := (Rule.linterOption (α := α)).name) (message := Rule.message m)
-            (explanation := Check.explanation m) (repls := repls) (reference := Check.reference (α := α))
+/-- A live, per-command handler instance for one rule. The master linter builds
+one of these per enabled rule per command, calls `visit` at every node whose
+kind matches the rule, then calls `emit` once at the end. -/
+structure RuleHandler where
+  /-- Syntax kinds at which `visit` should be invoked. -/
+  kinds : Array SyntaxNodeKind
+  /-- Called once per matching node during the master walk; accumulates matches
+  in handler-private state. -/
+  visit : Syntax → CommandElabM Unit
+  /-- Called once after the walk; applies the rule's `postProcess` and emits one
+  diagnostic per surviving match. -/
+  emit : CommandElabM Unit
 
-/-- Register a `Check` instance: linter option, linter, and test runner.
-Called from `meta initialize` in each rule file. -/
+/-- A type-erased registration. The registry stores `setup` thunks that build a
+fresh `RuleHandler` for each command (each handler owns its own match-collection
+state via `IO.Ref`). -/
+structure RuleEntry where
+  name : Name
+  isEnabled : Options → Bool
+  setup : CommandElabM RuleHandler
+
+meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
+
+/-- Build a fresh `RuleHandler` for one `Check` rule for one command. -/
+private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
+  let ref ← IO.mkRef (#[] : Array α)
+  let name := Rule.name (α := α)
+  let profiling := Heron.isProfilingEnabled (← getOptions)
+  let walkStart ← IO.monoNanosNow
+  return {
+    kinds := Rule.kinds (α := α)
+    visit := fun node => do
+      let found ← Rule.detect (α := α) node
+      if !found.isEmpty then ref.modify (· ++ found)
+    emit := do
+      let raw ← ref.get
+      let detectEnd ← IO.monoNanosNow
+      let processed := Rule.postProcess (α := α) raw
+      for m in processed do
+        let repls ← Rule.replacements (α := α) m
+        emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
+            (category := Check.category (α := α)) (tags := Check.tags (α := α))
+            (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
+            (message := Rule.message m) (explanation := Check.explanation m)
+            (repls := repls) (reference := Check.reference (α := α))
+      let emitEnd ← IO.monoNanosNow
+      if profiling then
+        Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) processed.size
+  }
+
+/-- Walk `stx` once, dispatching each node to every handler that registered for
+its kind. -/
+private meta partial def walkDispatch
+    (table : Std.HashMap SyntaxNodeKind (Array (Syntax → CommandElabM Unit))) (stx : Syntax) :
+    CommandElabM Unit := do
+  if let some hs := table[stx.getKind]? then
+    for h in hs do h stx
+  for c in stx.getArgs do walkDispatch table c
+
+/-- Build the kind→handlers dispatch table from a list of live handlers. -/
+private meta def buildDispatchTable (handlers : Array RuleHandler) :
+    Std.HashMap SyntaxNodeKind (Array (Syntax → CommandElabM Unit)) :=
+  handlers.foldl (init := {}) fun tbl h =>
+    h.kinds.foldl (init := tbl) fun tbl k =>
+      tbl.insert k ((tbl[k]?.getD #[]).push h.visit)
+
+/-- The single linter Heron registers with Lean. It activates every enabled
+rule, builds one handler per rule, walks the command syntax once via kind-keyed
+dispatch, then runs each handler's emit phase. -/
+meta def heronMasterLinter : Linter where
+  name := `heron
+  run := withSetOptionIn fun stx => do
+    if Heron.isReelaboratingGuardSet (← getOptions) then return
+    let opts ← getOptions
+    let entries ← heronRuleRegistry.get
+    let active := entries.filter (·.isEnabled opts)
+    if active.isEmpty then return
+    let handlers ← active.mapM (·.setup)
+    walkDispatch (buildDispatchTable handlers) stx
+    for h in handlers do h.emit
+
+meta initialize lintersRef.modify (·.push heronMasterLinter)
+
+/-- Register a `Check` instance: linter option, registry entry, and test runner. -/
 meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
   Rule.registerLinterOption name
-  lintersRef.modify fun ls => (ls.filter (·.name != name)).push (Check.toLinter (α := α))
+  heronRuleRegistry.modify fun reg =>
+    (reg.filter (·.name != name)).push
+      { name
+        isEnabled := Rule.isEnabled (α := α)
+        setup := Check.makeHandler (α := α) }
   Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
 
 open Server RequestM Lsp in

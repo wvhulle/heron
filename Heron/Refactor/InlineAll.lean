@@ -78,6 +78,7 @@ private meta def detectInlineAllConst (stx : Syntax) : CommandElabM (Array Inlin
 
 private meta instance : Refactor InlineAllConstMatch where
   name := `inlineAllConst
+  kinds := #[``Lean.Parser.Command.declaration]
   detect := detectInlineAllConst
   message := fun m => m! "Inline all {m.usageReplacements.size } usages of '{m.constName}'"
   replacements := fun m =>

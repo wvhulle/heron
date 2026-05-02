@@ -73,6 +73,7 @@ private meta def inlineLabel : InlineKind → MessageData
 
 private meta instance : Refactor InlineMatch where
   name := `inline
+  kinds := #[``Lean.Parser.Command.declaration]
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
   replacements := fun m => return #[{

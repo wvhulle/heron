@@ -39,24 +39,18 @@ private meta partial def collectAppChain (stx : Syntax) : Option AppChain := do
   | none =>
     some { innermostFn := fn, args := #[arg] }
 
-/-- Find chains of 2+ nested `Expr.app` / `.app` calls.
-Walk top-down, skip children of matched chains to avoid duplicates. -/
-private meta partial def findExprAppChains (stx : Syntax) : Array ExprAppChainToMkAppNMatch :=
-  match collectAppChain stx with
-  | some { innermostFn, args } =>
-    if args.size >= 2 then
-      let fnResults := findExprAppChains innermostFn
-      let argResults := args.flatMap findExprAppChains
-      #[{ fullStx := stx, fn := innermostFn, args }] ++ fnResults ++ argResults
-    else stx.getArgs.flatMap findExprAppChains
-  | none => stx.getArgs.flatMap findExprAppChains
-
 private meta instance : Check ExprAppChainToMkAppNMatch
     where
   name := `exprAppChainToMkAppN
+  kinds := #[``Term.app]
   severity := .information
   category := .simplification
-  find := findExprAppChains
+  detect := fun stx => pure <|
+    match collectAppChain stx with
+    | some { innermostFn, args } =>
+      if args.size >= 2 then #[{ fullStx := stx, fn := innermostFn, args }] else #[]
+    | none => #[]
+  postProcess := Rule.dedupContainedRanges (fun m => m.fullStx.getRange?)
   message := fun _ => m!"Use `mkAppN` instead of nested `Expr.app`"
   emphasize := fun m => m.fullStx
   reference :=

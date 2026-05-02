@@ -16,22 +16,18 @@ private meta def isNegation? : Syntax → Option Syntax
   | `(Not $inner) => some inner
   | _ => none
 
-/-- Find `if not cond then body` (no else) in do-blocks. -/
-private meta def detectIfNotToUnless : Syntax → Array IfNotToUnlessMatch
-  | s@`(doElem| if $cond then $thenBody) =>
-    match isNegation? cond with
-    | some inner => #[{ ifStx := s, innerCond := inner, thenBody }]
-    | none => #[]
-  | _ => #[]
-
-private meta def findIfNotToUnless (stx : Syntax) : Array IfNotToUnlessMatch :=
-  Syntax.collectAll detectIfNotToUnless stx
-
 private meta instance : Check IfNotToUnlessMatch where
   name := `ifNotToUnless
+  kinds := #[``Term.doIf]
   severity := .information
   category := .simplification
-  find := findIfNotToUnless
+  detect := fun stx => pure <|
+    match stx with
+    | s@`(doElem| if $cond then $thenBody) =>
+      match isNegation? cond with
+      | some inner => #[{ ifStx := s, innerCond := inner, thenBody }]
+      | none => #[]
+    | _ => #[]
   message := fun _ => m!"Use `unless` instead of `if not`"
   emphasize := fun m => m.ifStx
   reference := some { topic := "unless", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html" }

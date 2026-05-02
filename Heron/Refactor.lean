@@ -39,7 +39,7 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
               | .ok r => m!"{name} detect: {r.size} match(es)"
               | .error e => m!"{name} detect: error {e.toMessageData}")
             (tag := s!"{name}.detect") do
-          let detected ← Rule.detect (α := α) snap.stx
+          let detected ← Rule.detectAll (α := α) snap.stx
           detected.mapM fun m => do
             let repls ← Rule.replacements (α := α) m
             let fileMap ← getFileMap

@@ -15,8 +15,9 @@ private structure MergeIntrosMatch where
   fullRange : Syntax
   allIntros : Array Syntax
 
-private meta def introIdents : Syntax → Array Syntax :=
-  Syntax.collectAll fun stx => if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
+private meta partial def introIdents : Syntax → Array Syntax := fun stx =>
+  let here := if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
+  here ++ stx.getArgs.flatMap introIdents
 
 /-- Collect tactic child nodes from the argument array of a `sepByIndent`
 tactic sequence. In that layout, element/separator positions alternate starting
@@ -39,9 +40,8 @@ private meta def introRunsIn (tactics : Array Syntax) : Array (Array Syntax) := 
   if current.size ≥ 2 then runs := runs.push current
   runs
 
-/-- Walk syntax tree, collecting mergeable runs of consecutive `intro` tactics
-from each tactic sequence encountered. -/
-private meta partial def detectIntros (stx : Syntax) : Array MergeIntrosMatch := Id.run do
+/-- Detect mergeable runs in a single tactic sequence node. -/
+private meta def detectIntrosAt (stx : Syntax) : Array MergeIntrosMatch := Id.run do
   let mut found : Array MergeIntrosMatch := #[]
   let k := stx.getKind
   let seqArgs : Option (Array Syntax) :=
@@ -52,15 +52,14 @@ private meta partial def detectIntros (stx : Syntax) : Array MergeIntrosMatch :=
     for run in introRunsIn (tacticsOf args) do
       if let some fullRange := mkSpan run[0]! run.back! then
         found := found.push { secondIntro := run[1]!, fullRange, allIntros := run }
-  for child in stx.getArgs do
-    found := found ++ detectIntros child
   return found
 
 private meta instance : Check MergeIntrosMatch where
   name := `mergeIntros
+  kinds := #[``Lean.Parser.Tactic.tacticSeq1Indented, ``Lean.Parser.Tactic.tacticSeqBracketed]
   severity := .warning
   category := .simplification
-  find := detectIntros
+  detect := fun stx => pure (detectIntrosAt stx)
   message := fun _ => m!"Merge intros"
   emphasize := fun m => m.secondIntro
   tags := #[.unnecessary]
