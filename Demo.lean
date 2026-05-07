@@ -25,8 +25,7 @@ example : Nat :=
   add1 7
 
 example : Nat :=
-  add1 3 +
-    add1 5
+  add1 3 + add1 5
 
 end Inlining
 
@@ -57,8 +56,7 @@ section MonadicIfNot
 
 example : IO Unit := do
   if !true then
-    IO.println
-      "hello"
+    IO.println "hello"
 
 end MonadicIfNot
 
@@ -95,8 +93,7 @@ section BooleanMatch
 def boolToNat (b : Bool) : Nat :=
   match b with
   | true => 1
-  | false =>
-    0
+  | false => 0
 
 end BooleanMatch
 
@@ -109,8 +106,7 @@ def mergeArmsDemo (n : Nat) : Nat :=
   | 0 => 1
   | 1 => 0
   | 2 => 0
-  | _ =>
-    99
+  | _ => 99
 
 end MatchArmsWithSharedBody
 
@@ -119,8 +115,7 @@ section OptionMatch
 def fromOption (x : Option Nat) : Nat :=
   match x with
   | some v => v
-  | _ =>
-    0
+  | _ => 0
 
 end OptionMatch
 
@@ -135,9 +130,7 @@ end TupleDiscriminant
 section MonadicBind
 
 def bindDemo :=
-  Option.some 1 >>= fun x =>
-    Option.some
-      (x + 1)
+  Option.some 1 >>= fun x => Option.some (x + 1)
 
 end MonadicBind
 
@@ -145,8 +138,7 @@ section LetWildcardArrow
 
 example : IO Unit := do
   let _ ← IO.println "hello"
-  pure
-      ()
+  pure ()
 
 end LetWildcardArrow
 
@@ -156,8 +148,7 @@ example : IO Unit := do
   if true then
     IO.println "done"
   else
-    pure
-        ()
+    pure ()
 
 end IfElsePure
 
@@ -168,8 +159,7 @@ private structure DemoState where
 
 def increment : StateM DemoState Unit := do
   let s ← get
-  set
-      { s with count := s.count + 1 }
+  set { s with count := s.count + 1 }
 
 end StateGetSet
 
