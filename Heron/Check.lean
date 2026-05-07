@@ -45,39 +45,47 @@ class Check (α : Type) extends Rule α where
   /-- Optional reference rendered as a markdown link in the hover popup. -/
   reference : Option Reference := none
 
-/-- Emit a check diagnostic with an associated quick-fix code action. -/
-meta def emitCheck (node : Syntax) (severity : MessageSeverity) (category : Category) (tags : Array Lsp.DiagnosticTag)
+/-- Wrap `MessageData` with the upstream tag names that
+`Lean.Widget.InteractiveDiagnostic` recognises and translates into LSP
+`DiagnosticTag`s. This lets Heron emit `unnecessary`/`deprecated` tags via
+stock Lean message infrastructure, with no patch to `Lean.Message`. -/
+meta def applyDiagnosticTags (tags : Array Lsp.DiagnosticTag) (msg : MessageData) : MessageData :=
+  tags.foldl (init := msg) fun acc tag =>
+    match tag with
+    -- Tag names recognised by `Lean.Widget.InteractiveDiagnostic`:
+    -- the option name `Lean.Linter.linter.unusedVariables` → LSP `unnecessary`,
+    -- the attribute `Lean.Linter.deprecatedAttr` → LSP `deprecated`.
+    | .unnecessary => MessageData.tagged `Lean.Linter.linter.unusedVariables acc
+    | .deprecated  => MessageData.tagged `Lean.Linter.deprecatedAttr acc
+
+/-- Emit a check diagnostic. The associated quick-fix is produced by
+`heronCheckFixProvider` via re-detection at LSP request time, so this function
+no longer needs to embed edits in `Diagnostic.data?`. -/
+meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
     (reference : Option Reference := none) : CommandElabM Unit := do
-  let taggedMsg := message.tagWithErrorName ruleName
+  let bodyParts : Array MessageData :=
+    (#[explanation] : Array MessageData)
+      |>.append (match reference with
+        | some ref => (#[m!"\n\nLean Reference ({ref.topic}): *{ref.url}*"] : Array MessageData)
+        | none => #[])
+      |>.push m!"\n\nDisable with `set_option {optName} false`"
+  let composedMsg := bodyParts.foldl (init := message) fun acc part => acc ++ part
+  let taggedMsg := (applyDiagnosticTags tags composedMsg).tagWithErrorName ruleName
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
   let msgData ← addMessageContext taggedMsg
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
-  let shortFmt ← liftCoreM message.format
-  let editsArr ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
-  let edits := Json.arr (editsArr.map toJson)
   trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
-  let longFmt ← liftCoreM explanation.format
-  let bodyParts := #[longFmt.pretty].filter (!·.isEmpty)
-    |>.append (match reference with | some ref => #[s!"Lean Reference ({ref.topic}): *{ref.url}*"] | none => #[])
-    |>.push s!"Disable with `set_option {optName} false`"
-  let data :=
-    Lean.Json.mkObj
-      [("title", .str shortFmt.pretty), ("edits", edits), ("hoverTitle", .str shortFmt.pretty),
-        ("hoverTags", Json.arr #[toJson (toString category)]),
-        ("hoverBody", .str ("\n\n".intercalate bodyParts.toList))]
   let msg : Message :=
     { fileName := ← getFileName
       pos := fileMap.toPosition pos
       endPos := fileMap.toPosition endPos
       keepFullRange := true
       data := msgData
-      severity
-      diagnosticTags := tags
-      diagnosticData? := some data.compress }
+      severity }
   logMessage msg
 
 /-- A live, per-command handler instance for one rule. The master linter builds
@@ -94,11 +102,16 @@ structure RuleHandler where
 
 /-- A type-erased registration. The registry stores `setup` thunks that build a
 fresh `RuleHandler` for each command (each handler owns its own match-collection
-state via `IO.Ref`). -/
+state via `IO.Ref`), plus a `findActions` thunk used by the code-action provider
+to re-detect matches at request time. -/
 structure RuleEntry where
   name : Name
   isEnabled : Options → Bool
   setup : CommandElabM RuleHandler
+  /-- Re-run detection over the given command syntax and return one
+  `(title, replacements)` per match. Used by `heronCheckFixProvider` to build
+  quick-fix code actions without embedding edits in diagnostics. -/
+  findActions : Syntax → CommandElabM (Array (MessageData × Array Replacement))
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 
@@ -135,7 +148,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
       for m in collected do
         let repls ← Rule.replacements (α := α) m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
-            (category := Check.category (α := α)) (tags := Check.tags (α := α))
+            (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
             (message := Rule.message m) (explanation := Check.explanation m)
             (repls := repls) (reference := Check.reference (α := α))
@@ -180,6 +193,16 @@ meta def heronMasterLinter : Linter where
 
 meta initialize lintersRef.modify (·.push heronMasterLinter)
 
+/-- Re-run a `Check` rule's detection over `stx` and pair every match with its
+displayable title and computed replacements. This is the read-only twin of
+`Check.makeHandler`'s emit phase, used by the code-action provider. -/
+private meta def Check.findActions [Check α] (stx : Syntax) :
+    CommandElabM (Array (MessageData × Array Replacement)) := do
+  let detected ← Rule.detectAll (α := α) stx
+  detected.mapM fun m => do
+    let repls ← Rule.replacements (α := α) m
+    return (Rule.message (α := α) m, repls)
+
 /-- Register a `Check` instance: linter option, registry entry, and test runner. -/
 meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
@@ -188,21 +211,48 @@ meta def Check.register [Check α] : IO Unit := do
     (reg.filter (·.name != name)).push
       { name
         isEnabled := Rule.isEnabled (α := α)
-        setup := Check.makeHandler (α := α) }
+        setup := Check.makeHandler (α := α)
+        findActions := Check.findActions (α := α) }
   Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
 @[code_action_provider]
-meta def heronCheckFixProvider : CodeActionProvider := fun params _snap => do
+meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
   let doc ← readDoc
-  params.context.diagnostics.filterMapM fun diag => do
-    let some data := diag.data? | return none
-    let some title := data.getObjValAs? String "title" |>.toOption | return none
-    let some edits := data.getObjValAs? (Array TextEdit) "edits" |>.toOption | return none
-    let fullAction : CodeAction :=
+  let text := doc.meta.text
+  let startPos := text.lspPosToUtf8Pos params.range.start
+  let endPos := text.lspPosToUtf8Pos params.range.end
+  let allEntries ← heronRuleRegistry.get
+  let collect : CommandElabM (Array (MessageData × Array Replacement × Array TextEdit)) := do
+    let fileMap ← getFileMap
+    let opts ← getOptions
+    let entries := allEntries.filter (·.isEnabled opts)
+    entries.flatMapM fun entry => do
+      let detected ← entry.findActions snap.stx
+      detected.mapM fun (msg, repls) => do
+        let edits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        return (msg, repls, edits)
+  let results ← runCommandElabM snap collect
+  let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with
+    | some range => range.start ≤ endPos && startPos ≤ range.stop
+    | none => false
+  let rangeMatches (r : Replacement) (diag : Diagnostic) : Bool :=
+    match r.emphasizedSyntax.getRange? with
+    | some range =>
+      let lspRange := text.utf8RangeToLspRange range
+      lspRange.start == diag.range.start && lspRange.end == diag.range.end
+    | none => false
+  results.filterMapM fun (msg, repls, edits) => do
+    unless repls.any overlaps do return none
+    if edits.isEmpty then return none
+    let title := (← msg.format).pretty
+    let diagnostics? :=
+      let matched := params.context.diagnostics.filter fun d => repls.any (rangeMatches · d)
+      if matched.isEmpty then none else some matched
+    let full : CodeAction :=
       { title, kind? := "quickfix"
         edit? := some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits }
-        diagnostics? := some #[diag] }
-    return some { eager := { fullAction with edit? := none }, lazy? := some (pure fullAction) }
+        diagnostics? }
+    return some { eager := { full with edit? := none }, lazy? := some (pure full) }
 
 end Heron
