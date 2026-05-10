@@ -53,7 +53,7 @@ private meta def detectCandidate? : Syntax → Option Candidate
     let inner ← match outerArgs[outerArgs.size - 1]! with
       | `(($inner)) => some inner
       | _ => none
-    let (innerFn, innerArgs) ← match inner with
+    let (innerFn, _) ← match inner with
       | `($fn $args*) => some (fn, args)
       | _ => none
     guard innerFn.raw.isIdent

@@ -3,6 +3,8 @@ module
 meta import Heron.Assert
 meta import Heron.Check.FunToCdot
 
+set_option linter.unusedVariables false
+
 -- Ignore: parameter used more than once
 #assertIgnore funToCdot in
   def h :=

@@ -26,7 +26,7 @@ private meta instance : Check UnusedImportMatch where
   message := fun m => m!"Unused import `{m.moduleName}`"
   emphasize := fun m => m.importStx
   tags := #[.unnecessary]
-  explanation := fun m =>
+  explanation := fun _ =>
     m!"This import does not contribute any constants or elaboration dependencies used in this file."
   replacements := fun m => do
     return #[{
