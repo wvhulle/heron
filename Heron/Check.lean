@@ -92,6 +92,33 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Ls
       relatedInformation? := if relatedInformation.isEmpty then none else some relatedInformation }
   logMessage msg
 
+/-- Emit one `.information`-severity diagnostic per label so that LSP clients
+that don't render `relatedInformation` (notably Helix) still surface the label
+text inline at the labelled span. The label's range is excluded if it would
+overlap or duplicate an existing replacement's `oldSyntax` range — those are
+already underlined by the primary diagnostic, so an extra hint there is noise.
+
+This mirrors `nu-lint`'s `extra_labels_to_hint_diagnostics`. -/
+private meta def emitLabelHints (ruleName : Name) (primaryRange? : Option Syntax.Range)
+    (replacementRanges : Array Syntax.Range) (labels : Array Label) : CommandElabM Unit := do
+  let fileMap ← getFileMap
+  let mut seen : Array Syntax.Range := primaryRange?.toArray ++ replacementRanges
+  for l in labels do
+    let some range := l.span.getRange? | continue
+    if seen.any fun r => r.start = range.start ∧ r.stop = range.stop then continue
+    seen := seen.push range
+    let pos := fileMap.toPosition range.start
+    let endPos := fileMap.toPosition range.stop
+    let labelData ← addMessageContext ((l.text).tagWithErrorName ruleName)
+    logMessage {
+      fileName := ← getFileName
+      pos
+      endPos
+      keepFullRange := true
+      data := labelData
+      severity := .information
+    }
+
 /-- A live, per-command handler instance for one rule. The master linter builds
 one of these per enabled rule per command, calls `visit` at every node whose
 kind matches the rule, then calls `emit` once at the end. -/
@@ -160,6 +187,11 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
             (message := Rule.message m) (explanation := Check.explanation m)
             (repls := repls) (relatedInformation := related)
             (reference := Check.reference (α := α))
+        let primaryRange? := (Check.emphasize m).getRange?
+        let replacementRanges := repls.filterMap (·.oldSyntax.getRange?)
+        let extraLabels ← Rule.labels (α := α) m
+        let allLabels := repls.map (·.toLabel) ++ extraLabels
+        emitLabelHints name primaryRange? replacementRanges allLabels
       let emitEnd ← IO.monoNanosNow
       if profiling then
         Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) collected.size
