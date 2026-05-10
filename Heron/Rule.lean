@@ -187,6 +187,32 @@ meta def deduplicateTermInfos (infos : Array (ContextInfo × TermInfo)) : Array 
 meta def runInfoMetaM (ci : ContextInfo) (lctx : LocalContext) (x : MetaM α) : CommandElabM α := do
   IO.ofExcept (← (ci.runMetaM lctx x).toBaseIO)
 
+/-- Resolve `stx` to its elaborated `Expr` and run `f` in that `MetaM`
+context. Returns `none` if no `TermInfo` is found at `stx`'s start position.
+The most-applied `TermInfo` per position wins (see `deduplicateTermInfos`). -/
+meta def runMetaMForSyntax (stx : Syntax) (f : Expr → MetaM α) :
+    CommandElabM (Option α) := do
+  let some pos := stx.getPos? true | return none
+  let trees ← collectInfoTrees stx
+  let deduped := deduplicateTermInfos (trees.flatMap collectTermInfos)
+  let some (ci, ti) := deduped.find? fun (_, ti) =>
+    ti.stx.getPos? true |>.any (·.byteIdx == pos.byteIdx) | return none
+  some <$> runInfoMetaM ci ti.lctx (f ti.expr)
+
+/-- Check if the outer part of a fully-applied expression — everything except
+the last argument — has a `Monad` instance. Used by transformer-detection rules
+to confirm `f a₁ … aₙ (Wrapped α)` has `f a₁ … aₙ` actually being a monad. -/
+meta def outerHasMonadInstance (e : Expr) : MetaM Bool := do
+  let args := e.getAppArgs
+  if args.size == 0 then return false
+  let outerMonad := mkAppN e.getAppFn args.pop
+  try
+    let u ← mkFreshLevelMVar
+    let v ← mkFreshLevelMVar
+    let monadType := mkAppN (mkConst ``Monad [u, v]) #[outerMonad]
+    return (← synthInstance? monadType).isSome
+  catch _ => return false
+
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
