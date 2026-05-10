@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
 

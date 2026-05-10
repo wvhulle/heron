@@ -298,7 +298,7 @@ where
     --   (1) Direct hit: `j ∈ deps` — something in the file needs `I` itself.
     --   (2) Unique cover: `reach(I)` contains some need in `deps` that no
     --       other direct import (or auto-`Init`) reaches. This handles
-    --       umbrella imports like `Heron.Rules` that cover rule-source
+    --       umbrella imports like `Heron.Registry` that cover rule-source
     --       modules (`Heron.Check.*`) the consumer never references directly.
     --   (3) `imp.importAll` — the user explicitly opted into full re-export.
     let flatReach (j : Nat) : Std.HashSet Nat :=

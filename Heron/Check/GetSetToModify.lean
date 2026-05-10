@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
 
@@ -18,12 +19,13 @@ private structure GetSetToModifyMatch where
   structInst : Syntax
 
 /-- Check if a do-element is `let <name> ← get`. -/
-private meta def isGetBinding? : Syntax → Option (Syntax × Syntax)
+private meta def isGetBinding? : TSyntax `doElem → Option (TSyntax `doElem × TSyntax `ident)
   | elem@`(doElem| let $x ← get) => some (elem, x)
   | _ => none
 
 /-- Check if a do-element is `set { <name> with ... }`. -/
-private meta def isSetWithStructUpdate? (elem : Syntax) (varName : Name) : Option (Syntax × Syntax) :=
+private meta def isSetWithStructUpdate? (elem : TSyntax `doElem) (varName : Name) :
+    Option (TSyntax `doElem × TSyntax `Lean.Parser.Term.structInst) :=
   match elem with
   | `(doElem| set $upd:structInst) =>
     match upd with
@@ -42,7 +44,8 @@ private meta partial def containsName (varName : Name) (stx : Syntax) : Bool :=
     stx.getArgs.any (containsName varName)
 
 /-- For a given get-binding at index `i`, find the matching set call. -/
-private meta def findSetForGet (elems : Array Syntax) (i : Nat) (getElem : Syntax) (varNameStx : Syntax)
+private meta def findSetForGet (elems : Array (TSyntax `doElem)) (i : Nat)
+    (getElem : TSyntax `doElem) (varNameStx : TSyntax `ident)
     : Option GetSetToModifyMatch :=
   let varName := varNameStx.getId
   let rec go (j : Nat) : Option GetSetToModifyMatch :=

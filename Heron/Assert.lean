@@ -8,7 +8,8 @@ public meta import Lean.Elab.Command
 -- `public` required: referenced (via a private helper) by public
 -- `@[command_elab]` elaborators. The module system checks transitively
 -- through private helpers.
-public meta import Heron.TestRunner
+public meta import Heron.Rule
+public meta import Heron.Lsp
 public meta import Heron.ImportAnalysis
 -- Private: only used by the elaborator-internal helper `elabAssertResult` for
 -- `Syntax.getQuotContent`, which is available without re-exporting.
@@ -25,14 +26,16 @@ private meta def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
     withReader ({ · with snap? := none }) do
       try elabCommand cmd catch _ => pure ()
 
-/-- Collect all `TextEdit`s produced by a rule for a command.
+/-- Run a rule against a command for testing.
 
 Looks up the rule's runner by name and calls it directly — the same
 `Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?` path
-used by the code action providers. -/
-private meta def collectReplacements (cmd : Syntax) (linterName : Name)
-    : CommandElabM (Array Lsp.TextEdit) := do
-  let runners ← Rule.testRunnerRegistry.get
+used by the code action providers. Returns both the detection count and
+the resulting text edits so callers can distinguish "rule did not fire"
+from "rule fired but produced no automatic fix". -/
+private meta def runRule (cmd : Syntax) (linterName : Name)
+    : CommandElabM RunResult := do
+  let runners ← testRunnerRegistry.get
   let some runner := runners[linterName]? | do
     throwError "no rule runner registered for '{linterName}'"
   -- Elaborate the command so that rules needing info trees can find them.
@@ -41,9 +44,9 @@ private meta def collectReplacements (cmd : Syntax) (linterName : Name)
     let savedMessages := (← get).messages
     withoutModifyingEnv do
       elabCommandSilently cmd
-      let edits ← runner cmd
+      let result ← runner cmd
       modify fun s => { s with messages := savedMessages }
-      pure edits
+      pure result
 
 /-- Apply an array of non-overlapping LSP `TextEdit`s to a source string.
 
@@ -62,13 +65,21 @@ private meta def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : Stri
     let post := String.Pos.Raw.extract src endPos src.rawEndPos
     pre ++ edit.newText ++ post
 
-/-- Verify that applying all edits from a rule to `cmd` produces the text in
-the `expected` quotation. -/
+/-- Verify that a rule fires on `cmd`, optionally checking that applying all
+its edits produces the text in `expectedQuot?`. When `expectedQuot?` is
+`none`, the assertion is satisfied as long as `Rule.detect` produced at
+least one match — used for warning-only rules with no automatic fix. -/
 private meta def elabAssertResult (linterName : Ident) (cmd : Syntax)
-    (expectedQuot : Syntax) (stx : Syntax) : CommandElabM Unit := do
-  let edits ← collectReplacements cmd linterName.getId
+    (expectedQuot? : Option Syntax) (stx : Syntax) : CommandElabM Unit := do
+  let { matchCount, edits } ← runRule cmd linterName.getId
+  if matchCount == 0 then
+    logErrorAt stx m!"{linterName} did not fire on this command"
+    return
+  let some expectedQuot := expectedQuot? | return
   if edits.isEmpty then
-    logWarningAt stx m!"expected replacements but got none"
+    logErrorAt stx
+      m!"{linterName} fired but produced no replacements; drop `becomes` or \
+         add a `replacements` implementation"
     return
   let text ← getFileMap
   let some cmdRange := cmd.getRange? | do
@@ -106,7 +117,7 @@ private meta def recordAssertUsage : CommandElabM Unit :=
   Lean.recordExtraModUse `Heron.Assert (isMeta := true)
 
 syntax (name := assertCheckCmd)
-  "#assertCheck " ident " in " command " becomes " term : command
+  "#assertCheck " ident " in " command (" becomes " term)? : command
 
 syntax (name := assertRefactorCmd)
   "#assertRefactor " ident " in " command " becomes " term : command
@@ -114,13 +125,16 @@ syntax (name := assertRefactorCmd)
 @[command_elab assertCheckCmd] meta def elabAssertCheck : CommandElab
   | stx@`(command| #assertCheck $linterName in $cmd becomes $expected) => do
     recordAssertUsage
-    elabAssertResult linterName cmd expected stx
+    elabAssertResult linterName cmd (some expected) stx
+  | stx@`(command| #assertCheck $linterName in $cmd) => do
+    recordAssertUsage
+    elabAssertResult linterName cmd none stx
   | _ => throwUnsupportedSyntax
 
 @[command_elab assertRefactorCmd] meta def elabAssertRefactor : CommandElab
   | stx@`(command| #assertRefactor $linterName in $cmd becomes $expected) => do
     recordAssertUsage
-    elabAssertResult linterName cmd expected stx
+    elabAssertResult linterName cmd (some expected) stx
   | _ => throwUnsupportedSyntax
 
 syntax (name := assertIgnoreCmd)
@@ -129,7 +143,7 @@ syntax (name := assertIgnoreCmd)
 @[command_elab assertIgnoreCmd] meta def elabAssertIgnore : CommandElab
   | stx@`(command| #assertIgnore $linterName in $cmd) => do
     recordAssertUsage
-    let edits ← collectReplacements cmd linterName.getId
+    let { edits, .. } ← runRule cmd linterName.getId
     unless edits.isEmpty do
       let text ← getFileMap
       let descriptions := edits.map fun edit =>

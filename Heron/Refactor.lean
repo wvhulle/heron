@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Rule
+public meta import Heron.Lsp
 public meta import Lean.Server.CodeActions.Basic
 
 public section
@@ -17,8 +18,8 @@ class Refactor (α : Type) extends Rule α where
 Code action provider registration is handled by `@[code_action_provider]` in rule files. -/
 meta def Refactor.register [Refactor α] : IO Unit := do
   let name := Rule.name (α := α)
-  Rule.registerLinterOption name
-  Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
+  registerLinterOption name
+  testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
 meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=

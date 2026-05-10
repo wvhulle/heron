@@ -4,18 +4,12 @@ public meta import Lean.Elab.Command
 public meta import Lean.Server.InfoUtils
 public meta import Lean.PrettyPrinter
 public meta import Heron.Profiling
-public meta import Heron.TestRunner
 
 public section
 
 open Lean Elab Command Meta
 
 namespace Heron
-
-/-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
-meta def getDoElems (doSeq : Syntax) : Array Syntax :=
-  if doSeq.getKind == ``Parser.Term.doSeqBracketed then doSeq[1]!.getArgs.map (·[0]!)
-  else if doSeq.getKind == ``Parser.Term.doSeqIndent then doSeq[0]!.getArgs.map (·[0]!) else #[]
 
 /-- A range-anchored label surfaced via LSP `Diagnostic.relatedInformation`. -/
 structure Label where
@@ -48,30 +42,6 @@ structure Replacement where
 relatedInformation emission. -/
 meta def Replacement.toLabel (r : Replacement) : Label :=
   { span := r.emphasizedSyntax, text := r.inlineViolationLabel }
-
-/-- Build a `DiagnosticRelatedInformation` entry for `l`, anchoring it at
-`l.span`'s LSP range in the file identified by `uri`. Returns `none` if the
-span has no source range. -/
-meta def Label.toRelatedInformation (l : Label) (fileMap : FileMap) (uri : Lsp.DocumentUri) :
-    CommandElabM (Option Lsp.DiagnosticRelatedInformation) := do
-  let some range := l.span.getRange? | return none
-  let lspRange := fileMap.utf8RangeToLspRange range
-  let formatted ← (← addMessageContext l.text).format
-  return some { location := { uri, range := lspRange }, message := formatted.pretty }
-
-/-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
-to format the replacement text. Falls back to `reprint` if formatting fails. -/
-meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
-  let some range := r.oldSyntax.getRange? | return none
-  let lspRange := fileMap.utf8RangeToLspRange range
-  if r.newSyntax.isMissing then
-    return some { range := lspRange, newText := "" }
-  let newText ← try
-    pure (← PrettyPrinter.ppCategory r.category r.newSyntax).pretty
-  catch _ =>
-    let some text := r.newSyntax.reprint | return none
-    pure text.trimAscii.toString
-  return some { range := lspRange, newText }
 
 /-- Core rule typeclass. The harness walks each command syntax tree once and
 calls `detect` only at nodes whose kind is in `kinds`. Both `kinds` and `detect`
@@ -121,7 +91,7 @@ meta def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
   let ruleOpt := `linter ++ Rule.name (α := α)
   if opts.contains ruleOpt then (Rule.linterOption (α := α)).get opts else Heron.allRulesLinterOption.get opts
 
-meta def Rule.registerLinterOption (ruleName : Name) : IO Unit :=
+meta def registerLinterOption (ruleName : Name) : IO Unit :=
   Lean.registerOption (`linter ++ ruleName)
     { defValue := .ofBool false
       descr := s!"Enable the {ruleName} linter rule."
@@ -233,20 +203,6 @@ meta def runMetaMForSyntax (stx : Syntax) (f : Expr → MetaM α) :
     ti.stx.getPos? true |>.any (·.byteIdx == pos.byteIdx) | return none
   some <$> runInfoMetaM ci ti.lctx (f ti.expr)
 
-/-- Check if the outer part of a fully-applied expression — everything except
-the last argument — has a `Monad` instance. Used by transformer-detection rules
-to confirm `f a₁ … aₙ (Wrapped α)` has `f a₁ … aₙ` actually being a monad. -/
-meta def outerHasMonadInstance (e : Expr) : MetaM Bool := do
-  let args := e.getAppArgs
-  if args.size == 0 then return false
-  let outerMonad := mkAppN e.getAppFn args.pop
-  try
-    let u ← mkFreshLevelMVar
-    let v ← mkFreshLevelMVar
-    let monadType := mkAppN (mkConst ``Monad [u, v]) #[outerMonad]
-    return (← synthInstance? monadType).isSome
-  catch _ => return false
-
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
@@ -266,24 +222,5 @@ meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool
 meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) :=
   try return some s!"({← runInfoMetaM ci lctx (ppExpr e)})"
   catch _ => return none
-
-/-- Collect `DiagnosticRelatedInformation` entries for one match: one per
-replacement (using `Replacement.toLabel`), plus any extra label-only entries
-from `Rule.labels`. -/
-meta def Rule.collectRelatedInformation [Rule α] (m : α) (repls : Array Replacement)
-    (fileMap : FileMap) (uri : Lsp.DocumentUri) :
-    CommandElabM (Array Lsp.DiagnosticRelatedInformation) := do
-  let fromRepls ← repls.filterMapM fun r => r.toLabel.toRelatedInformation fileMap uri
-  let extras ← Rule.labels (α := α) m
-  let fromExtras ← extras.filterMapM fun l => l.toRelatedInformation fileMap uri
-  return fromRepls ++ fromExtras
-
-/-- Build a type-erased test runner for a `Rule` instance. -/
-meta def Rule.buildTestRunner [Rule α] : Rule.TestRunner := fun stx => do
-  let fileMap ← getFileMap
-  let results ← Rule.detectAll (α := α) stx
-  results.flatMapM fun m => do
-    let repls ← Rule.replacements (α := α) m
-    repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
 
 end Heron

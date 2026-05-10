@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Rule
+public meta import Heron.Lsp
 public meta import Lean.Server.CodeActions.Basic
 
 public section
@@ -197,7 +198,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
       let uri : Lsp.DocumentUri := System.Uri.pathToUri (System.FilePath.mk (← getFileName))
       for m in collected do
         let repls ← Rule.replacements (α := α) m
-        let related ← Rule.collectRelatedInformation (α := α) m repls fileMap uri
+        let related ← collectRelatedInformation (α := α) m repls fileMap uri
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
@@ -263,14 +264,14 @@ private meta def Check.findActions [Check α] (stx : Syntax) :
 /-- Register a `Check` instance: linter option, registry entry, and test runner. -/
 meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
-  Rule.registerLinterOption name
+  registerLinterOption name
   heronRuleRegistry.modify fun reg =>
     (reg.filter (·.name != name)).push
       { name
         isEnabled := Rule.isEnabled (α := α)
         setup := Check.makeHandler (α := α)
         findActions := Check.findActions (α := α) }
-  Rule.testRunnerRegistry.modify (·.insert name (Rule.buildTestRunner (α := α)))
+  testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
 @[code_action_provider]

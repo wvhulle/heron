@@ -1,3 +1,3 @@
 module
 
-public import Heron.Rules
+public import Heron.Registry
