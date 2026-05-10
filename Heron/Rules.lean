@@ -24,6 +24,10 @@ public import Heron.Check.FunToCdot
 public import Heron.Check.UnusedImport
 public import Heron.Check.UnnecessaryPublicImport
 public import Heron.Check.UnnecessaryMetaImport
+-- Meta-programming hygiene
+public import Heron.Check.SyntaxRawAccess
+public import Heron.Check.SyntaxKindCheck
+public import Heron.Check.OptionWrapFilter
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
