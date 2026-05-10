@@ -12,10 +12,6 @@ open Lean Elab Command Meta
 
 namespace Heron
 
-/-- Reprint a syntax node with trailing trivia stripped, then trim whitespace. -/
-meta def reprintTrimmed (stx : Syntax) : String :=
-  (stx.updateTrailing "".toRawSubstring |>.reprint.getD "").trimAscii.toString
-
 /-- Extract doElem array from a doSeq node (doSeqIndent or doSeqBracketed). -/
 meta def getDoElems (doSeq : Syntax) : Array Syntax :=
   if doSeq.getKind == ``Parser.Term.doSeqBracketed then doSeq[1]!.getArgs.map (·[0]!)

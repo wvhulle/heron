@@ -23,15 +23,9 @@ private meta instance : Check RedundantElsePureUnitMatch where
   category := .simplification
   detect := fun stx => pure <|
     match stx with
-    | s@`(doElem| if $cond then $thenBody else $elseBody) =>
-      let elseElems := getDoElems elseBody
-      if elseElems.size != 1 then #[]
-      else
-      let elem := elseElems[0]!
-      let body := if elem.getKind == ``Term.doExpr then elem[0]! else elem
-      if !isPureUnit body then #[]
-      else
-        #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
+    | s@`(doElem| if $cond then $thenBody else $body:term) =>
+      if isPureUnit body then #[{ ifStx := s, elseBranch := s.getArgs.back!, cond, thenBody }]
+      else #[]
     | _ => #[]
   message := fun _ => m!"Redundant `else pure ()`"
   emphasize := fun m => m.elseBranch

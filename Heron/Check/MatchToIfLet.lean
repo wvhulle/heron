@@ -7,41 +7,31 @@ open Lean Elab Command Parser Heron
 private structure MatchToIfLetMatch where
   matchStx : Syntax
   matchKw : Syntax
-  pat : Syntax
-  discr : Syntax
-  thenRhs : Syntax
-  elseRhs : Syntax
+  pat : TSyntax `term
+  discr : TSyntax `term
+  thenRhs : TSyntax `term
+  elseRhs : TSyntax `term
 
-/-- Check if a match alt pattern is a wildcard `_`. -/
-private meta def isWildcardAlt? (alt : Syntax) : Option Syntax :=
-  let pats := alt[1]!  -- null-node of pattern groups
-  if pats.getNumArgs != 1 then none
-  else
-    let patGroup := pats[0]!
-    if patGroup.getNumArgs != 1 then none
-    else
-      let pat := patGroup[0]!
-      if pat.isOfKind ``Term.hole || (pat.isIdent && pat.getId == `_) then
-        some alt
-      else none
+/-- Recognise a wildcard match arm `| _ => rhs`, returning its RHS. -/
+private meta def wildcardArmRhs? : TSyntax ``Term.matchAlt → Option (TSyntax `term)
+  | `(Term.matchAltExpr| | _ => $rhs) => some rhs
+  | _ => none
+
+/-- Recognise a single-pattern arm `| pat => rhs`. -/
+private meta def singlePatternArm? :
+    TSyntax ``Term.matchAlt → Option (TSyntax `term × TSyntax `term)
+  | `(Term.matchAltExpr| | $pat:term => $rhs) => some (pat, rhs)
+  | _ => none
 
 private meta def detectMatchToIfLet? : Syntax → Option MatchToIfLetMatch
-  | stx@`(match%$matchKw $discr:term with $alts:matchAlt*) => do
-    guard (alts.size == 2)
-    let a0 := alts[0]!.raw
-    let a1 := alts[1]!.raw
-    let (patAlt, wildAlt) ← match isWildcardAlt? a0, isWildcardAlt? a1 with
+  | stx@`(match%$matchKw $discr:term with $a0:matchAlt $a1:matchAlt) => do
+    let (patAlt, wildAlt) ← match wildcardArmRhs? a0, wildcardArmRhs? a1 with
       | none, some _ => some (a0, a1)
       | some _, none => some (a1, a0)
       | _, _ => none
-    return {
-      matchStx := stx
-      matchKw := matchKw
-      pat := patAlt[1]![0]![0]!
-      discr := discr.raw
-      thenRhs := patAlt[3]!
-      elseRhs := wildAlt[3]!
-    }
+    let (pat, thenRhs) ← singlePatternArm? patAlt
+    let elseRhs ← wildcardArmRhs? wildAlt
+    return { matchStx := stx, matchKw, pat, discr, thenRhs, elseRhs }
   | _ => none
 
 private meta instance : Check MatchToIfLetMatch where
@@ -58,11 +48,7 @@ private meta instance : Check MatchToIfLetMatch where
   reference := some { topic := "if let", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
   explanation := fun _ => m!"A `match` with exactly two arms where one is `_` can be written more concisely as `if let`."
   replacements := fun m => do
-    let pat : TSyntax `term := ⟨m.pat⟩
-    let discr : TSyntax `term := ⟨m.discr⟩
-    let thenRhs : TSyntax `term := ⟨m.thenRhs⟩
-    let elseRhs : TSyntax `term := ⟨m.elseRhs⟩
-    let repl ← `(if let $pat := $discr then $thenRhs else $elseRhs)
+    let repl ← `(if let $m.pat := $m.discr then $m.thenRhs else $m.elseRhs)
     return #[{
       emphasizedSyntax := m.matchStx
       oldSyntax := m.matchStx

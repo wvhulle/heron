@@ -4,59 +4,44 @@ public meta import Heron.Refactor
 
 open Lean Elab Command Parser Heron
 
+private structure Binding where
+  lhs : TSyntax `term
+  ident : TSyntax `ident
+
 private structure BindToDoMatch where
   fullStx : Syntax
-  bindings : Array (Syntax × Syntax)
-  finalBody : Syntax
+  bindings : Array Binding
+  finalBody : TSyntax `term
+  deriving Nonempty
 
-/-- Try to decompose `lhs >>= fun x => body` into `(lhs, varName, body)`. -/
-private meta def decomposeBind? (stx : Syntax) : Option (Syntax × Syntax × Syntax) :=
-  if stx.getKind != `«term_>>=_» then none
-  else
-    let lhs := stx[0]!
-    let rhs := stx[2]!
-    if rhs.getKind != ``Term.fun then none
-    else
-      let basicFun := rhs[1]!
-      if basicFun.getKind != ``Term.basicFun then none
-      else
-        let params := basicFun[0]!
-        if params.getNumArgs != 1 then none
-        else
-          let varName := params[0]!
-          let body := basicFun[3]!
-          some (lhs, varName, body)
+/-- Match `lhs >>= fun x => body`, splitting off the leading binding from the
+remaining body. -/
+private meta def matchBind? : TSyntax `term → Option (Binding × TSyntax `term)
+  | `($lhs >>= fun $x:ident => $body) => some ({ lhs, ident := x }, body)
+  | _ => none
 
-/-- Collect a chain of `>>= fun x => ...` bindings. -/
-private meta partial def collectBindChain (stx : Syntax) : Array (Syntax × Syntax) × Syntax :=
-  match decomposeBind? stx with
-  | none => (#[], stx)
-  | some (lhs, varName, body) =>
-    let (rest, finalBody) := collectBindChain body
-    (#[(lhs, varName)] ++ rest, finalBody)
+/-- Walk a chain of `>>= fun x => …` bindings into a flat match. -/
+private meta partial def collectBindChain (fullStx : Syntax) (stx : TSyntax `term) :
+    BindToDoMatch :=
+  match matchBind? stx with
+  | none => { fullStx, bindings := #[], finalBody := stx }
+  | some (b, body) =>
+    let rest := collectBindChain fullStx body
+    { rest with bindings := #[b] ++ rest.bindings }
 
 private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
   kinds := #[`«term_>>=_»]
   detect := fun stx => pure <|
-    match decomposeBind? stx with
-    | some _ =>
-      let (bindings, finalBody) := collectBindChain stx
-      if bindings.isEmpty then #[] else #[{ fullStx := stx, bindings, finalBody }]
-    | none => #[]
+    let m := collectBindChain stx ⟨stx⟩
+    if m.bindings.isEmpty then #[] else #[m]
   consumesSubtree := true
   message := fun _ => m!"Convert `>>=` to do-notation"
   replacements := fun m => do
-    -- Build doSeqItems: one `let v ← lhs` per binding, then final body
-    let mut items : Array (TSyntax ``Parser.Term.doSeqItem) := #[]
-    for (lhs, varName) in m.bindings do
-      let v : TSyntax `ident := ⟨varName⟩
-      let l : TSyntax `term := ⟨lhs⟩
-      let item ← `(Parser.Term.doSeqItem| let $v ← $l:term)
-      items := items.push item
-    let bodyItem ← `(Parser.Term.doSeqItem| $( (⟨m.finalBody⟩ : TSyntax `term) ):term)
-    items := items.push bodyItem
-    let seq ← `(Parser.Term.doSeq| $items*)
+    let lets ← m.bindings.mapM fun b =>
+      `(Parser.Term.doSeqItem| let $b.ident ← $b.lhs:term)
+    let body ← `(Parser.Term.doSeqItem| $m.finalBody:term)
+    let seq ← `(Parser.Term.doSeq| $(lets.push body)*)
     let repl ← `(do $seq)
     return #[{
       emphasizedSyntax := m.fullStx

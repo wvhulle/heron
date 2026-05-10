@@ -11,17 +11,13 @@ private inductive NatLiteralPatternsMatch where
   | succ (appStx : Syntax) (arg : Syntax)
 
 /-- Find `Nat.zero` or `Nat.succ k` idents inside a pattern subtree. -/
-private meta partial def detectNatPattern : Syntax → Array NatLiteralPatternsMatch
-  | stx =>
-    let here :=
-      match stx with
-      | `($fn $arg) =>
-        if fn.raw.isIdent && fn.raw.getId == `Nat.succ then #[.succ stx arg]
-        else #[]
-      | _ =>
-        if stx.isIdent && stx.getId == `Nat.zero then #[.zero stx]
-        else #[]
-    here ++ stx.getArgs.flatMap detectNatPattern
+private meta partial def detectNatPattern (stx : Syntax) : Array NatLiteralPatternsMatch :=
+  let here :=
+    match stx with
+    | `(Nat.succ $arg) => #[.succ stx arg]
+    | `(Nat.zero) => #[.zero stx]
+    | _ => #[]
+  here ++ stx.getArgs.flatMap detectNatPattern
 
 private meta instance : Check NatLiteralPatternsMatch where
   name := `natLiteralPatterns
@@ -30,8 +26,11 @@ private meta instance : Check NatLiteralPatternsMatch where
   category := .style
   detect := fun stx => pure <|
     match stx with
-    | `(match $_:term with $alts:matchAlts) =>
-      alts.raw[0]!.getArgs.flatMap fun alt => detectNatPattern alt[1]!
+    | `(match $_:term with $alts:matchAlt*) =>
+      alts.flatMap fun
+        | `(Term.matchAltExpr| | $pats,* => $_) =>
+          pats.getElems.flatMap fun pat => detectNatPattern pat
+        | _ => #[]
     | _ => #[]
   message := fun
     | .zero .. => m!"Use `0` instead of `Nat.zero`"

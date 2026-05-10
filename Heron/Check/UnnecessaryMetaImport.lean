@@ -13,14 +13,12 @@ private structure UnnecessaryMetaImportMatch where
 private meta def detectUnnecessaryMetaImports (stx : Syntax) :
     CommandElabM (Array UnnecessaryMetaImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
-  return analyses.filterMap fun a =>
-    if a.isUsed && a.imp.isMeta && !a.needsMeta then
-      -- Extract the `meta` keyword syntax from the import syntax node
-      -- Import syntax: `$[public%$pubTk?]? $[meta%$metaTk?]? import $[all%$allTk?]? $id`
-      let metaKw := a.importStx[1]![0]!
-      some { importStx := a.importStx, metaKw, moduleName := a.imp.module }
-    else
-      none
+  return analyses.filterMap fun a => do
+    guard (a.isUsed && a.imp.isMeta && !a.needsMeta)
+    let `(Lean.Parser.Module.import| $[public%$_]? $[meta%$metaTk?]? import $[all%$_]? $_) :=
+      a.importStx | none
+    let metaKw ← metaTk?
+    some { importStx := a.importStx, metaKw, moduleName := a.imp.module }
 
 private meta instance : Check UnnecessaryMetaImportMatch where
   name := `unnecessaryMetaImport

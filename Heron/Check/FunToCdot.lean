@@ -34,9 +34,9 @@ private meta instance : Check FunToCdotMatch where
   category := .simplification
   detect := fun stx => pure <|
     match stx with
-    | `(fun $x:ident => $body) =>
-      if body.raw.isIdent then #[]
-      else match cdotEligibleCount x.getId body with
+    | `(fun $x:ident => $body) => match body with
+      | `($_:ident) => #[]
+      | _ => match cdotEligibleCount x.getId body with
         | some 1 => #[{ funStx := stx, body, paramName := x.getId }]
         | _ => #[]
     | _ => #[]

@@ -13,14 +13,12 @@ private structure UnnecessaryPublicImportMatch where
 private meta def detectUnnecessaryPublicImports (stx : Syntax) :
     CommandElabM (Array UnnecessaryPublicImportMatch) := do
   let analyses ← ImportAnalysis.analyzeImports stx
-  return analyses.filterMap fun a =>
-    if a.isUsed && a.imp.isExported && !a.needsExported then
-      -- Extract the `public` keyword syntax from the import syntax node
-      -- Import syntax: `$[public%$pubTk?]? $[meta%$metaTk?]? import $[all%$allTk?]? $id`
-      let publicKw := a.importStx[0]![0]!
-      some { importStx := a.importStx, publicKw, moduleName := a.imp.module }
-    else
-      none
+  return analyses.filterMap fun a => do
+    guard (a.isUsed && a.imp.isExported && !a.needsExported)
+    let `(Lean.Parser.Module.import| $[public%$pubTk?]? $[meta%$_]? import $[all%$_]? $_) :=
+      a.importStx | none
+    let publicKw ← pubTk?
+    some { importStx := a.importStx, publicKw, moduleName := a.imp.module }
 
 private meta instance : Check UnnecessaryPublicImportMatch where
   name := `unnecessaryPublicImport

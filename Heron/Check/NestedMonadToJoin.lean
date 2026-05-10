@@ -7,7 +7,20 @@ open Lean Elab Command Parser Heron
 private structure NestedMonadToJoinMatch where
   outerStx : Syntax
   inner : Syntax
-  monadName : String
+  monadName : Name
+
+private meta def findMatch? : Syntax → Option NestedMonadToJoinMatch
+  | stx@`($fn:ident $args*) => do
+    let lastArg ← args.back?
+    let `(($innerApp:term)) := lastArg | none
+    let `($innerFn:ident $innerArgs*) := innerApp | none
+    guard (fn.getId == innerFn.getId)
+    let outerLeading := args.pop
+    let innerLeading := innerArgs.pop
+    guard (outerLeading.size == innerLeading.size)
+    guard (outerLeading.zip innerLeading |>.all fun (a, b) => a == b)
+    return { outerStx := stx, inner := innerApp, monadName := fn.getId }
+  | _ => none
 
 private meta instance : Check NestedMonadToJoinMatch where
   name := `nestedMonadToJoin
@@ -15,25 +28,9 @@ private meta instance : Check NestedMonadToJoinMatch where
   severity := .warning
   category := .simplification
   detect := fun stx => pure <|
-    match stx with
-    | `($fn $args*) =>
-      if !fn.raw.isIdent || args.size == 0 then #[]
-      else
-        let outerName := reprintTrimmed fn
-        match args.back! with
-        | `(($innerFn $innerArgs*)) =>
-          if reprintTrimmed innerFn != outerName then #[]
-          else
-            let outerLeading := args.pop
-            let innerLeading := innerArgs.pop
-            if outerLeading.size != innerLeading.size then #[]
-            else if !(outerLeading.zip innerLeading |>.all fun (a, b) =>
-              reprintTrimmed a.raw == reprintTrimmed b.raw) then #[]
-            else
-              let inner : Syntax := (args.back!.raw)[1]!
-              #[{ outerStx := stx, inner, monadName := outerName }]
-        | _ => #[]
-    | _ => #[]
+    match findMatch? stx with
+    | some m => #[m]
+    | none => #[]
   message := fun m => m! "Nested `{m.monadName}` can be flattened with `join`"
   emphasize := fun m => m.outerStx
   tags := #[.unnecessary]

@@ -11,7 +11,8 @@ private structure MergeMatchArmsMatch where
   firstAlt : Syntax
   secondAlt : Syntax
 
-private meta def pairWithSharedRhs? (prev next : Syntax) : Option MergeMatchArmsMatch := do
+private meta def pairWithSharedRhs? (prev next : TSyntax ``Term.matchAlt) :
+    Option MergeMatchArmsMatch := do
   let `(Term.matchAltExpr| | $_ => $rhs1) := prev | none
   let `(Term.matchAltExpr| | $_ => $rhs2) := next | none
   guard (rhs1 == rhs2)
@@ -31,7 +32,7 @@ private meta instance : Check MergeMatchArmsMatch where
     match stx with
     | `(match $_:term with
           $alts:matchAlt*) =>
-      let l := (alts.map (·.raw)).toList
+      let l := alts.toList
       ((l.zip l.tail).filterMap fun (a, b) => pairWithSharedRhs? a b).toArray
     | _ => #[]
   message := fun _ => m!"Merge match arms with identical right-hand sides"

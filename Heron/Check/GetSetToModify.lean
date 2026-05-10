@@ -25,12 +25,11 @@ private meta def isGetBinding? : Syntax → Option (Syntax × Syntax)
 /-- Check if a do-element is `set { <name> with ... }`. -/
 private meta def isSetWithStructUpdate? (elem : Syntax) (varName : Name) : Option (Syntax × Syntax) :=
   match elem with
-  | `(doElem| set { $src with $_,* }) =>
-    if src.raw.getId == varName then
-      -- Extract the structInst node from inside the app
-      let arg := elem[0]![1]![0]!
-      some (elem, arg)
-    else none
+  | `(doElem| set $upd:structInst) =>
+    match upd with
+    | `({ $src:ident with $_,* }) =>
+      if src.getId == varName then some (elem, upd) else none
+    | _ => none
   | _ => none
 
 /-- Check if a variable name appears anywhere in a syntax tree,

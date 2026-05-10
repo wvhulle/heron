@@ -29,7 +29,8 @@ private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (de
   | none =>
     -- Fallback: construct the name from the identifier; try the private-mangled
     -- variant if the plain name is not in the environment.
-    let plainName := ns ++ declIdStx[0]!.getId
+    let some plainIdent := declIdStx.find? (·.isIdent) | none
+    let plainName := ns ++ plainIdent.getId
     if env.find? plainName |>.isSome then some plainName
     else infos.findSome? fun (_, ti) =>
       ti.expr.constName?.bind fun n =>
