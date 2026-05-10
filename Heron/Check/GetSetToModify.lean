@@ -101,5 +101,11 @@ private meta instance : Check GetSetToModifyMatch where
         category := `doElem
         inlineViolationLabel := m!"remove set" }
     ]
+  labels := fun m => return #[
+    { span := m.varName
+      text := m!"state binding `{m.varName}` becomes the parameter of `modify`" },
+    { span := m.structInst
+      text := m!"structure update reused as the body of `modify`" }
+  ]
 
 meta initialize Check.register (α := GetSetToModifyMatch)

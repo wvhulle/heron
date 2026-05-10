@@ -58,11 +58,14 @@ meta def applyDiagnosticTags (tags : Array Lsp.DiagnosticTag) (msg : MessageData
     | .unnecessary => MessageData.tagged `Lean.Linter.linter.unusedVariables acc
     | .deprecated  => MessageData.tagged `Lean.Linter.deprecatedAttr acc
 
-/-- Emit a check diagnostic. The associated quick-fix is produced by
-`heronCheckFixProvider` via re-detection at LSP request time, so this function
-no longer needs to embed edits in `Diagnostic.data?`. -/
+/-- Emit a check diagnostic. Per-replacement and extra labels are surfaced via
+`Diagnostic.relatedInformation` (patched into `BaseMessage.relatedInformation?`
+upstream). The associated quick-fix is produced by `heronCheckFixProvider` via
+re-detection at LSP request time, so this function no longer needs to embed
+edits in `Diagnostic.data?`. -/
 meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
+    (relatedInformation : Array Lsp.DiagnosticRelatedInformation := #[])
     (reference : Option Reference := none) : CommandElabM Unit := do
   let bodyParts : Array MessageData :=
     (#[explanation] : Array MessageData)
@@ -85,7 +88,8 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Ls
       endPos := fileMap.toPosition endPos
       keepFullRange := true
       data := msgData
-      severity }
+      severity
+      relatedInformation? := if relatedInformation.isEmpty then none else some relatedInformation }
   logMessage msg
 
 /-- A live, per-command handler instance for one rule. The master linter builds
@@ -145,13 +149,17 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
     emit := do
       let collected ← matchesRef.get
       let detectEnd ← IO.monoNanosNow
+      let fileMap ← getFileMap
+      let uri : Lsp.DocumentUri := System.Uri.pathToUri (System.FilePath.mk (← getFileName))
       for m in collected do
         let repls ← Rule.replacements (α := α) m
+        let related ← Rule.collectRelatedInformation (α := α) m repls fileMap uri
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
             (message := Rule.message m) (explanation := Check.explanation m)
-            (repls := repls) (reference := Check.reference (α := α))
+            (repls := repls) (relatedInformation := related)
+            (reference := Check.reference (α := α))
       let emitEnd ← IO.monoNanosNow
       if profiling then
         Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) collected.size

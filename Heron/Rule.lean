@@ -17,18 +17,47 @@ meta def getDoElems (doSeq : Syntax) : Array Syntax :=
   if doSeq.getKind == ``Parser.Term.doSeqBracketed then doSeq[1]!.getArgs.map (·[0]!)
   else if doSeq.getKind == ``Parser.Term.doSeqIndent then doSeq[0]!.getArgs.map (·[0]!) else #[]
 
-/-- A single text replacement with associated source annotation. -/
+/-- A range-anchored label surfaced via LSP `Diagnostic.relatedInformation`. -/
+structure Label where
+  /-- Source node whose range the label points at. -/
+  span : Syntax
+  /-- Label text shown next to the span by clients that render `relatedInformation`. -/
+  text : MessageData
+
+/-- A single text replacement with associated source annotation.
+
+A replacement carries both an edit (`oldSyntax → newSyntax`) and the label
+metadata (`emphasizedSyntax`, `inlineViolationLabel`) used to render that edit
+as a `relatedInformation` entry on the published diagnostic. The two roles are
+kept on one record because every replacement currently produces both; rules
+that need a label *without* an edit use `Rule.labels` instead. -/
 structure Replacement where
-  /-- Syntax node to underline in the diagnostic or anchor the code action. -/
+  /-- Source range used to anchor both the LSP `relatedInformation` label and
+  the code action attached to this edit. -/
   emphasizedSyntax : Syntax
   /-- Syntax node whose range is replaced. -/
   oldSyntax : Syntax
-  /-- Syntax to insert in place of `targetNode`. -/
+  /-- Syntax to insert in place of `oldSyntax`. -/
   newSyntax : Syntax
-  /-- Inline label shown below the span in editors. -/
+  /-- Label surfaced via LSP `relatedInformation`, anchored at `emphasizedSyntax`. -/
   inlineViolationLabel : MessageData
   /-- Syntax category for pretty-printing (e.g. `term`, `tactic`, `doElem`). -/
   category : Name := `term
+
+/-- Promote a replacement's label metadata to a standalone `Label` for
+relatedInformation emission. -/
+meta def Replacement.toLabel (r : Replacement) : Label :=
+  { span := r.emphasizedSyntax, text := r.inlineViolationLabel }
+
+/-- Build a `DiagnosticRelatedInformation` entry for `l`, anchoring it at
+`l.span`'s LSP range in the file identified by `uri`. Returns `none` if the
+span has no source range. -/
+meta def Label.toRelatedInformation (l : Label) (fileMap : FileMap) (uri : Lsp.DocumentUri) :
+    CommandElabM (Option Lsp.DiagnosticRelatedInformation) := do
+  let some range := l.span.getRange? | return none
+  let lspRange := fileMap.utf8RangeToLspRange range
+  let formatted ← (← addMessageContext l.text).format
+  return some { location := { uri, range := lspRange }, message := formatted.pretty }
 
 /-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
 to format the replacement text. Falls back to `reprint` if formatting fails. -/
@@ -60,8 +89,13 @@ class Rule (α : Type) where
   detect : Syntax → CommandElabM (Array α)
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
-  /-- Per-edit replacement data. -/
+  /-- Per-edit replacement data. Each replacement also produces a
+  `relatedInformation` entry via `Replacement.toLabel`. -/
   replacements : α → CommandElabM (Array Replacement)
+  /-- Extra `relatedInformation` labels not tied to any replacement. Use this
+  for label-only annotations — e.g. pointing at a related declaration that
+  caused the diagnostic but is not itself being edited. Defaults to empty. -/
+  labels : α → CommandElabM (Array Label) := fun _ => pure #[]
   /-- When `true`, the walker stops descending into a node's children whenever
   `detect` produces matches at that node. Use this for rules that emit at every
   level of a nested chain and want only the outermost match (e.g. `Expr.app`
@@ -232,6 +266,17 @@ meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool
 meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) :=
   try return some s!"({← runInfoMetaM ci lctx (ppExpr e)})"
   catch _ => return none
+
+/-- Collect `DiagnosticRelatedInformation` entries for one match: one per
+replacement (using `Replacement.toLabel`), plus any extra label-only entries
+from `Rule.labels`. -/
+meta def Rule.collectRelatedInformation [Rule α] (m : α) (repls : Array Replacement)
+    (fileMap : FileMap) (uri : Lsp.DocumentUri) :
+    CommandElabM (Array Lsp.DiagnosticRelatedInformation) := do
+  let fromRepls ← repls.filterMapM fun r => r.toLabel.toRelatedInformation fileMap uri
+  let extras ← Rule.labels (α := α) m
+  let fromExtras ← extras.filterMapM fun l => l.toRelatedInformation fileMap uri
+  return fromRepls ++ fromExtras
 
 /-- Build a type-erased test runner for a `Rule` instance. -/
 meta def Rule.buildTestRunner [Rule α] : Rule.TestRunner := fun stx => do
