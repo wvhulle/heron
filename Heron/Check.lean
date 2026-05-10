@@ -58,30 +58,46 @@ meta def applyDiagnosticTags (tags : Array Lsp.DiagnosticTag) (msg : MessageData
     | .unnecessary => MessageData.tagged `Lean.Linter.linter.unusedVariables acc
     | .deprecated  => MessageData.tagged `Lean.Linter.deprecatedAttr acc
 
-/-- Emit a check diagnostic. Per-replacement and extra labels are surfaced via
-`Diagnostic.relatedInformation` (patched into `BaseMessage.relatedInformation?`
-upstream). The associated quick-fix is produced by `heronCheckFixProvider` via
-re-detection at LSP request time, so this function no longer needs to embed
-edits in `Diagnostic.data?`. -/
+/-- Build the JSON-encoded `DiagnosticHoverData` payload consumed by Lean's
+hover handler. The hover handler pretty-prints `hoverTitle` in bold, then
+the body in markdown (see `Lean.Server.FileWorker.RequestHandling`). -/
+private meta def buildHoverData (title : String) (body : MessageData) : CommandElabM String := do
+  let bodyStr := (← (← addMessageContext body).format).pretty
+  -- DiagnosticHoverData's derived FromJson requires every field to be present;
+  -- defaults aren't applied for missing JSON fields without `?`-suffixed names.
+  let json : Json := Json.mkObj [
+    ("hoverTitle", title),
+    ("hoverTags", Json.arr #[]),
+    ("hoverBody", bodyStr)
+  ]
+  return json.compress
+
+/-- Emit a check diagnostic. The published `Diagnostic.message` carries only the
+short headline. The explanation / reference / disable hint are packed into
+`Diagnostic.data?` as `DiagnosticHoverData`, which Lean's hover handler renders
+into the hover popup at request time.
+
+The associated quick-fix is produced by `heronCheckFixProvider` via re-detection
+at LSP request time. Per-replacement labels and any extra labels flow into
+`Diagnostic.relatedInformation` via the patched `BaseMessage.relatedInformation?`. -/
 meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
-    (ruleName : Name) (optName : Name) (message explanation : MessageData) (repls : Array Replacement)
+    (ruleName : Name) (optName : Name) (message explanation : MessageData)
     (relatedInformation : Array Lsp.DiagnosticRelatedInformation := #[])
     (reference : Option Reference := none) : CommandElabM Unit := do
-  let bodyParts : Array MessageData :=
-    (#[explanation] : Array MessageData)
-      |>.append (match reference with
-        | some ref => (#[m!"\n\nLean Reference ({ref.topic}): *{ref.url}*"] : Array MessageData)
-        | none => #[])
-      |>.push m!"\n\nDisable with `set_option {optName} false`"
-  let composedMsg := bodyParts.foldl (init := message) fun acc part => acc ++ part
-  let taggedMsg := (applyDiagnosticTags tags composedMsg).tagWithErrorName ruleName
+  let taggedMsg := (applyDiagnosticTags tags message).tagWithErrorName ruleName
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
   let msgData ← addMessageContext taggedMsg
+  let titleStr := (← (← addMessageContext message).format).pretty
+  let referenceMd : MessageData := match reference with
+    | some ref => m!"**Reference ({ref.topic}):** {ref.url}\n\n"
+    | none => m!""
+  let disableMd : MessageData := m!"_Disable with `set_option {optName} false`._"
+  let hoverBody : MessageData := explanation ++ m!"\n\n" ++ referenceMd ++ disableMd
+  let hoverData ← buildHoverData titleStr hoverBody
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
-  trace[heron]"  emitting {severity} at {(fileMap.toPosition pos)}: {repls.size} replacement(s)"
   let msg : Message :=
     { fileName := ← getFileName
       pos := fileMap.toPosition pos
@@ -89,6 +105,7 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Ls
       keepFullRange := true
       data := msgData
       severity
+      diagnosticData? := some hoverData
       relatedInformation? := if relatedInformation.isEmpty then none else some relatedInformation }
   logMessage msg
 
@@ -185,7 +202,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
             (message := Rule.message m) (explanation := Check.explanation m)
-            (repls := repls) (relatedInformation := related)
+            (relatedInformation := related)
             (reference := Check.reference (α := α))
         let primaryRange? := (Check.emphasize m).getRange?
         let replacementRanges := repls.filterMap (·.oldSyntax.getRange?)
