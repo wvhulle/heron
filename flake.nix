@@ -66,17 +66,25 @@
 
         # Use locally-built lean4 — no flake rebuild on source changes.
         # Requires: cd ../lean4 && cmake --preset release && make -C build/release
-        unmanaged-fork = pkgs.mkShell {
-          packages = with pkgs; [
-            gcc
-            llvmPackages.bintools
-          ];
+        # And, for lsp-probe: cd ../lean4/script && lake build lsp-probe
+        unmanaged-fork =
+          let
+            lsp-probe = pkgs.writeShellScriptBin "lsp-probe" ''
+              exec "$PWD/../lean4/script/.lake/build/bin/lsp-probe" "$@"
+            '';
+          in
+          pkgs.mkShell {
+            packages = with pkgs; [
+              gcc
+              llvmPackages.bintools
+              lsp-probe
+            ];
 
-          shellHook = ''
-            export ELAN=""
-            export PATH="$PWD/../lean4/build/release/bin:$PATH"
-          '';
-        };
+            shellHook = ''
+              export ELAN=""
+              export PATH="$PWD/../lean4/build/release/bin:$PATH"
+            '';
+          };
 
         default = managed-fork;
       };
