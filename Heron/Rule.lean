@@ -73,7 +73,7 @@ class Rule (α : Type) where
   consumesSubtree : Bool := false
 
 /-- Master option that enables all Heron linter rules at once. -/
-meta def Heron.allRulesLinterOption : Lean.Option Bool :=
+private meta def Heron.allRulesLinterOption : Lean.Option Bool :=
   { name := `linter.heron, defValue := false }
 
 meta initialize
@@ -141,7 +141,7 @@ Uses the scoped `heron.reelaborating` option instead of clearing the global
 `lintersRef` to prevent recursive linter invocation. This is safe under
 concurrent (async) elaboration — `withScope` modifies only the current
 command's options, so other commands' linters are unaffected. -/
-meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+private meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
   let savedInfoState ← getInfoState
   let savedMessages := (← get).messages
   setInfoState { enabled := true, trees := { } }
@@ -219,7 +219,7 @@ meta def outsideDeclId (declRange? : Option Syntax.Range) (ti : TermInfo) : Bool
   | _, _ => true
 
 /-- Pretty-print an expression inside a `ContextInfo`, returning a parenthesised string. -/
-meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) :=
+private meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) : CommandElabM (Option String) :=
   try return some s!"({← runInfoMetaM ci lctx (ppExpr e)})"
   catch _ => return none
 

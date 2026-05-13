@@ -15,8 +15,6 @@ meta import Lean.Parser.Module
 public import Lean.ExtraModUses
 public import Lean.ResolveName
 
-public section
-
 open Lean Elab Command Parser
 
 namespace Heron.ImportAnalysis
@@ -213,7 +211,7 @@ def parseImportSyntax (fileMap : FileMap) (fileName : String) :
 /-! ## ImportAnalysis result -/
 
 /-- Result of analyzing one direct import. -/
-structure ImportAnalysis where
+public structure ImportAnalysis where
   /-- The decoded import. -/
   imp : Import
   /-- The import syntax node (for diagnostic position via `emphasize`). -/
@@ -252,7 +250,7 @@ and what visibility level is minimally required.
 
 This is the main entry point called by all three import checks. The result is
 cached so only the first call per file does actual work. -/
-def analyzeImports (stx : Syntax) : CommandElabM (Array ImportAnalysis) := do
+public def analyzeImports (stx : Syntax) : CommandElabM (Array ImportAnalysis) := do
   unless (← isLastCommand stx) do return #[]
   let env ← getEnv
   let mainMod := env.mainModule

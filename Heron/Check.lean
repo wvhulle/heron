@@ -235,7 +235,7 @@ private meta def buildDispatchTable (handlers : Array RuleHandler) :
 rule, builds one handler per rule, walks the command syntax once via kind-keyed
 dispatch, then runs each handler's emit phase. Handlers with empty `kinds`
 fire once at the command root (file-level analyses like import checks). -/
-meta def heronMasterLinter : Linter where
+private meta def heronMasterLinter : Linter where
   name := `heron
   run := withSetOptionIn fun stx => do
     if Heron.isReelaboratingGuardSet (← getOptions) then return
