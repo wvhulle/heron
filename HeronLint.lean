@@ -137,6 +137,117 @@ def lintSource (all : Bool) (label : String) (source : String) : IO (FileMap × 
   let (collected, _) ← ((collectLoop all #[]).run { inputCtx }).run frontendState
   return (inputCtx.fileMap, collected)
 
+/-! ## Single-pass workspace linting
+
+Instead of importing the full environment (Mathlib etc.) once per file, import the
+external-dependency closure ONCE and elaborate the local modules in dependency order
+against a single growing `Environment`, running detection per command. This is the
+efficient path for linting a whole codebase. -/
+
+/-- A local module to be linted: its name, source path + contents, and header imports. -/
+structure Mod where
+  name : Name
+  file : String
+  src : String
+  imports : Array Import
+  deriving Inhabited
+
+/-- A linted file's findings, carrying the `FileMap` needed to render/apply edits. -/
+structure Report where
+  /-- Path on disk, or `none` for stdin (not rewritable by `--fix`). -/
+  path : Option String
+  label : String
+  fileMap : FileMap
+  fixes : Array Fix
+
+/-- Module `Name` from a source path relative to the package root, e.g.
+`Sparkle/Analog/Foo.lean` ↦ `Sparkle.Analog.Foo`. (Step 2 replaces this with Lake's
+exact name↔file mapping.) -/
+def modNameOfFile (f : String) : Name :=
+  let p := if f.endsWith ".lean" then (f.dropEnd 5).toString else f
+  let parts := (p.splitOn "/").filter (fun s => s != "" && s != ".")
+  parts.foldl (fun acc s => Name.str acc s) Name.anonymous
+
+/-- Load every `*.so`/`*.dylib` under the package build dir so `@[extern]`/initializer
+symbols resolve during elaboration (Sparkle has precompiled C FFI). Best-effort: a lib
+that fails to load is skipped. Step 3 replaces this with Lake's exact per-module setup. -/
+def loadDynlibsFallback (root : System.FilePath) : IO Unit := do
+  for sub in [["lib"], ["c_src"]] do
+    let d := sub.foldl (· / ·) (root / ".lake" / "build")
+    if ← d.pathExists then
+      for f in ← System.FilePath.walkDir d do
+        if f.extension == some "so" || f.extension == some "dylib" then
+          try Lean.loadDynlib f catch _ => pure ()
+
+/-- Post-order DFS topological sort: emit each module after its local dependencies, so
+elaboration grows the env in an order where every import is already present. Modules are
+visited in name order for deterministic output; cycles (shouldn't occur) are broken by the
+visited guard. -/
+partial def topoSort (mods : Array Mod) : Array Mod := Id.run do
+  let byName : Std.HashMap Name Mod := mods.foldl (fun m x => m.insert x.name x) {}
+  let localNames : Std.HashSet Name := mods.foldl (fun s x => s.insert x.name) {}
+  let rec visit (n : Name) (st : Std.HashSet Name × Array Mod) : Std.HashSet Name × Array Mod :=
+    let (seen, acc) := st
+    if seen.contains n then (seen, acc)
+    else match byName[n]? with
+      | none => (seen, acc)
+      | some x =>
+        let seen := seen.insert n
+        let deps := x.imports.filterMap fun i =>
+          if localNames.contains i.module then some i.module else none
+        let (seen, acc) := (deps.qsort (toString · < toString ·)).foldl (fun s d => visit d s) (seen, acc)
+        (seen, acc.push x)
+  let roots := (mods.map (·.name)).qsort (toString · < toString ·)
+  let (_, ordered) := roots.foldl (fun s n => visit n s) ((∅ : Std.HashSet Name), (#[] : Array Mod))
+  return ordered
+
+/-- Run the per-command detection+elaboration loop over one module starting from `env`,
+returning its fixes and the grown environment. -/
+def runSharedLoop (all : Bool) (env : Environment) (baseOpts : Options) (m : Mod)
+    : IO (FileMap × Array Fix × Environment) := do
+  let ictx := mkInputContext m.src m.file
+  let (_, pstate, _) ← parseHeader ictx
+  -- Fresh root scope (drops the previous module's `open`/`namespace`/`set_option`) while
+  -- keeping the grown `env`; messages reset.
+  let cmdState := Command.mkState env {} baseOpts
+  let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
+  let (fixes, st) ← ((collectLoop all #[]).run { inputCtx := ictx }).run fst
+  return (ictx.fileMap, fixes, st.commandState.env)
+
+/-- Lint `files` in one process: import the external-dependency closure once, then
+elaborate the files in dependency order against a growing environment. -/
+def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
+  let root ← IO.currentDir
+  let mods ← files.mapM fun (f : String) => do
+    let src ← IO.FS.readFile f
+    let hdr ← Lean.parseImports' src f
+    return ({ name := modNameOfFile f, file := f, src, imports := hdr.imports } : Mod)
+  let localNames : Std.HashSet Name := mods.foldl (fun s x => s.insert x.name) {}
+  -- External base = every imported module that is not itself a target.
+  let mut baseSet : Std.HashSet Name := ∅
+  for x in mods do
+    for imp in x.imports do
+      unless localNames.contains imp.module do baseSet := baseSet.insert imp.module
+  let baseImports := baseSet.toArray.map fun n => ({ module := n } : Import)
+  -- Seed `linter.heron := true` to match Sparkle's repo-wide enable; in-file options still apply.
+  let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
+  loadDynlibsFallback root
+  IO.eprintln s!"heron-lint: importing {baseImports.size} external module(s) once…"
+  let baseEnv ← importModules baseImports baseOpts (loadExts := true)
+  let ordered := topoSort mods
+  let n := ordered.size
+  let mut env := baseEnv
+  let mut out : Array Report := #[]
+  for i in [0:n] do
+    let m := ordered[i]!
+    try
+      let (fileMap, fixes, env') ← runSharedLoop all env baseOpts m
+      env := env'
+      out := out.push { path := some m.file, label := m.file, fileMap, fixes }
+    catch e =>
+      IO.eprintln s!"heron-lint: [{i + 1}/{n}] {m.name}: {e.toString}"
+  return out
+
 /-! ## Rendering -/
 
 /-- ANSI colouring, gated on whether output is a terminal. -/
@@ -274,15 +385,21 @@ unsafe def main (args : List String) : IO UInt32 := do
   let cli ← match parseArgs args with
     | .error e => do IO.eprintln s!"heron-lint: {e}\n{usage}"; return 1
     | .ok c => pure c
-  -- Resolve inputs.
-  let mut inputs : Array Input := #[]
-  if cli.stdin then
-    inputs := inputs.push { path := none, label := "<stdin>", source := ← readStdin }
-  for f in ← expandPaths cli.paths do
-    inputs := inputs.push { path := some f, label := f, source := ← IO.FS.readFile f }
-  if inputs.isEmpty then
+  -- Resolve inputs into a uniform `Array Report`. Path/dir inputs go through the
+  -- single-pass shared-environment driver (import deps once); stdin stays per-file.
+  let files ← expandPaths cli.paths
+  if files.isEmpty && !cli.stdin then
     IO.eprintln s!"heron-lint: no input\n{usage}"
     return 1
+  let mut reports : Array Report := #[]
+  if cli.stdin then
+    try
+      let src ← readStdin
+      let (fm, fixes) ← lintSource cli.all "<stdin>" src
+      reports := reports.push { path := none, label := "<stdin>", fileMap := fm, fixes }
+    catch e => IO.eprintln s!"heron-lint: <stdin>: {e.toString}"
+  unless files.isEmpty do
+    reports := reports ++ (← lintShared cli.all files)
   -- Colour: forced flags win; otherwise on for a terminal unless NO_COLOR is set.
   let plain := cli.json || cli.apply
   let useColor ← match cli.color with
@@ -294,59 +411,44 @@ unsafe def main (args : List String) : IO UInt32 := do
 
   -- `--apply`: patched source of a single input to stdout.
   if cli.apply then
-    unless inputs.size == 1 do
-      IO.eprintln "heron-lint: --apply takes exactly one input; use --fix for multiple"
-      return 1
-    let inp := inputs[0]!
-    let (fm, fixes) ← lintSource cli.all inp.label inp.source
-    IO.print (applyEdits fm (fixes.map (·.edit)))
-    return 0
+    match reports[0]? with
+    | some r =>
+      unless reports.size == 1 do
+        IO.eprintln "heron-lint: --apply takes exactly one input; use --fix for multiple"
+        return 1
+      IO.print (applyEdits r.fileMap (r.fixes.map (·.edit)))
+      return 0
+    | none => return 1
 
   -- `--fix`: rewrite files in place.
   if cli.fix then
-    if cli.stdin then IO.eprintln "heron-lint: --fix cannot rewrite stdin"; return 1
     let mut changed := 0
     let mut total := 0
-    for inp in inputs do
-      let some path := inp.path | continue
-      try
-        let (fm, fixes) ← lintSource cli.all inp.label inp.source
-        unless fixes.isEmpty do
-          let patched := applyEdits fm (fixes.map (·.edit))
-          if patched != inp.source then
-            IO.FS.writeFile path patched
-            changed := changed + 1
-            total := total + fixes.size
-            IO.eprintln s!"fixed {fixes.size} in {path}"
-      catch ex => IO.eprintln s!"heron-lint: {path}: {ex.toString}"
+    for r in reports do
+      let some path := r.path
+        | do IO.eprintln "heron-lint: --fix cannot rewrite stdin"; continue
+      unless r.fixes.isEmpty do
+        let patched := applyEdits r.fileMap (r.fixes.map (·.edit))
+        if patched != r.fileMap.source then
+          IO.FS.writeFile path patched
+          changed := changed + 1
+          total := total + r.fixes.size
+          IO.eprintln s!"fixed {r.fixes.size} in {path}"
     IO.eprintln (pal.warn s!"heron-lint: applied {total} fix(es) across {changed} file(s)")
     return 0
 
   -- Default / `--json`: report findings.
   let mut allJson : Array Json := #[]
   let mut total := 0
-  let mut failed := 0
-  let n := inputs.size
-  for i in [0:n] do
-    let inp := inputs[i]!
-    if n > 1 && !cli.json && useColor then
-      IO.eprint s!"\r{pal.dim s!"[{i + 1}/{n}] {inp.label}"}\x1b[K"
-    try
-      let (fm, fixes) ← lintSource cli.all inp.label inp.source
-      total := total + fixes.size
-      if cli.json then
-        allJson := allJson ++ fixes.map (fixToJson inp.label fm)
-      else
-        let srcLines := fm.source.splitOn "\n" |>.toArray
-        for fix in fixes do
-          IO.println (renderFix pal inp.label fm srcLines fix)
-    catch ex =>
-      failed := failed + 1
-      IO.eprintln s!"heron-lint: {inp.label}: {ex.toString}"
-  if n > 1 && !cli.json && useColor then IO.eprint "\r\x1b[K"
   if cli.json then
+    for r in reports do
+      allJson := allJson ++ r.fixes.map (fixToJson r.label r.fileMap)
     IO.println (Json.arr allJson).compress
   else
-    let suffix := if failed == 0 then "" else s!", {failed} file(s) failed to load"
-    IO.eprintln (pal.warn s!"heron-lint: {total} fix(es) across {n} file(s){suffix}")
+    for r in reports do
+      total := total + r.fixes.size
+      let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
+      for fix in r.fixes do
+        IO.println (renderFix pal r.label r.fileMap srcLines fix)
+    IO.eprintln (pal.warn s!"heron-lint: {total} fix(es) across {reports.size} file(s)")
   return 0
