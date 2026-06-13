@@ -101,7 +101,7 @@ Detection runs in the command's *pre*-state (before its real elaboration is
 committed), matching how the live linter observes each command; the real
 elaboration that follows keeps `namespace`/`open`/`variable` scope correct for
 subsequent commands. -/
-partial def collectLoop (all : Bool) (acc : Array Fix) : FrontendM (Array Fix) := do
+partial def collectLoop (all commitInit : Bool) (acc : Array Fix) : FrontendM (Array Fix) := do
   updateCmdPos
   let cmdState ← getCommandState
   let ictx ← getInputContext
@@ -112,10 +112,16 @@ partial def collectLoop (all : Bool) (acc : Array Fix) : FrontendM (Array Fix) :
   let (cmd, ps, messages) := parseCommand ictx pmctx pstate cmdState.messages
   setParserState ps
   setMessages messages
-  let found ← runCommandElabM (collectFixes all cmd)
-  elabCommandAtFrontend cmd
-  let acc := acc ++ found
-  if isTerminalCommand cmd then return acc else collectLoop all acc
+  -- When the environment was imported (not grown), `initialize`/`builtin_initialize` decls
+  -- already exist; elaborating them (even transiently, for detection) panics in
+  -- `addDeclarationRanges` because the decl belongs to an imported module. They never produce
+  -- fixes and don't affect scope, so skip them entirely in imported mode.
+  let skipInit := !commitInit && cmd.isOfKind ``Lean.Parser.Command.initialize
+  let acc ← if skipInit then pure acc else do
+    let found ← runCommandElabM (collectFixes all cmd)
+    elabCommandAtFrontend cmd
+    pure (acc ++ found)
+  if isTerminalCommand cmd then return acc else collectLoop all commitInit acc
 
 /-- Elaborate `source` (labelled `label` for diagnostics) headlessly and collect
 all suggested fixes, in source order. Throws if the imports fail to load. -/
@@ -136,7 +142,7 @@ def lintSource (all : Bool) (label : String) (source : String) : IO (FileMap × 
     { commandState := Command.mkState env msgs opts
       parserState
       cmdPos := parserState.pos }
-  let (collected, _) ← ((collectLoop all #[]).run { inputCtx }).run frontendState
+  let (collected, _) ← ((collectLoop all true #[]).run { inputCtx }).run frontendState
   return (inputCtx.fileMap, collected)
 
 /-! ## Single-pass workspace linting
@@ -181,80 +187,53 @@ def loadDynlibsFallback (root : System.FilePath) : IO Unit := do
         if f.extension == some "so" || f.extension == some "dylib" then
           try Lean.loadDynlib f catch _ => pure ()
 
-/-- Post-order DFS topological sort: emit each module after its local dependencies, so
-elaboration grows the env in an order where every import is already present. Modules are
-visited in name order for deterministic output; cycles (shouldn't occur) are broken by the
-visited guard. -/
-partial def topoSort (mods : Array Mod) : Array Mod := Id.run do
-  let byName : Std.HashMap Name Mod := mods.foldl (fun m x => m.insert x.name x) {}
-  let localNames : Std.HashSet Name := mods.foldl (fun s x => s.insert x.name) {}
-  let rec visit (n : Name) (st : Std.HashSet Name × Array Mod) : Std.HashSet Name × Array Mod :=
-    let (seen, acc) := st
-    if seen.contains n then (seen, acc)
-    else match byName[n]? with
-      | none => (seen, acc)
-      | some x =>
-        let seen := seen.insert n
-        let deps := x.imports.filterMap fun i =>
-          if localNames.contains i.module then some i.module else none
-        let (seen, acc) := (deps.qsort (toString · < toString ·)).foldl (fun s d => visit d s) (seen, acc)
-        (seen, acc.push x)
-  let roots := (mods.map (·.name)).qsort (toString · < toString ·)
-  let (_, ordered) := roots.foldl (fun s n => visit n s) ((∅ : Std.HashSet Name), (#[] : Array Mod))
-  return ordered
-
-/-- Run the per-command detection+elaboration loop over one module starting from `env`,
-returning its fixes and the grown environment. -/
-def runSharedLoop (all : Bool) (env : Environment) (baseOpts : Options) (m : Mod)
-    : IO (FileMap × Array Fix × Environment) := do
-  let ictx := mkInputContext m.src m.file
-  let (_, pstate, _) ← parseHeader ictx
-  -- Fresh root scope (drops the previous module's `open`/`namespace`/`set_option`) while
-  -- keeping the grown `env`; messages reset.
-  let cmdState := Command.mkState env {} baseOpts
-  let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
-  let (fixes, st) ← ((collectLoop all #[]).run { inputCtx := ictx }).run fst
-  return (ictx.fileMap, fixes, st.commandState.env)
-
 /-- Read a source file into a `Mod` (name + contents + header imports). -/
 def buildMod (name : Name) (file : String) : IO Mod := do
   let src ← IO.FS.readFile file
   let hdr ← Lean.parseImports' src file
   return { name, file, src, imports := hdr.imports }
 
-/-- Lint a set of local modules in one process: import the external-dependency closure
-once, then elaborate the modules in dependency order against a growing environment. The
-`mods` array IS the local set — imports outside it are imported from oleans (resolved via
-the search path; unresolved ones are skipped with a warning rather than aborting). -/
+/-- Lint a set of modules in one process.
+
+Import every target module that is **built** (its olean exists) ONCE — Lake's build
+invariant guarantees a built olean's entire transitive closure is also built, so this single
+import never hits a missing dependency. Importing (rather than re-elaborating) the modules
+means their `initialize`/attribute blocks have already run, so re-elaborating a file for
+detection only re-registers already-present declarations (harmless, swallowed) instead of
+trying to evaluate an `[init]` "in the same module" (which aborts the process).
+
+Then detect per file: parse + run `collectFixes` per command against the complete imported
+environment. Modules whose olean is missing (unbuilt) are skipped with a warning — lint
+what's built; build first to lint everything. -/
 def lintMods (all : Bool) (root : System.FilePath) (mods : Array Mod) : IO (Array Report) := do
-  let localNames : Std.HashSet Name := mods.foldl (fun s x => s.insert x.name) {}
-  let mut baseSet : Std.HashSet Name := ∅
-  for x in mods do
-    for imp in x.imports do
-      unless localNames.contains imp.module do baseSet := baseSet.insert imp.module
-  -- Keep only imports whose olean is on the search path; a missing one (e.g. an unbuilt
-  -- sibling library) is reported and dropped instead of aborting the whole import.
-  let mut baseImports : Array Import := #[]
-  for n in baseSet.toArray do
-    if let some _ ← (try some <$> Lean.findOLean n catch _ => pure none) then
-      baseImports := baseImports.push { module := n }
-    else
-      IO.eprintln s!"heron-lint: skipping unresolved import {n} (not built?)"
-  -- Seed `linter.heron := true` to match Sparkle's repo-wide enable; in-file options still apply.
   let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
+  -- Import the union of the targets' DEPENDENCIES (their header imports), not the targets
+  -- themselves. Importing pulls each one's full transitive closure once; a dependency that
+  -- registers an attribute gets imported so dependents elaborate, while leaf modules (exe
+  -- roots defining `main`, umbrellas) are never imported — avoiding duplicate-decl collisions
+  -- between independent modules. Only built oleans are importable (Lake's invariant: a built
+  -- olean's whole closure is built), so unbuilt imports are dropped.
+  let mut impSet : Std.HashSet Name := ∅
+  for m in mods do
+    for i in m.imports do impSet := impSet.insert i.module
+  let mut importNames : Array Import := #[]
+  for n in impSet.toArray do
+    let built ← (do let p ← Lean.findOLean n; p.pathExists) <|> pure false
+    if built then importNames := importNames.push { module := n }
   loadDynlibsFallback root
-  IO.eprintln s!"heron-lint: importing {baseImports.size} external module(s) once, then elaborating {mods.size} local module(s)…"
-  let baseEnv ← importModules baseImports baseOpts (loadExts := true)
-  let ordered := topoSort mods
-  let n := ordered.size
-  let mut env := baseEnv
+  IO.eprintln s!"heron-lint: importing {importNames.size} dependency module(s) once, then linting {mods.size} file(s)…"
+  let env ← importModules importNames baseOpts (loadExts := true)
+  let n := mods.size
   let mut out : Array Report := #[]
   for i in [0:n] do
-    let m := ordered[i]!
+    let m := mods[i]!
     try
-      let (fileMap, fixes, env') ← runSharedLoop all env baseOpts m
-      env := env'
-      out := out.push { path := some m.file, label := m.file, fileMap, fixes }
+      let ictx := mkInputContext m.src m.file
+      let (_, pstate, _) ← parseHeader ictx
+      let cmdState := Command.mkState env {} baseOpts
+      let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
+      let (fixes, _) ← ((collectLoop all false #[]).run { inputCtx := ictx }).run fst
+      out := out.push { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
       IO.eprintln s!"heron-lint: [{i + 1}/{n}] {m.name}: {e.toString}"
   return out
