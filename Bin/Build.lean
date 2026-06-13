@@ -1,5 +1,5 @@
-import Cli.Render
-import Cli.BuildSink
+import Reporter.Render
+import Reporter.BuildSink
 
 /-!
 # `heron` — build-integrated Heron fix reporter (clippy model)
@@ -16,7 +16,7 @@ the cache — no re-elaboration, no cache of our own. Requires the project's lak
     lake env heron --no-build       # read the existing sink only
 -/
 
-open Cli
+open Reporter
 
 structure Cli where
   fix : Bool := false

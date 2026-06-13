@@ -8,7 +8,7 @@ Heron's `meta` `collectFixRecords`. -/
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 open Heron (FixRecord collectFixRecords)
 
-namespace Cli
+namespace Reporter
 
 /-- Walk a module's commands, gathering a `FixRecord` per suggested edit.
 
@@ -51,4 +51,4 @@ partial def parMap {α β : Type} (conc : Nat) (xs : Array α) (f : α → IO β
     | .error _ => pure ()
   parMap conc xs f stop acc
 
-end Cli
+end Reporter

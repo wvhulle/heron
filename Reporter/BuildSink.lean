@@ -2,7 +2,7 @@ import Lean
 import Lake
 import Lake.Load.Workspace
 import Heron.Fix
-import Cli.Render
+import Reporter.Render
 
 /-! **Build-sink engine (clippy model).** Heron's linter runs during `lake build` and writes each
 module's fixes to `$HERON_FIX_DIR/<module>.json` (see `Heron/Check.lean`). This drives that build
@@ -12,7 +12,7 @@ lakefile wiring) and reads the sink. No elaboration here; Lake's incremental bui
 open Lean
 open Heron (FixRecord)
 
-namespace Cli
+namespace Reporter
 
 /-- `Sparkle.Analog.Foo` ↦ `Sparkle/Analog/Foo.lean`. -/
 def moduleSrcPath (mod : String) : String := "/".intercalate (mod.splitOn ".") ++ ".lean"
@@ -101,4 +101,4 @@ def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) 
     out := out.push { path := some srcPath, label := srcPath, fileMap := (Lean.Parser.mkInputContext src srcPath).fileMap, fixes }
   return out.qsort (fun a b => a.label < b.label)
 
-end Cli
+end Reporter

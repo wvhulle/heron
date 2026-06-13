@@ -15,12 +15,14 @@ name = "Demo"
 globs = ["Demo"]
 
 # Shared engines/rendering for the two reporter binaries (per-file, shared-env, build-sink).
+# Named `Reporter` (not `Cli`) so it doesn't collide with the `Cli` package that consumers pull in
+# transitively (e.g. via doc-gen4) — a `Cli.*` lib here would shadow that dependency.
 [[lean_lib]]
-name = "Cli"
-globs = ["Cli.*"]
+name = "Reporter"
+globs = ["Reporter.*"]
 
 # The executables' roots live under `Bin/` — intentionally outside the `Heron.*` glob so the IO
-# `main`s (and Lake, pulled in by `Cli.BuildSink`) never get linked into the plugin `.so`.
+# `main`s (and Lake, pulled in by `Reporter.BuildSink`) never get linked into the plugin `.so`.
 [[lean_exe]]
 name = "dump-ast"
 root = "Bin.DumpAst"
