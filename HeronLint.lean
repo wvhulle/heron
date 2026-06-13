@@ -113,18 +113,24 @@ def findPluginSo : IO (Option String) := do
   let cand := (← IO.appDir) / ".." / "lib" / "libheron_Heron.so"
   (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
-/-- Run `lake build <targets>` with the Heron plugin + sink enabled. Build stdout is discarded so
-it can't corrupt our `--json`/`--apply`; stderr (progress, warnings, errors) is inherited. -/
+/-- Run `lake build <targets>` with the Heron plugin + sink enabled. The build's stdout is
+forwarded to *our* stderr — so its progress/errors stay visible — keeping our stdout clean for
+`--json`/`--apply`. A non-zero exit (some target failed) is reported but not fatal: fixes for the
+targets that did build are still in the sink. -/
 def runBuild (so fixDir : String) (targets : Array String) : IO Unit := do
   IO.eprintln s!"heron-lint: building {targets.size} target(s) under the Heron plugin…"
   let child ← IO.Process.spawn {
     cmd := "lake"
     args := #["build"] ++ targets ++ #[s!"-KheronPlugin={so}", "--reconfigure"]
     env := #[("HERON_FIX_DIR", some fixDir)]
-    stdout := .null
+    stdout := .piped
   }
+  let out ← child.stdout.readToEnd
   let rc ← child.wait
-  unless rc == 0 do IO.eprintln s!"heron-lint: lake build exited with code {rc}"
+  unless out.isEmpty do IO.eprint out
+  unless rc == 0 do
+    IO.eprintln s!"heron-lint: lake build exited with code {rc} — some target failed to build; \
+                  reporting fixes for the targets that did build"
 
 /-! ## Rendering -/
 
