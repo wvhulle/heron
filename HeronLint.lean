@@ -305,14 +305,18 @@ def lintMods (all useCache : Bool) (conc : Nat) (mods : Array Mod) : IO (Array R
       let (_, pstate, _) ← parseHeader ictx
       let cmdState := Command.mkState env {} baseOpts
       let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
-      let (fixes, _) ← ((collectLoop all false #[]).run { inputCtx := ictx }).run fst
+      -- Isolate streams *inside the task*: Lean's stdout/stderr streams are thread-local, so a
+      -- batch-level isolation on the main thread would miss the worker threads. Per-task
+      -- isolation keeps `--json`/`--apply` clean even when elaboration prints — e.g. a project
+      -- that (improperly) does file IO / logging at elaboration time. (It does not stop such IO,
+      -- only its stream output; elaboration-time side effects are a project-side concern.)
+      let (_, (fixes, _)) ← IO.FS.withIsolatedStreams
+        (((collectLoop all false #[]).run { inputCtx := ictx }).run fst)
       return { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
       IO.eprintln s!"heron-lint: {m.name}: {e.toString}"
       return { path := some m.file, label := m.file, fileMap := (mkInputContext m.src m.file).fileMap, fixes := #[] }
-  -- One stdout isolation around the whole (possibly parallel) batch — avoids per-task races and
-  -- keeps `--json`/`--apply` clean even if some elaboration prints; stderr (progress) stays live.
-  let (_, fresh) ← IO.FS.withIsolatedStreams (isolateStderr := false) (parMap conc misses lintOne)
+  let fresh ← parMap conc misses lintOne
   -- Persist updated cache (old hits keep their entries; misses get fresh ones).
   if useCache then
     let mut newCache := cache
