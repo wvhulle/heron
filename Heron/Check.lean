@@ -243,13 +243,15 @@ meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array Fix
 process-global ref suffices; it is (re)written to the sink as the linter runs. -/
 meta initialize heronFixAccum : IO.Ref (Array FixRecord) ← IO.mkRef #[]
 
-/-- When `HERON_FIX_DIR` is set, append this command's fixes to `${HERON_FIX_DIR}/<module>.json`,
-turning a normal `lake build` into a fix-collecting pass (consumed by the `heron-lint` tool). Run
-against the build's live elaboration — no re-elaboration. The file is rewritten on each command
-(the first truncates any stale content) and stamped with the source hash for freshness checks.
-No-op when the env var is unset, so ordinary builds are unaffected. -/
+/-- Append this command's fixes to `<dir>/<module>.json`, turning a normal `lake build` into a
+fix-collecting pass (consumed by the `heron` reporter). `dir` defaults to `.lake/build/heron-fixes`
+(overridable with `HERON_FIX_DIR`), so an always-on plugin build keeps the sink in sync with the
+oleans as a side effect of elaboration — the reporter then just reads it, with no re-elaboration.
+Runs against the build's live elaboration; the file is rewritten on each command (the first
+truncates any stale content) and stamped with the source hash for freshness checks. This runs only
+inside the linter, i.e. only when `linter.heron` is enabled. -/
 private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
-  let some dir ← IO.getEnv "HERON_FIX_DIR" | return
+  let dir := (← IO.getEnv "HERON_FIX_DIR").getD ".lake/build/heron-fixes"
   let recs ← collectFixRecords (all := false) stx
   let all ← heronFixAccum.modifyGet fun a => let a := a ++ recs; (a, a)
   let mod ← getMainModule

@@ -1,6 +1,6 @@
-import Reporter.Render
-import Reporter.SharedEnv
-import Reporter.PerFile
+import Cli.Render
+import Cli.SharedEnv
+import Cli.PerFile
 
 /-!
 # `heron-scan` — self-contained Heron fix reporter
@@ -17,7 +17,7 @@ simpler per-file engine (and `-` reads stdin). Requires the scope to be built (o
     lake exe heron-scan --fix Sparkle/Analog     # rewrite in place
 -/
 
-open Reporter
+open Cli
 
 structure Cli where
   fix : Bool := false

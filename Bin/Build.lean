@@ -1,5 +1,5 @@
-import Reporter.Render
-import Reporter.BuildSink
+import Cli.Render
+import Cli.BuildSink
 
 /-!
 # `heron` — build-integrated Heron fix reporter (clippy model)
@@ -16,7 +16,7 @@ the cache — no re-elaboration, no cache of our own. Requires the project's lak
     lake env heron --no-build       # read the existing sink only
 -/
 
-open Reporter
+open Cli
 
 structure Cli where
   fix : Bool := false
@@ -49,12 +49,13 @@ def main (args : List String) : IO UInt32 := do
   let fixDir : System.FilePath := ".lake" / "build" / "heron-fixes"
   let targets ← if cli.paths.isEmpty then localLibNames else pure cli.paths.toArray
   unless cli.noBuild do
+    -- Ensure the plugin `.so` exists so the consumer's always-on `--plugin` wiring resolves.
     match ← ensurePluginSo with
     | none =>
       IO.eprintln "heron: could not build or locate libheron_Heron.so \
                    (set HERON_PLUGIN_SO, or use --no-build to read an existing sink)"
       return 1
-    | some so => runBuild so fixDir.toString targets
+    | some _ => runBuild fixDir.toString targets
   let reports ← readSink fixDir cli.paths
   let pal : Palette := { on := ← decideColor cli.color (cli.json || cli.apply) }
   emit reports pal cli.json cli.apply cli.fix

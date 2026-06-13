@@ -1,7 +1,7 @@
 import Lean
 import Heron
-import Reporter.Render
-import Reporter.Frontend
+import Cli.Render
+import Cli.Frontend
 
 /-! **Shared-environment engine.** Import the dependency closure ONCE, then detect every target file
 against that shared imported env — instead of re-importing per file. Incremental cache (by source
@@ -12,7 +12,7 @@ unbuilt modules are skipped. -/
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 open Heron (FixRecord)
 
-namespace Reporter
+namespace Cli
 
 /-- A target module: name, source path + contents, and header imports. -/
 structure Mod where
@@ -137,4 +137,4 @@ def lintShared (all useCache : Bool) (conc : Nat) (files : Array String) : IO (A
   let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
   lintMods all useCache conc mods
 
-end Reporter
+end Cli

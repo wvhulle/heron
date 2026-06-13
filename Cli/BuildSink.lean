@@ -2,7 +2,7 @@ import Lean
 import Lake
 import Lake.Load.Workspace
 import Heron.Fix
-import Reporter.Render
+import Cli.Render
 
 /-! **Build-sink engine (clippy model).** Heron's linter runs during `lake build` and writes each
 module's fixes to `$HERON_FIX_DIR/<module>.json` (see `Heron/Check.lean`). This drives that build
@@ -12,7 +12,7 @@ lakefile wiring) and reads the sink. No elaboration here; Lake's incremental bui
 open Lean
 open Heron (FixRecord)
 
-namespace Reporter
+namespace Cli
 
 /-- `Sparkle.Analog.Foo` ↦ `Sparkle/Analog/Foo.lean`. -/
 def moduleSrcPath (mod : String) : String := "/".intercalate (mod.splitOn ".") ++ ".lean"
@@ -59,14 +59,16 @@ def ensurePluginSo : IO (Option String) := do
   buildPluginSo
   findPluginSo
 
-/-- Run `lake build <targets>` with the Heron plugin + sink enabled. Build stdout is forwarded to
-our stderr (so progress/errors stay visible) keeping our stdout clean for `--json`/`--apply`. A
-non-zero exit (some target failed) is reported but non-fatal. -/
-def runBuild (so fixDir : String) (targets : Array String) : IO Unit := do
-  IO.eprintln s!"heron: building {targets.size} target(s) under the Heron plugin…"
+/-- Run a plain `lake build <targets>`, letting the always-on Heron plugin write the fix sink during
+elaboration (no `--reconfigure`, so warm builds stay fast — only changed modules re-elaborate and
+refresh their sink entry; unchanged ones keep theirs). Build stdout is forwarded to our stderr (so
+progress/errors stay visible) keeping our stdout clean for `--json`/`--apply`. A non-zero exit (some
+target failed) is reported but non-fatal. -/
+def runBuild (fixDir : String) (targets : Array String) : IO Unit := do
+  IO.eprintln s!"heron: building {targets.size} target(s)…"
   let child ← IO.Process.spawn {
     cmd := "lake"
-    args := #["build"] ++ targets ++ #[s!"-KheronPlugin={so}", "--reconfigure"]
+    args := #["build"] ++ targets
     env := #[("HERON_FIX_DIR", some fixDir)]
     stdout := .piped
   }
@@ -99,4 +101,4 @@ def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) 
     out := out.push { path := some srcPath, label := srcPath, fileMap := (Lean.Parser.mkInputContext src srcPath).fileMap, fixes }
   return out.qsort (fun a b => a.label < b.label)
 
-end Reporter
+end Cli
