@@ -68,12 +68,12 @@ private structure Suggestion where
   isDelete : Bool
   inlineFix : Bool
 
+/-- Classify an edit's replacement text. Short single-line replacements ride the caret
+line; long or multi-line ones go in a block below to avoid wrapping. -/
 private def Suggestion.of (newText : String) : Suggestion :=
   let trimmed := newText.trimAscii.toString
   let isDelete := trimmed.isEmpty
   let isSingle := !newText.any (· == '\n')
-  -- Short single-line replacements ride the caret line; long or multi-line ones go in a
-  -- block below to avoid wrapping.
   { newText, trimmed, isDelete, inlineFix := isSingle && !isDelete && trimmed.length ≤ 40 }
 
 /-- The annotation appended to the caret line (empty unless this is a delete or a short
@@ -84,23 +84,21 @@ private def Suggestion.inlineHelp (s : Suggestion) (pal : Palette) : String :=
   else ""
 
 /-- The replacement block for multi-line / long single-line fixes, set off by a leading
-blank line ([] for deletes and inline fixes). -/
+blank line (`[]` for deletes and inline fixes). -/
 private def Suggestion.block (s : Suggestion) (g : Gutter) : List String :=
   if s.isDelete || s.inlineFix then []
   else "" :: (g.eq ++ g.pal.dimItalic "replace with:")
     :: (s.newText.splitOn "\n").map (fun rl => g.bar ++ "   " ++ g.pal.italic rl)
 
 /-- The opening lines: `warning: <message> [heron::rule]`, the `--> file:line:col`
-location, and the leading gutter bar. -/
+location (a clickable OSC 8 link pointing at the exact line:col), and the leading bar. -/
 private def headerLines (g : Gutter) (file fileUri : String) (fix : FixRecord) (sp : Position) :
     List String :=
   let header := if fix.message.isEmpty then s!"applicable refactor: {fix.rule}" else fix.message
   let lineCol := s!"{sp.line}:{sp.column + 1}"
-  let loc := s!"{file}:{lineCol}"
-  -- Point the hyperlink at the exact line:col so a click jumps there, not just to the file.
   let target := if fileUri.isEmpty then "" else s!"{fileUri}:{lineCol}"
   [ g.pal.warn "warning" ++ g.pal.bold s!": {header}" ++ " " ++ g.pal.dim s!"[heron::{fix.rule}]"
-  , g.pal.blue (spaces g.width ++ "--> ") ++ osc8 g.pal.on target (g.pal.url loc)
+  , g.pal.blue (spaces g.width ++ "--> ") ++ osc8 g.pal.on target (g.pal.url s!"{file}:{lineCol}")
   , g.bar ]
 
 /-- One source line, plus a caret row underlining the span when `ln` falls within
@@ -171,45 +169,47 @@ def decideColor (color : Option Bool) (plain : Bool) : IO Bool := do
     let noColor := (← IO.getEnv "NO_COLOR").isSome
     return !plain && !noColor && (← (← IO.getStdout).isTty)
 
+/-- The `file://` URI for a report's on-disk path (absolute if it resolves), or empty for
+stdin. The lone IO needed by the human renderer, isolated here. -/
+private def absFileUri : Option String → IO String
+  | none => pure ""
+  | some p => do
+    let abs ← (try IO.FS.realPath p catch _ => pure (System.FilePath.mk p))
+    return s!"file://{abs}"
+
+/-- Apply every report's fixes to disk, returning the number of fixes applied per file that
+actually changed. -/
+private def applyReports (reports : Array Report) : IO (Array Nat) :=
+  reports.filterMapM fun r => do
+    let some path := r.path | return none
+    if r.fixes.isEmpty then return none
+    let patched := Heron.applyEdits r.fileMap (r.fixes.map (·.edit))
+    if patched == r.fileMap.source then return none
+    IO.FS.writeFile path patched
+    IO.eprintln s!"fixed {r.fixes.size} in {path}"
+    return some r.fixes.size
+
 /-- Render `reports` per the chosen mode (`json`/`apply`/`fix`/default human). Returns the exit code. -/
 def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO UInt32 := do
   if apply then
-    match reports[0]? with
-    | some r =>
-      unless reports.size == 1 do
-        IO.eprintln "heron: --apply needs exactly one matching file; narrow the input or use --fix"
-        return 1
-      IO.print (Heron.applyEdits r.fileMap (r.fixes.map (·.edit)))
-      return 0
-    | none => IO.eprintln "heron: no matching file"; return 1
+    let some r := reports[0]? | do IO.eprintln "heron: no matching file"; return 1
+    unless reports.size == 1 do
+      IO.eprintln "heron: --apply needs exactly one matching file; narrow the input or use --fix"
+      return 1
+    IO.print (Heron.applyEdits r.fileMap (r.fixes.map (·.edit)))
+    return 0
   if fix then
-    let mut changed := 0; let mut total := 0
-    for r in reports do
-      let some path := r.path | continue
-      unless r.fixes.isEmpty do
-        let patched := Heron.applyEdits r.fileMap (r.fixes.map (·.edit))
-        if patched != r.fileMap.source then
-          IO.FS.writeFile path patched
-          changed := changed + 1; total := total + r.fixes.size
-          IO.eprintln s!"fixed {r.fixes.size} in {path}"
-    IO.eprintln (pal.warn s!"heron: applied {total} fix(es) across {changed} file(s)")
+    let applied ← applyReports reports
+    IO.eprintln (pal.warn s!"heron: applied {applied.sum} fix(es) across {applied.size} file(s)")
     return 0
   if json then
     IO.println (Json.arr (reports.flatMap fun r => r.fixes.map (fixToJson r.label r.fileMap))).compress
-  else
-    let mut total := 0
-    for r in reports do
-      total := total + r.fixes.size
-      let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
-      -- Absolute `file://` URI so the location line can be a clickable OSC 8 hyperlink.
-      let fileUri ← match r.path with
-        | some p => do
-          let abs ← (try IO.FS.realPath p catch _ => pure (System.FilePath.mk p))
-          pure s!"file://{abs}"
-        | none => pure ""
-      for f in r.fixes do
-        IO.println (renderFix pal r.label fileUri r.fileMap srcLines f)
-    IO.eprintln (pal.warn s!"heron: {total} fix(es) across {reports.size} file(s)")
+    return 0
+  reports.forM fun r => do
+    let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
+    let fileUri ← absFileUri r.path
+    r.fixes.forM fun f => IO.println (renderFix pal r.label fileUri r.fileMap srcLines f)
+  IO.eprintln (pal.warn s!"heron: {(reports.map (·.fixes.size)).sum} fix(es) across {reports.size} file(s)")
   return 0
 
 end Reporter
