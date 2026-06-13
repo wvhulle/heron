@@ -21,9 +21,6 @@ public import Heron.Check.NatLiteralPatterns
 public import Heron.Check.FunMatchToMatchFun
 public import Heron.Check.ExprAppChainToMkAppN
 public import Heron.Check.FunToCdot
-public import Heron.Check.UnusedImport
-public import Heron.Check.UnnecessaryPublicImport
-public import Heron.Check.UnnecessaryMetaImport
 -- Meta-programming hygiene
 public import Heron.Check.SyntaxRawAccess
 public import Heron.Check.SyntaxKindCheck

@@ -10,7 +10,6 @@ public meta import Lean.Elab.Command
 -- through private helpers.
 public meta import Heron.Rule
 public meta import Heron.Lsp
-public meta import Heron.ImportAnalysis
 -- Private: only used by the elaborator-internal helper `elabAssertResult` for
 -- `Syntax.getQuotContent`, which is available without re-exporting.
 meta import Lean.Elab.Quotation
@@ -109,13 +108,6 @@ private meta def elabAssertResult (linterName : Ident) (cmd : Syntax)
     logErrorAt stx
       m!"\n\n{linterName} failed to rewrite:\n\noriginal:\n{original.trimAscii}\n\nexpected:\n{expectedNorm}\n\nactual:\n{actualNorm}\n"
 
-/-- Record `Heron.Assert` as an implicit dependency of the current file so the
-unused-import analysis counts it as used whenever any of the `#assert*`
-commands below are invoked. This removes the need for consumers to write a
-dummy `_usedAssert := @Heron.Assert.applyEdits` reference. -/
-private meta def recordAssertUsage : CommandElabM Unit :=
-  Lean.recordExtraModUse `Heron.Assert (isMeta := true)
-
 syntax (name := assertCheckCmd)
   "#assertCheck " ident " in " command (" becomes " term)? : command
 
@@ -124,16 +116,13 @@ syntax (name := assertRefactorCmd)
 
 @[command_elab assertCheckCmd] meta def elabAssertCheck : CommandElab
   | stx@`(command| #assertCheck $linterName in $cmd becomes $expected) => do
-    recordAssertUsage
     elabAssertResult linterName cmd (some expected) stx
   | stx@`(command| #assertCheck $linterName in $cmd) => do
-    recordAssertUsage
     elabAssertResult linterName cmd none stx
   | _ => throwUnsupportedSyntax
 
 @[command_elab assertRefactorCmd] meta def elabAssertRefactor : CommandElab
   | stx@`(command| #assertRefactor $linterName in $cmd becomes $expected) => do
-    recordAssertUsage
     elabAssertResult linterName cmd (some expected) stx
   | _ => throwUnsupportedSyntax
 
@@ -142,7 +131,6 @@ syntax (name := assertIgnoreCmd)
 
 @[command_elab assertIgnoreCmd] meta def elabAssertIgnore : CommandElab
   | stx@`(command| #assertIgnore $linterName in $cmd) => do
-    recordAssertUsage
     let { edits, .. } ← runRule cmd linterName.getId
     unless edits.isEmpty do
       let text ← getFileMap
@@ -154,48 +142,5 @@ syntax (name := assertIgnoreCmd)
       logWarningAt stx
         m!"expected no replacements but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax
-
-/-! ## `#assertImports` — verifies the import-analysis predictions for a file. -/
-
-/-- Collect all identifiers anywhere inside a syntax tree. -/
-private meta partial def collectIdents (stx : Syntax) : Array Name :=
-  if stx.isIdent then #[stx.getId]
-  else stx.getArgs.foldl (init := #[]) fun acc child => acc ++ collectIdents child
-
-/-- Sort names using `Name.cmp` so `Array.==` comparisons are order-independent. -/
-private meta def sortNames (xs : Array Name) : Array Name :=
-  xs.qsort fun a b => Name.cmp a b == .lt
-
-syntax (name := assertImportsCmd)
-  "#assertImports"
-    (ppSpace &"unused" " := " "[" ident,* "]")?
-    (ppSpace &"overPublic" " := " "[" ident,* "]")?
-    (ppSpace &"overMeta" " := " "[" ident,* "]")? : command
-
-@[command_elab assertImportsCmd] meta def elabAssertImports : CommandElab := fun stx => do
-  Lean.recordExtraModUse `Heron.Assert (isMeta := true)
-  let expectedUnused := sortNames (collectIdents stx[1])
-  let expectedOverPublic := sortNames (collectIdents stx[2])
-  let expectedOverMeta := sortNames (collectIdents stx[3])
-  let analyses ← ImportAnalysis.analyzeImports stx
-  if analyses.isEmpty then
-    logErrorAt stx
-      m!"no imports were analyzed — `#assertImports` must be the last command of the file"
-    return
-  let actualUnused := sortNames <| analyses.filterMap fun a =>
-    if !a.isUsed then some a.imp.module else none
-  let actualOverPublic := sortNames <| analyses.filterMap fun a =>
-    if a.isUsed && a.imp.isExported && !a.needsExported then some a.imp.module else none
-  let actualOverMeta := sortNames <| analyses.filterMap fun a =>
-    if a.isUsed && a.imp.isMeta && !a.needsMeta then some a.imp.module else none
-  if actualUnused != expectedUnused then
-    logErrorAt stx
-      m!"unused imports mismatch:\n  expected: {expectedUnused}\n  actual:   {actualUnused}"
-  if actualOverPublic != expectedOverPublic then
-    logErrorAt stx
-      m!"over-public imports mismatch:\n  expected: {expectedOverPublic}\n  actual:   {actualOverPublic}"
-  if actualOverMeta != expectedOverMeta then
-    logErrorAt stx
-      m!"over-meta imports mismatch:\n  expected: {expectedOverMeta}\n  actual:   {actualOverMeta}"
 
 end Heron.Assert

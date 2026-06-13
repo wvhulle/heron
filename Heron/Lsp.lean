@@ -27,16 +27,6 @@ invoke rules directly without going through the linter/diagnostic path. -/
 meta initialize testRunnerRegistry : IO.Ref (Std.HashMap Name TestRunner) ←
   IO.mkRef { }
 
-/-- Build a `DiagnosticRelatedInformation` entry for `l`, anchoring it at
-`l.span`'s LSP range in the file identified by `uri`. Returns `none` if the
-span has no source range. -/
-meta def Label.toRelatedInformation (l : Label) (fileMap : FileMap) (uri : Lsp.DocumentUri) :
-    CommandElabM (Option Lsp.DiagnosticRelatedInformation) := do
-  let some range := l.span.getRange? | return none
-  let lspRange := fileMap.utf8RangeToLspRange range
-  let formatted ← (← addMessageContext l.text).format
-  return some { location := { uri, range := lspRange }, message := formatted.pretty }
-
 /-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
 to format the replacement text. Falls back to `reprint` if formatting fails. -/
 meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
@@ -50,17 +40,6 @@ meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (O
     let some text := r.newSyntax.reprint | return none
     pure text.trimAscii.toString
   return some { range := lspRange, newText }
-
-/-- Collect `DiagnosticRelatedInformation` entries for one match: one per
-replacement (using `Replacement.toLabel`), plus any extra label-only entries
-from `Rule.labels`. -/
-meta def collectRelatedInformation [Rule α] (m : α) (repls : Array Replacement)
-    (fileMap : FileMap) (uri : Lsp.DocumentUri) :
-    CommandElabM (Array Lsp.DiagnosticRelatedInformation) := do
-  let fromRepls ← repls.filterMapM fun r => r.toLabel.toRelatedInformation fileMap uri
-  let extras ← Rule.labels (α := α) m
-  let fromExtras ← extras.filterMapM fun l => l.toRelatedInformation fileMap uri
-  return fromRepls ++ fromExtras
 
 /-- Build a type-erased test runner for a `Rule` instance. -/
 meta def buildTestRunner [Rule α] : TestRunner := fun stx => do
