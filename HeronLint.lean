@@ -1,85 +1,44 @@
 import Lean
-import Heron
 
 /-!
-# `heron-lint` — headless fix reporter
+# `heron-lint` — build-integrated fix reporter
 
-Drives the Lean frontend over Lean source, runs Heron's checks against every
-top-level command, and reports the suggested fixes with `cargo clippy`-style
-diagnostics (source context, carets, and the proposed replacement).
+Heron's linter runs *during* `lake build` and, when `HERON_FIX_DIR` is set, writes each module's
+suggested fixes to `${HERON_FIX_DIR}/<module>.json` (see `Heron/Check.lean`). This binary drives
+that build and renders the resulting sink — like `cargo clippy`, the lints come from the compile
+itself, and **Lake's incremental cache decides what re-lints**. No second elaboration, no cache of
+our own.
 
-Heron otherwise only surfaces its replacements as LSP code actions in an editor;
-the plain `lake build` diagnostic carries the headline but not the fix text. This
-binary exposes the same `Replacement → TextEdit` path the LSP provider and the
-`#assertCheck` test harness use, so fixes can be inspected — and, with `--fix`,
-applied and rebuilt — headlessly.
+To lint every module (not only those that `import Heron`), the build loads Heron as a Lean
+*plugin* via `lean --plugin`, wired in the project's lakefile and enabled by
+`-KheronPlugin=<libheron_Heron.so>` (this binary passes it automatically).
 
-Inputs may be files, directories (recursed for `*.lean`, skipping `.lake` and
-dotfiles — point at a library's source dir to lint a whole lake target), or `-`
-for stdin. Run under the target project's environment so imports resolve:
+    lake env heron-lint                  # build + report all fixes (clippy-style)
+    lake env heron-lint Sparkle/Analog   # report only fixes under a path
+    lake env heron-lint --json | jq      # machine-readable
+    lake env heron-lint --fix            # rewrite files in place
+    lake env heron-lint --no-build       # just read the existing sink (skip the build)
 
-    lake env heron-lint Sparkle/Analog                 # lint a whole subtree
-    lake env heron-lint A.lean B.lean                  # several files
-    lake env heron-lint --fix Sparkle                  # rewrite files in place
-    lake env heron-lint --apply A.lean > A.fixed.lean  # patched source to stdout
-    lake env heron-lint --json Sparkle | jq            # machine-readable findings
-    cat snippet.lean | lake env heron-lint -           # stdin
+Requires a project whose lakefile honours `-KheronPlugin` (see Sparkle's `lakefile.lean`).
 -/
 
-open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
+open Lean
 
 namespace HeronLint
 
-/-- A single suggested edit: which rule produced it, the rule's headline, and the
-LSP text edit (source range + replacement text). -/
+/-- A single suggested edit. -/
 structure Fix where
   rule : Name
   message : String
   edit : Lsp.TextEdit
 
-/-- Run Heron's rules against `cmd`, returning a `Fix` per suggested replacement.
+/-- A file's findings, with the `FileMap` of its current source for rendering/applying. -/
+structure Report where
+  path : String
+  fileMap : FileMap
+  fixes : Array Fix
 
-**Checks** (the rules the linter actually emits) are always collected from
-`heronRuleRegistry`, filtered by the same `isEnabled` gate the master linter uses,
-so the output reflects what `lake build` would warn about — and each carries its
-rule headline. When `all` is `true`, the manual-only **refactors** (`inline`,
-`flipIf`, …) that the linter never suggests on its own are additionally collected
-from `testRunnerRegistry`. -/
-meta def collectFixes (all : Bool) (cmd : Syntax) : CommandElabM (Array Fix) := do
-  let saved := (← get).messages
-  let fileMap ← getFileMap
-  -- No pre-elaboration: 23 of Heron's 25 checks are purely syntactic (they match on
-  -- `Syntax`), and the 2 that need types (`exceptToExceptT`/`optionToOptionT`) self-elaborate
-  -- their candidates via `Rule.collectInfoTrees`. So detection costs only a parse, never a
-  -- full elaboration of every declaration. `withoutModifyingEnv` isolates any such self-elab.
-  let result ← withoutModifyingEnv do
-    let entries ← Heron.heronRuleRegistry.get
-    let opts ← getOptions
-    let checkNames := entries.map (·.name)
-    let mut acc : Array Fix := #[]
-    for entry in entries do
-      if entry.isEnabled opts then
-        let detected ← entry.findActions cmd
-        for (msg, repls) in detected do
-          let title := (← msg.toString).trimAscii.toString
-          for repl in repls do
-            let edit? ← liftCoreM (repl.toTextEdit fileMap)
-            if let some edit := edit? then
-              acc := acc.push { rule := entry.name, message := title, edit }
-    if all then
-      let runners ← Heron.testRunnerRegistry.get
-      for (name, runner) in runners.toList do
-        unless checkNames.contains name do
-          let res ← runner cmd
-          for edit in res.edits do
-            acc := acc.push { rule := name, message := "", edit }
-    pure acc
-  modify fun s => { s with messages := saved }
-  return result
-
-/-- Apply non-overlapping LSP `TextEdit`s to a source string. Edits are sorted by
-range start descending and applied back-to-front so earlier byte offsets stay
-valid (LSP ranges refer to the original document). Matches `Heron.Assert.applyEdits`. -/
+/-- Apply non-overlapping LSP `TextEdit`s back-to-front (ranges refer to the original document). -/
 def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
   let sorted := edits.qsort fun a b =>
     text.lspPosToUtf8Pos b.range.start < text.lspPosToUtf8Pos a.range.start
@@ -90,250 +49,69 @@ def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
     let post := String.Pos.Raw.extract src endPos src.rawEndPos
     pre ++ edit.newText ++ post
 
-/-- Walk every top-level command, gathering a `Fix` for each suggested edit.
+/-! ## Sink reading -/
 
-Each command is elaborated **once** (`elabCommandAtFrontend`), which both advances the
-env/scope for subsequent commands and populates the info trees the two type-aware rules
-(`exceptToExceptT`/`optionToOptionT`) consult. Detection then runs *after* that single
-elaboration, reusing those trees (no second elaboration). `#eval`/`#eval!` are never
-elaborated (they execute user code: printing, writing files); `initialize`/
-`builtin_initialize` are skipped in imported mode (already present — re-elaboration panics
-in `addDeclarationRanges`).
+/-- `Sparkle.Analog.Proofs.RC` ↦ `Sparkle/Analog/Proofs/RC.lean` (Lake's source root = package root). -/
+def moduleSrcPath (mod : String) : String :=
+  "/".intercalate (mod.splitOn ".") ++ ".lean"
 
-`commitInit := true` (growing-env `lintSource`/stdin mode) commits `initialize` too, since
-declarations there are not pre-imported. -/
-partial def collectLoop (all commitInit : Bool) (acc : Array Fix) : FrontendM (Array Fix) := do
-  updateCmdPos
-  let cmdState ← getCommandState
-  let ictx ← getInputContext
-  let pstate ← getParserState
-  let scope := cmdState.scopes.head!
-  let pmctx := { env := cmdState.env, options := scope.opts,
-                 currNamespace := scope.currNamespace, openDecls := scope.openDecls }
-  let (cmd, ps, messages) := parseCommand ictx pmctx pstate cmdState.messages
-  setParserState ps
-  setMessages messages
-  let imported := !commitInit
-  let isEval := cmd.isOfKind ``Lean.Parser.Command.eval || cmd.isOfKind ``Lean.Parser.Command.evalBang
-  let isInit := cmd.isOfKind ``Lean.Parser.Command.initialize
-  let acc ← if isEval || (imported && isInit) then pure acc else do
-    elabCommandAtFrontend cmd
-    let found ← runCommandElabM (collectFixes all cmd)
-    pure (acc ++ found)
-  if isTerminalCommand cmd then return acc else collectLoop all commitInit acc
-
-/-- Elaborate `source` (labelled `label` for diagnostics) headlessly and collect
-all suggested fixes, in source order. Throws if the imports fail to load. -/
-def lintSource (all : Bool) (label : String) (source : String) : IO (FileMap × Array Fix) := do
-  let inputCtx := mkInputContext source label
-  let (header, parserState, msgs) ← parseHeader inputCtx
-  -- Deterministic, synchronous elaboration so fix collection is stable. Seed
-  -- `linter.heron := true` to match how Sparkle enables every rule repo-wide (its
-  -- `weak.linter.heron` lakefile option); in-file `set_option`s still apply.
-  let opts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
-  -- The main-module name is irrelevant when linting an external file; deriving it
-  -- via `moduleNameOfFileName` would wrongly require the file to live under the cwd.
-  let (env, msgs) ← processHeader header opts msgs inputCtx
-  if msgs.hasErrors then
-    for m in msgs.toList do IO.eprintln (← m.toString)
-    throw <| IO.userError s!"failed to load imports of {label}"
-  let frontendState : Frontend.State :=
-    { commandState := Command.mkState env msgs opts
-      parserState
-      cmdPos := parserState.pos }
-  let (_, (collected, _)) ← IO.FS.withIsolatedStreams
-    (((collectLoop all true #[]).run { inputCtx }).run frontendState)
-  return (inputCtx.fileMap, collected)
-
-/-! ## Single-pass workspace linting
-
-Instead of importing the full environment (Mathlib etc.) once per file, import the
-external-dependency closure ONCE and elaborate the local modules in dependency order
-against a single growing `Environment`, running detection per command. This is the
-efficient path for linting a whole codebase. -/
-
-/-- A local module to be linted: its name, source path + contents, and header imports. -/
-structure Mod where
-  name : Name
-  file : String
-  src : String
-  imports : Array Import
-  deriving Inhabited
-
-/-- A linted file's findings, carrying the `FileMap` needed to render/apply edits. -/
-structure Report where
-  /-- Path on disk, or `none` for stdin (not rewritable by `--fix`). -/
-  path : Option String
-  label : String
-  fileMap : FileMap
-  fixes : Array Fix
-
-/-- Module `Name` from a source path relative to the package root, e.g.
-`Sparkle/Analog/Foo.lean` ↦ `Sparkle.Analog.Foo`. (Lake's source root is the package root,
-so this matches how imports name modules.) -/
-def modNameOfFile (f : String) : Name :=
-  let p := if f.endsWith ".lean" then (f.dropEnd 5).toString else f
-  let parts := (p.splitOn "/").filter (fun s => s != "" && s != ".")
-  parts.foldl (fun acc s => Name.str acc s) Name.anonymous
-
-/-- Read a source file into a `Mod` (name + contents + header imports). -/
-def buildMod (name : Name) (file : String) : IO Mod := do
-  let src ← IO.FS.readFile file
-  let hdr ← Lean.parseImports' src file
-  return { name, file, src, imports := hdr.imports }
-
-/-! ## Incremental cache
-
-A per-file cache keyed by source-content hash. On re-run, files whose source is byte-identical
-reuse their cached fixes without elaboration; if *every* file is a cache hit the dependency
-import is skipped entirely → near-instant. (Caveat: keyed on a file's own source only, so a
-change in a dependency that would alter this file's fixes is not detected — fine in practice
-since Heron's fixes are local/syntactic; `--no-cache` forces a full re-lint.) -/
-
-def cachePath : System.FilePath := ".lake" / "build" / "heron-lint-cache.json"
-
-def fixToCacheJson (f : Fix) : Json :=
-  Json.mkObj [("rule", f.rule.toString), ("message", f.message),
-              ("range", toJson f.edit.range), ("newText", f.edit.newText)]
-
-def fixFromCacheJson? (j : Json) : Except String Fix := do
+/-- Parse one fix record written by the sink. -/
+def fixOfJson? (j : Json) : Except String Fix := do
   let rule ← j.getObjValAs? String "rule"
   let message ← j.getObjValAs? String "message"
   let range ← j.getObjValAs? Lsp.Range "range"
-  let newText ← j.getObjValAs? String "newText"
-  return { rule := Name.mkSimple rule, message, edit := { range, newText } }
+  let after ← j.getObjValAs? String "after"
+  return { rule := Name.mkSimple rule, message, edit := { range, newText := after } }
 
-structure CacheEntry where
-  hash : UInt64
-  fixes : Array Fix
+/-- Read `${dir}/<module>.json` sink files into `Report`s. Each is matched to its current source
+file; if the source changed since the build wrote the sink (hash mismatch) it is skipped with a
+note (rebuild to refresh). `filter` (path prefixes) limits which modules are reported. -/
+def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) := do
+  unless ← dir.pathExists do return #[]
+  let mut out : Array Report := #[]
+  for f in ← System.FilePath.walkDir dir do
+    if f.extension != some "json" then continue
+    let mod := (f.fileStem).getD ""
+    let srcPath := moduleSrcPath mod
+    unless filter.isEmpty || filter.any (fun p => srcPath == p || srcPath.startsWith (p ++ "/")) do
+      continue
+    unless ← (System.FilePath.mk srcPath).pathExists do continue
+    let src ← IO.FS.readFile srcPath
+    let .ok json := Json.parse (← IO.FS.readFile f) | continue
+    let stored := (json.getObjValAs? Nat "source").toOption.getD 0
+    if hash src != UInt64.ofNat stored then
+      IO.eprintln s!"heron-lint: {srcPath} changed since last build — rebuild to refresh"
+      continue
+    let fixesJson := (json.getObjValAs? (Array Json) "fixes").toOption.getD #[]
+    let fixes := fixesJson.filterMap (fun j => (fixOfJson? j).toOption)
+    out := out.push { path := srcPath, fileMap := (Parser.mkInputContext src srcPath).fileMap, fixes }
+  return out.qsort (·.path < ·.path)
 
-def loadCache : IO (Std.HashMap String CacheEntry) := do
-  let mut m : Std.HashMap String CacheEntry := ∅
-  try
-    unless ← cachePath.pathExists do return m
-    let .ok json := Json.parse (← IO.FS.readFile cachePath) | return m
-    let .ok arr := json.getArr? | return m
-    for e in arr do
-      let parsed : Except String (String × Nat × Array Fix) := do
-        let file ← e.getObjValAs? String "file"
-        let h ← e.getObjValAs? Nat "hash"
-        let fj ← e.getObjValAs? (Array Json) "fixes"
-        return (file, h, ← fj.mapM fixFromCacheJson?)
-      if let .ok (file, h, fixes) := parsed then
-        m := m.insert file { hash := UInt64.ofNat h, fixes }
-  catch _ => pure ()
-  return m
+/-! ## Build driver -/
 
-def saveCache (m : Std.HashMap String CacheEntry) : IO Unit := do
-  try
-    if let some d := cachePath.parent then
-      if ← d.pathExists then
-        let arr := m.toArray.map fun (file, e) =>
-          Json.mkObj [("file", file), ("hash", (e.hash.toNat : Nat)),
-                      ("fixes", Json.arr (e.fixes.map fixToCacheJson))]
-        IO.FS.writeFile cachePath (Json.arr arr).compress
-  catch _ => pure ()
+/-- Locate Heron's plugin shared library relative to this executable
+(`…/.lake/build/bin/heron-lint` → `…/.lake/build/lib/libheron_Heron.so`), overridable with
+`HERON_PLUGIN_SO`. -/
+def findPluginSo : IO (Option String) := do
+  if let some p ← IO.getEnv "HERON_PLUGIN_SO" then return some p
+  let cand := (← IO.appDir) / ".." / "lib" / "libheron_Heron.so"
+  (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
-/-- Run `f` over `xs` with at most `conc` concurrent tasks (`conc = 1` ⇒ sequential),
-preserving input order. `f` is expected to handle its own errors. -/
-partial def parMap {α β : Type} (conc : Nat) (xs : Array α) (f : α → IO β) (i : Nat := 0)
-    (acc : Array β := #[]) : IO (Array β) := do
-  if i ≥ xs.size then return acc
-  let stop := min (i + max 1 conc) xs.size
-  let tasks ← (xs.extract i stop).mapM fun x => IO.asTask (f x)
-  let mut acc := acc
-  for t in tasks do
-    match ← IO.wait t with
-    | .ok b => acc := acc.push b
-    | .error _ => pure ()
-  parMap conc xs f stop acc
-
-/-- Lint a set of modules in one process.
-
-Import every target module that is **built** (its olean exists) ONCE — Lake's build
-invariant guarantees a built olean's entire transitive closure is also built, so this single
-import never hits a missing dependency. Importing (rather than re-elaborating) the modules
-means their `initialize`/attribute blocks have already run, so re-elaborating a file for
-detection only re-registers already-present declarations (harmless, swallowed) instead of
-trying to evaluate an `[init]` "in the same module" (which aborts the process).
-
-Then detect per file: parse + run `collectFixes` per command against the complete imported
-environment. Modules whose olean is missing (unbuilt) are skipped with a warning — lint
-what's built; build first to lint everything. -/
-def lintMods (all useCache : Bool) (conc : Nat) (mods : Array Mod) : IO (Array Report) := do
-  let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
-  -- Cache: reuse fixes for files whose source hash is unchanged.
-  let cache ← if useCache then loadCache else pure ∅
-  let mut hits : Array Report := #[]
-  let mut misses : Array Mod := #[]
-  for m in mods do
-    match cache[m.file]? with
-    | some e =>
-      if e.hash == hash m.src then
-        hits := hits.push { path := some m.file, label := m.file,
-                            fileMap := (mkInputContext m.src m.file).fileMap, fixes := e.fixes }
-      else misses := misses.push m
-    | none => misses := misses.push m
-  if misses.isEmpty then
-    IO.eprintln s!"heron-lint: {mods.size} file(s) unchanged — all served from cache"
-    return hits
-  -- Import the union of the MISSES' DEPENDENCIES (their header imports), not the targets
-  -- themselves. Importing pulls each one's full transitive closure once; a dependency that
-  -- registers an attribute gets imported so dependents elaborate, while leaf modules (exe
-  -- roots defining `main`, umbrellas) are never imported — avoiding duplicate-decl collisions.
-  -- Only built oleans are importable (Lake's invariant: a built olean's whole closure is
-  -- built), so unbuilt imports are dropped. `Init` is excluded: it's implicit in every closure
-  -- and listing it explicitly makes `loadExts` re-run imported initializers (double-registering
-  -- env extensions). Precompiled-module dynlibs are deliberately NOT loaded — dlopen-ing them
-  -- runs compiled module initializers that `importModules` then re-registers; extern C symbols
-  -- aren't invoked during elaboration anyway.
-  let mut impSet : Std.HashSet Name := ∅
-  for m in misses do
-    for i in m.imports do
-      unless i.module == `Init do impSet := impSet.insert i.module
-  let mut importNames : Array Import := #[]
-  for n in impSet.toArray do
-    let built ← (do let p ← Lean.findOLean n; p.pathExists) <|> pure false
-    if built then importNames := importNames.push { module := n }
-  IO.eprintln s!"heron-lint: {hits.size} cached; importing {importNames.size} dependency module(s) to lint {misses.size} file(s) (≤{max 1 conc}-way)…"
-  let env ← importModules importNames baseOpts (loadExts := true)
-  -- Detect one file against the shared (immutable) imported env. Independent per file, so safe
-  -- to run concurrently. Errors are isolated to the file.
-  let lintOne : Mod → IO Report := fun m => do
-    try
-      let ictx := mkInputContext m.src m.file
-      let (_, pstate, _) ← parseHeader ictx
-      let cmdState := Command.mkState env {} baseOpts
-      let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
-      -- Isolate streams *inside the task*: Lean's stdout/stderr streams are thread-local, so a
-      -- batch-level isolation on the main thread would miss the worker threads. Per-task
-      -- isolation keeps `--json`/`--apply` clean even when elaboration prints — e.g. a project
-      -- that (improperly) does file IO / logging at elaboration time. (It does not stop such IO,
-      -- only its stream output; elaboration-time side effects are a project-side concern.)
-      let (_, (fixes, _)) ← IO.FS.withIsolatedStreams
-        (((collectLoop all false #[]).run { inputCtx := ictx }).run fst)
-      return { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
-    catch e =>
-      IO.eprintln s!"heron-lint: {m.name}: {e.toString}"
-      return { path := some m.file, label := m.file, fileMap := (mkInputContext m.src m.file).fileMap, fixes := #[] }
-  let fresh ← parMap conc misses lintOne
-  -- Persist updated cache (old hits keep their entries; misses get fresh ones).
-  if useCache then
-    let mut newCache := cache
-    for r in fresh do
-      if let some path := r.path then
-        newCache := newCache.insert path { hash := hash r.fileMap.source, fixes := r.fixes }
-    saveCache newCache
-  return hits ++ fresh
-
-/-- Lint explicit files/dirs as the local set (module names derived from paths). -/
-def lintShared (all useCache : Bool) (conc : Nat) (files : Array String) : IO (Array Report) := do
-  let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
-  lintMods all useCache conc mods
+/-- Run `lake build` with the Heron plugin + sink enabled. Build stdout is discarded so it can't
+corrupt our `--json`/`--apply`; stderr (progress, warnings, errors) is inherited. -/
+def runBuild (so fixDir : String) : IO Unit := do
+  IO.eprintln "heron-lint: building (lake build -KheronPlugin … --reconfigure)…"
+  let child ← IO.Process.spawn {
+    cmd := "lake"
+    args := #["build", s!"-KheronPlugin={so}", "--reconfigure"]
+    env := #[("HERON_FIX_DIR", some fixDir)]
+    stdout := .null
+  }
+  let rc ← child.wait
+  unless rc == 0 do IO.eprintln s!"heron-lint: lake build exited with code {rc}"
 
 /-! ## Rendering -/
 
-/-- ANSI colouring, gated on whether output is a terminal. -/
 structure Palette where
   on : Bool
 
@@ -404,95 +182,50 @@ def fixToJson (file : String) (fm : FileMap) (fix : Fix) : Json :=
     , ("before", before)
     , ("after", fix.edit.newText) ]
 
-/-! ## Input resolution -/
-
-/-- A unit of work: source text plus how to label and (optionally) rewrite it. -/
-structure Input where
-  /-- Filesystem path, or `none` for stdin (which `--fix` refuses). -/
-  path : Option String
-  label : String
-  source : String
-  deriving Inhabited
-
-/-- Expand CLI path arguments into concrete `.lean` files. Directories are walked
-recursively; `.lake`, `.git`, and other dotfiles are skipped. -/
-def expandPaths (paths : List String) : IO (Array String) := do
-  let mut out : Array String := #[]
-  for p in paths do
-    if ← System.FilePath.isDir p then
-      let enter := fun (d : System.FilePath) =>
-        pure (match d.fileName with | some n => !n.startsWith "." | none => true)
-      let files ← System.FilePath.walkDir p enter
-      for f in files do
-        if f.extension == some "lean" then out := out.push f.toString
-    else
-      out := out.push p
-  return out.qsort (· < ·)
-
 /-! ## CLI -/
 
 structure Cli where
   fix : Bool := false
   apply : Bool := false
   json : Bool := false
-  all : Bool := false
   color : Option Bool := none
-  noCache : Bool := false
-  noParallel : Bool := false
+  noBuild : Bool := false
   paths : List String := []
-  stdin : Bool := false
 
 def parseArgs : List String → Except String Cli
   | [] => .ok {}
   | "--fix" :: r => do pure { (← parseArgs r) with fix := true }
   | "--apply" :: r => do pure { (← parseArgs r) with apply := true }
   | "--json" :: r => do pure { (← parseArgs r) with json := true }
-  | "--all" :: r => do pure { (← parseArgs r) with all := true }
   | "--color" :: r => do pure { (← parseArgs r) with color := some true }
   | "--no-color" :: r => do pure { (← parseArgs r) with color := some false }
-  | "--no-cache" :: r => do pure { (← parseArgs r) with noCache := true }
-  | "--no-parallel" :: r => do pure { (← parseArgs r) with noParallel := true }
-  | "-" :: r => do pure { (← parseArgs r) with stdin := true }
+  | "--no-build" :: r => do pure { (← parseArgs r) with noBuild := true }
   | arg :: r =>
     if arg.startsWith "-" then .error s!"unknown flag: {arg}"
     else do let c ← parseArgs r; pure { c with paths := arg :: c.paths }
 
 def usage : String :=
-  "usage: heron-lint [--fix | --apply | --json] [--all] [--no-cache] [--no-parallel] [--color|--no-color] <path|-> ..."
+  "usage: heron-lint [--fix | --apply | --json] [--no-build] [--color|--no-color] [<path-prefix> ...]"
 
 end HeronLint
 
 open HeronLint
 
-private def readStdin : IO String := do (← IO.getStdin).readToEnd
-
-unsafe def main (args : List String) : IO UInt32 := do
-  Lean.initSearchPath (← Lean.findSysroot)
-  Lean.enableInitializersExecution
+def main (args : List String) : IO UInt32 := do
   let cli ← match parseArgs args with
     | .error e => do IO.eprintln s!"heron-lint: {e}\n{usage}"; return 1
     | .ok c => pure c
-  -- Resolve inputs into a uniform `Array Report`. Path/dir inputs go through the
-  -- single-pass shared-environment driver (import deps once); stdin stays per-file.
-  let files ← expandPaths cli.paths
-  let mut reports : Array Report := #[]
-  if cli.stdin then
-    try
-      let src ← readStdin
-      let (fm, fixes) ← lintSource cli.all "<stdin>" src
-      reports := reports.push { path := none, label := "<stdin>", fileMap := fm, fixes }
-    catch e => IO.eprintln s!"heron-lint: <stdin>: {e.toString}"
-  let useCache := !cli.noCache
-  let conc := if cli.noParallel then 1 else 16
-  if !files.isEmpty then
-    -- Explicit paths/dirs: lint just those as the local set.
-    reports := reports ++ (← lintShared cli.all useCache conc files)
-  else if !cli.stdin then
-    -- No input: lint the whole project tree (every `.lean` under the root, skipping
-    -- `.lake`/dotdirs), sharing one env. All project source is elaborated; the base is
-    -- purely the built dependency packages.
-    reports := reports ++ (← lintShared cli.all useCache conc (← expandPaths ["."]))
-  -- Colour: forced flags win; otherwise on for a terminal unless NO_COLOR is set.
+  let fixDir : System.FilePath := ".lake" / "build" / "heron-fixes"
+  -- Drive the build (unless told to just read the existing sink).
+  unless cli.noBuild do
+    match ← findPluginSo with
+    | none =>
+      IO.eprintln "heron-lint: cannot locate libheron_Heron.so (build heron, or set HERON_PLUGIN_SO); \
+                   use --no-build to read an existing sink"
+      return 1
+    | some so => runBuild so fixDir.toString
+  -- Read + render the sink.
+  let reports ← readSink fixDir cli.paths
   let plain := cli.json || cli.apply
   let useColor ← match cli.color with
     | some b => pure (b && !plain)
@@ -501,46 +234,37 @@ unsafe def main (args : List String) : IO UInt32 := do
       pure (!plain && !noColor && (← (← IO.getStdout).isTty))
   let pal : Palette := { on := useColor }
 
-  -- `--apply`: patched source of a single input to stdout.
   if cli.apply then
     match reports[0]? with
     | some r =>
       unless reports.size == 1 do
-        IO.eprintln "heron-lint: --apply takes exactly one input; use --fix for multiple"
+        IO.eprintln "heron-lint: --apply needs exactly one matching file; narrow the path or use --fix"
         return 1
       IO.print (applyEdits r.fileMap (r.fixes.map (·.edit)))
       return 0
-    | none => return 1
+    | none => IO.eprintln "heron-lint: no matching file"; return 1
 
-  -- `--fix`: rewrite files in place.
   if cli.fix then
     let mut changed := 0
     let mut total := 0
     for r in reports do
-      let some path := r.path
-        | do IO.eprintln "heron-lint: --fix cannot rewrite stdin"; continue
       unless r.fixes.isEmpty do
         let patched := applyEdits r.fileMap (r.fixes.map (·.edit))
         if patched != r.fileMap.source then
-          IO.FS.writeFile path patched
-          changed := changed + 1
-          total := total + r.fixes.size
-          IO.eprintln s!"fixed {r.fixes.size} in {path}"
+          IO.FS.writeFile r.path patched
+          changed := changed + 1; total := total + r.fixes.size
+          IO.eprintln s!"fixed {r.fixes.size} in {r.path}"
     IO.eprintln (pal.warn s!"heron-lint: applied {total} fix(es) across {changed} file(s)")
     return 0
 
-  -- Default / `--json`: report findings.
-  let mut allJson : Array Json := #[]
-  let mut total := 0
   if cli.json then
-    for r in reports do
-      allJson := allJson ++ r.fixes.map (fixToJson r.label r.fileMap)
-    IO.println (Json.arr allJson).compress
+    IO.println (Json.arr (reports.flatMap fun r => r.fixes.map (fixToJson r.path r.fileMap))).compress
   else
+    let mut total := 0
     for r in reports do
       total := total + r.fixes.size
       let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
       for fix in r.fixes do
-        IO.println (renderFix pal r.label r.fileMap srcLines fix)
+        IO.println (renderFix pal r.path r.fileMap srcLines fix)
     IO.eprintln (pal.warn s!"heron-lint: {total} fix(es) across {reports.size} file(s)")
   return 0
