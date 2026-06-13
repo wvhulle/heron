@@ -29,7 +29,7 @@ supportInterpreter = true
 
 # Self-contained reporter: imports Heron and elaborates the target files itself.
 [[lean_exe]]
-name = "standalone"
-root = "Standalone"
+name = "heron-scan"
+root = "HeronScan"
 # Detection runs imported modules' initializers / rule meta-code via the interpreter.
 supportInterpreter = true
