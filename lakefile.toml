@@ -13,3 +13,10 @@ globs = ["Demo"]
 [[lean_exe]]
 name = "dump-ast"
 root = "DumpAst"
+
+[[lean_exe]]
+name = "heron-lint"
+root = "HeronLint"
+# Required: the binary imports and runs the initializers of arbitrary target
+# modules (and Heron's rule registry) through the interpreter at runtime.
+supportInterpreter = true
