@@ -1,5 +1,7 @@
 import Lean
 import Heron
+import Lake
+import Lake.Load.Workspace
 
 /-!
 # `heron-lint` — headless fix reporter
@@ -214,25 +216,34 @@ def runSharedLoop (all : Bool) (env : Environment) (baseOpts : Options) (m : Mod
   let (fixes, st) ← ((collectLoop all #[]).run { inputCtx := ictx }).run fst
   return (ictx.fileMap, fixes, st.commandState.env)
 
-/-- Lint `files` in one process: import the external-dependency closure once, then
-elaborate the files in dependency order against a growing environment. -/
-def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
-  let root ← IO.currentDir
-  let mods ← files.mapM fun (f : String) => do
-    let src ← IO.FS.readFile f
-    let hdr ← Lean.parseImports' src f
-    return ({ name := modNameOfFile f, file := f, src, imports := hdr.imports } : Mod)
+/-- Read a source file into a `Mod` (name + contents + header imports). -/
+def buildMod (name : Name) (file : String) : IO Mod := do
+  let src ← IO.FS.readFile file
+  let hdr ← Lean.parseImports' src file
+  return { name, file, src, imports := hdr.imports }
+
+/-- Lint a set of local modules in one process: import the external-dependency closure
+once, then elaborate the modules in dependency order against a growing environment. The
+`mods` array IS the local set — imports outside it are imported from oleans (resolved via
+the search path; unresolved ones are skipped with a warning rather than aborting). -/
+def lintMods (all : Bool) (root : System.FilePath) (mods : Array Mod) : IO (Array Report) := do
   let localNames : Std.HashSet Name := mods.foldl (fun s x => s.insert x.name) {}
-  -- External base = every imported module that is not itself a target.
   let mut baseSet : Std.HashSet Name := ∅
   for x in mods do
     for imp in x.imports do
       unless localNames.contains imp.module do baseSet := baseSet.insert imp.module
-  let baseImports := baseSet.toArray.map fun n => ({ module := n } : Import)
+  -- Keep only imports whose olean is on the search path; a missing one (e.g. an unbuilt
+  -- sibling library) is reported and dropped instead of aborting the whole import.
+  let mut baseImports : Array Import := #[]
+  for n in baseSet.toArray do
+    if let some _ ← (try some <$> Lean.findOLean n catch _ => pure none) then
+      baseImports := baseImports.push { module := n }
+    else
+      IO.eprintln s!"heron-lint: skipping unresolved import {n} (not built?)"
   -- Seed `linter.heron := true` to match Sparkle's repo-wide enable; in-file options still apply.
   let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
   loadDynlibsFallback root
-  IO.eprintln s!"heron-lint: importing {baseImports.size} external module(s) once…"
+  IO.eprintln s!"heron-lint: importing {baseImports.size} external module(s) once, then elaborating {mods.size} local module(s)…"
   let baseEnv ← importModules baseImports baseOpts (loadExts := true)
   let ordered := topoSort mods
   let n := ordered.size
@@ -247,6 +258,31 @@ def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
     catch e =>
       IO.eprintln s!"heron-lint: [{i + 1}/{n}] {m.name}: {e.toString}"
   return out
+
+/-- Lint explicit files/dirs as the local set (module names derived from paths). -/
+def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
+  let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
+  lintMods all (← IO.currentDir) mods
+
+/-! ## Lake-driven workspace discovery -/
+
+/-- Load the Lake workspace rooted at `wsDir`, mirroring how the `lake` CLI bootstraps
+(`findInstall?` → `Env.compute` → `loadWorkspace`). -/
+def loadHeronWorkspace (wsDir : System.FilePath) : IO Lake.Workspace := do
+  let (elan?, lean?, lake?) ← Lake.findInstall?
+  let some leanInstall := lean? | throw <| IO.userError "lake: no Lean install found"
+  let some lakeInstall := lake? | throw <| IO.userError "lake: no Lake install found"
+  let env ← (Lake.Env.compute lakeInstall leanInstall elan? none).toIO
+    (fun m => IO.userError s!"lake env: {m}")
+  let cfg : Lake.LoadConfig := { lakeEnv := env, wsDir }
+  let some ws ← (Lake.loadWorkspace cfg).toBaseIO
+    | throw <| IO.userError "lake: failed to load workspace"
+  return ws
+
+/-! `loadHeronWorkspace` is retained for the per-module dynlib/plugin setup that precompiled
+C FFI needs (resolved against module names). Module *enumeration*, however, is done by
+walking the project source tree: that is robust to partially-built trees and odd lib globs,
+and module names map cleanly from paths since the source root is the package root. -/
 
 /-! ## Rendering -/
 
@@ -388,9 +424,6 @@ unsafe def main (args : List String) : IO UInt32 := do
   -- Resolve inputs into a uniform `Array Report`. Path/dir inputs go through the
   -- single-pass shared-environment driver (import deps once); stdin stays per-file.
   let files ← expandPaths cli.paths
-  if files.isEmpty && !cli.stdin then
-    IO.eprintln s!"heron-lint: no input\n{usage}"
-    return 1
   let mut reports : Array Report := #[]
   if cli.stdin then
     try
@@ -398,8 +431,14 @@ unsafe def main (args : List String) : IO UInt32 := do
       let (fm, fixes) ← lintSource cli.all "<stdin>" src
       reports := reports.push { path := none, label := "<stdin>", fileMap := fm, fixes }
     catch e => IO.eprintln s!"heron-lint: <stdin>: {e.toString}"
-  unless files.isEmpty do
+  if !files.isEmpty then
+    -- Explicit paths/dirs: lint just those as the local set.
     reports := reports ++ (← lintShared cli.all files)
+  else if !cli.stdin then
+    -- No input: lint the whole project tree (every `.lean` under the root, skipping
+    -- `.lake`/dotdirs), sharing one env. All project source is elaborated; the base is
+    -- purely the built dependency packages.
+    reports := reports ++ (← lintShared cli.all (← expandPaths ["."]))
   -- Colour: forced flags win; otherwise on for a terminal unless NO_COLOR is set.
   let plain := cli.json || cli.apply
   let useColor ← match cli.color with
