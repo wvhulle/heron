@@ -1,7 +1,5 @@
 import Lean
 import Heron
-import Lake
-import Lake.Load.Workspace
 
 /-!
 # `heron-lint` — headless fix reporter
@@ -112,12 +110,15 @@ partial def collectLoop (all commitInit : Bool) (acc : Array Fix) : FrontendM (A
   let (cmd, ps, messages) := parseCommand ictx pmctx pstate cmdState.messages
   setParserState ps
   setMessages messages
-  -- When the environment was imported (not grown), `initialize`/`builtin_initialize` decls
-  -- already exist; elaborating them (even transiently, for detection) panics in
-  -- `addDeclarationRanges` because the decl belongs to an imported module. They never produce
-  -- fixes and don't affect scope, so skip them entirely in imported mode.
-  let skipInit := !commitInit && cmd.isOfKind ``Lean.Parser.Command.initialize
-  let acc ← if skipInit then pure acc else do
+  -- Skip elaborating commands that we must not run or cannot re-run:
+  --  * `#eval`/`#eval!` execute user code (printing, writing files) — linting must not run it;
+  --  * `initialize`/`builtin_initialize`, in imported mode, already exist in the env, and
+  --    re-elaborating them panics in `addDeclarationRanges` (decl belongs to an imported
+  --    module). They don't affect scope and never produce fixes, so skip entirely.
+  let skip := cmd.isOfKind ``Lean.Parser.Command.eval
+    || cmd.isOfKind ``Lean.Parser.Command.evalBang
+    || (!commitInit && cmd.isOfKind ``Lean.Parser.Command.initialize)
+  let acc ← if skip then pure acc else do
     let found ← runCommandElabM (collectFixes all cmd)
     elabCommandAtFrontend cmd
     pure (acc ++ found)
@@ -142,7 +143,8 @@ def lintSource (all : Bool) (label : String) (source : String) : IO (FileMap × 
     { commandState := Command.mkState env msgs opts
       parserState
       cmdPos := parserState.pos }
-  let (collected, _) ← ((collectLoop all true #[]).run { inputCtx }).run frontendState
+  let (_, (collected, _)) ← IO.FS.withIsolatedStreams
+    (((collectLoop all true #[]).run { inputCtx }).run frontendState)
   return (inputCtx.fileMap, collected)
 
 /-! ## Single-pass workspace linting
@@ -169,23 +171,12 @@ structure Report where
   fixes : Array Fix
 
 /-- Module `Name` from a source path relative to the package root, e.g.
-`Sparkle/Analog/Foo.lean` ↦ `Sparkle.Analog.Foo`. (Step 2 replaces this with Lake's
-exact name↔file mapping.) -/
+`Sparkle/Analog/Foo.lean` ↦ `Sparkle.Analog.Foo`. (Lake's source root is the package root,
+so this matches how imports name modules.) -/
 def modNameOfFile (f : String) : Name :=
   let p := if f.endsWith ".lean" then (f.dropEnd 5).toString else f
   let parts := (p.splitOn "/").filter (fun s => s != "" && s != ".")
   parts.foldl (fun acc s => Name.str acc s) Name.anonymous
-
-/-- Load every `*.so`/`*.dylib` under the package build dir so `@[extern]`/initializer
-symbols resolve during elaboration (Sparkle has precompiled C FFI). Best-effort: a lib
-that fails to load is skipped. Step 3 replaces this with Lake's exact per-module setup. -/
-def loadDynlibsFallback (root : System.FilePath) : IO Unit := do
-  for sub in [["lib"], ["c_src"]] do
-    let d := sub.foldl (· / ·) (root / ".lake" / "build")
-    if ← d.pathExists then
-      for f in ← System.FilePath.walkDir d do
-        if f.extension == some "so" || f.extension == some "dylib" then
-          try Lean.loadDynlib f catch _ => pure ()
 
 /-- Read a source file into a `Mod` (name + contents + header imports). -/
 def buildMod (name : Name) (file : String) : IO Mod := do
@@ -205,7 +196,7 @@ trying to evaluate an `[init]` "in the same module" (which aborts the process).
 Then detect per file: parse + run `collectFixes` per command against the complete imported
 environment. Modules whose olean is missing (unbuilt) are skipped with a warning — lint
 what's built; build first to lint everything. -/
-def lintMods (all : Bool) (root : System.FilePath) (mods : Array Mod) : IO (Array Report) := do
+def lintMods (all : Bool) (mods : Array Mod) : IO (Array Report) := do
   let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
   -- Import the union of the targets' DEPENDENCIES (their header imports), not the targets
   -- themselves. Importing pulls each one's full transitive closure once; a dependency that
@@ -215,24 +206,34 @@ def lintMods (all : Bool) (root : System.FilePath) (mods : Array Mod) : IO (Arra
   -- olean's whole closure is built), so unbuilt imports are dropped.
   let mut impSet : Std.HashSet Name := ∅
   for m in mods do
-    for i in m.imports do impSet := impSet.insert i.module
+    for i in m.imports do
+      -- `parseImports'` auto-adds `Init` to every file; listing it explicitly alongside
+      -- modules whose closure already contains it makes `loadExts` re-run imported
+      -- initializers, double-registering env extensions. It's implicit in every closure.
+      unless i.module == `Init do impSet := impSet.insert i.module
   let mut importNames : Array Import := #[]
   for n in impSet.toArray do
     let built ← (do let p ← Lean.findOLean n; p.pathExists) <|> pure false
     if built then importNames := importNames.push { module := n }
-  loadDynlibsFallback root
+  -- NOTE: deliberately NOT loading precompiled-module dynlibs here. dlopen-ing
+  -- `lib*.so` runs the compiled Lean module initializers, which re-register env
+  -- extensions that `importModules` also registers → "already been used". Extern C
+  -- symbols aren't invoked during elaboration, so linting doesn't need them.
   IO.eprintln s!"heron-lint: importing {importNames.size} dependency module(s) once, then linting {mods.size} file(s)…"
   let env ← importModules importNames baseOpts (loadExts := true)
   let n := mods.size
   let mut out : Array Report := #[]
   for i in [0:n] do
     let m := mods[i]!
+    if n > 30 && i % 25 == 0 && i > 0 then IO.eprintln s!"heron-lint: linted [{i}/{n}]…"
     try
       let ictx := mkInputContext m.src m.file
       let (_, pstate, _) ← parseHeader ictx
       let cmdState := Command.mkState env {} baseOpts
       let fst : Frontend.State := { commandState := cmdState, parserState := pstate, cmdPos := pstate.pos }
-      let (fixes, _) ← ((collectLoop all false #[]).run { inputCtx := ictx }).run fst
+      -- Isolate stdout/stderr so any stray output from elaboration can't corrupt `--json`/`--apply`.
+      let (_, (fixes, _)) ← IO.FS.withIsolatedStreams
+        (((collectLoop all false #[]).run { inputCtx := ictx }).run fst)
       out := out.push { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
       IO.eprintln s!"heron-lint: [{i + 1}/{n}] {m.name}: {e.toString}"
@@ -241,27 +242,7 @@ def lintMods (all : Bool) (root : System.FilePath) (mods : Array Mod) : IO (Arra
 /-- Lint explicit files/dirs as the local set (module names derived from paths). -/
 def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
   let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
-  lintMods all (← IO.currentDir) mods
-
-/-! ## Lake-driven workspace discovery -/
-
-/-- Load the Lake workspace rooted at `wsDir`, mirroring how the `lake` CLI bootstraps
-(`findInstall?` → `Env.compute` → `loadWorkspace`). -/
-def loadHeronWorkspace (wsDir : System.FilePath) : IO Lake.Workspace := do
-  let (elan?, lean?, lake?) ← Lake.findInstall?
-  let some leanInstall := lean? | throw <| IO.userError "lake: no Lean install found"
-  let some lakeInstall := lake? | throw <| IO.userError "lake: no Lake install found"
-  let env ← (Lake.Env.compute lakeInstall leanInstall elan? none).toIO
-    (fun m => IO.userError s!"lake env: {m}")
-  let cfg : Lake.LoadConfig := { lakeEnv := env, wsDir }
-  let some ws ← (Lake.loadWorkspace cfg).toBaseIO
-    | throw <| IO.userError "lake: failed to load workspace"
-  return ws
-
-/-! `loadHeronWorkspace` is retained for the per-module dynlib/plugin setup that precompiled
-C FFI needs (resolved against module names). Module *enumeration*, however, is done by
-walking the project source tree: that is robust to partially-built trees and odd lib globs,
-and module names map cleanly from paths since the source root is the package root. -/
+  lintMods all mods
 
 /-! ## Rendering -/
 
