@@ -182,6 +182,58 @@ def buildMod (name : Name) (file : String) : IO Mod := do
   let hdr ← Lean.parseImports' src file
   return { name, file, src, imports := hdr.imports }
 
+/-! ## Incremental cache
+
+A per-file cache keyed by source-content hash. On re-run, files whose source is byte-identical
+reuse their cached fixes without elaboration; if *every* file is a cache hit the dependency
+import is skipped entirely → near-instant. (Caveat: keyed on a file's own source only, so a
+change in a dependency that would alter this file's fixes is not detected — fine in practice
+since Heron's fixes are local/syntactic; `--no-cache` forces a full re-lint.) -/
+
+def cachePath : System.FilePath := ".lake" / "build" / "heron-lint-cache.json"
+
+def fixToCacheJson (f : Fix) : Json :=
+  Json.mkObj [("rule", f.rule.toString), ("message", f.message),
+              ("range", toJson f.edit.range), ("newText", f.edit.newText)]
+
+def fixFromCacheJson? (j : Json) : Except String Fix := do
+  let rule ← j.getObjValAs? String "rule"
+  let message ← j.getObjValAs? String "message"
+  let range ← j.getObjValAs? Lsp.Range "range"
+  let newText ← j.getObjValAs? String "newText"
+  return { rule := Name.mkSimple rule, message, edit := { range, newText } }
+
+structure CacheEntry where
+  hash : UInt64
+  fixes : Array Fix
+
+def loadCache : IO (Std.HashMap String CacheEntry) := do
+  let mut m : Std.HashMap String CacheEntry := ∅
+  try
+    unless ← cachePath.pathExists do return m
+    let .ok json := Json.parse (← IO.FS.readFile cachePath) | return m
+    let .ok arr := json.getArr? | return m
+    for e in arr do
+      let parsed : Except String (String × Nat × Array Fix) := do
+        let file ← e.getObjValAs? String "file"
+        let h ← e.getObjValAs? Nat "hash"
+        let fj ← e.getObjValAs? (Array Json) "fixes"
+        return (file, h, ← fj.mapM fixFromCacheJson?)
+      if let .ok (file, h, fixes) := parsed then
+        m := m.insert file { hash := UInt64.ofNat h, fixes }
+  catch _ => pure ()
+  return m
+
+def saveCache (m : Std.HashMap String CacheEntry) : IO Unit := do
+  try
+    if let some d := cachePath.parent then
+      if ← d.pathExists then
+        let arr := m.toArray.map fun (file, e) =>
+          Json.mkObj [("file", file), ("hash", (e.hash.toNat : Nat)),
+                      ("fixes", Json.arr (e.fixes.map fixToCacheJson))]
+        IO.FS.writeFile cachePath (Json.arr arr).compress
+  catch _ => pure ()
+
 /-- Lint a set of modules in one process.
 
 Import every target module that is **built** (its olean exists) ONCE — Lake's build
@@ -194,35 +246,47 @@ trying to evaluate an `[init]` "in the same module" (which aborts the process).
 Then detect per file: parse + run `collectFixes` per command against the complete imported
 environment. Modules whose olean is missing (unbuilt) are skipped with a warning — lint
 what's built; build first to lint everything. -/
-def lintMods (all : Bool) (mods : Array Mod) : IO (Array Report) := do
+def lintMods (all useCache : Bool) (mods : Array Mod) : IO (Array Report) := do
   let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
-  -- Import the union of the targets' DEPENDENCIES (their header imports), not the targets
+  -- Cache: reuse fixes for files whose source hash is unchanged.
+  let cache ← if useCache then loadCache else pure ∅
+  let mut hits : Array Report := #[]
+  let mut misses : Array Mod := #[]
+  for m in mods do
+    match cache[m.file]? with
+    | some e =>
+      if e.hash == hash m.src then
+        hits := hits.push { path := some m.file, label := m.file,
+                            fileMap := (mkInputContext m.src m.file).fileMap, fixes := e.fixes }
+      else misses := misses.push m
+    | none => misses := misses.push m
+  if misses.isEmpty then
+    IO.eprintln s!"heron-lint: {mods.size} file(s) unchanged — all served from cache"
+    return hits
+  -- Import the union of the MISSES' DEPENDENCIES (their header imports), not the targets
   -- themselves. Importing pulls each one's full transitive closure once; a dependency that
   -- registers an attribute gets imported so dependents elaborate, while leaf modules (exe
-  -- roots defining `main`, umbrellas) are never imported — avoiding duplicate-decl collisions
-  -- between independent modules. Only built oleans are importable (Lake's invariant: a built
-  -- olean's whole closure is built), so unbuilt imports are dropped.
+  -- roots defining `main`, umbrellas) are never imported — avoiding duplicate-decl collisions.
+  -- Only built oleans are importable (Lake's invariant: a built olean's whole closure is
+  -- built), so unbuilt imports are dropped. `Init` is excluded: it's implicit in every closure
+  -- and listing it explicitly makes `loadExts` re-run imported initializers (double-registering
+  -- env extensions). Precompiled-module dynlibs are deliberately NOT loaded — dlopen-ing them
+  -- runs compiled module initializers that `importModules` then re-registers; extern C symbols
+  -- aren't invoked during elaboration anyway.
   let mut impSet : Std.HashSet Name := ∅
-  for m in mods do
+  for m in misses do
     for i in m.imports do
-      -- `parseImports'` auto-adds `Init` to every file; listing it explicitly alongside
-      -- modules whose closure already contains it makes `loadExts` re-run imported
-      -- initializers, double-registering env extensions. It's implicit in every closure.
       unless i.module == `Init do impSet := impSet.insert i.module
   let mut importNames : Array Import := #[]
   for n in impSet.toArray do
     let built ← (do let p ← Lean.findOLean n; p.pathExists) <|> pure false
     if built then importNames := importNames.push { module := n }
-  -- NOTE: deliberately NOT loading precompiled-module dynlibs here. dlopen-ing
-  -- `lib*.so` runs the compiled Lean module initializers, which re-register env
-  -- extensions that `importModules` also registers → "already been used". Extern C
-  -- symbols aren't invoked during elaboration, so linting doesn't need them.
-  IO.eprintln s!"heron-lint: importing {importNames.size} dependency module(s) once, then linting {mods.size} file(s)…"
+  IO.eprintln s!"heron-lint: {hits.size} cached; importing {importNames.size} dependency module(s) to lint {misses.size} file(s)…"
   let env ← importModules importNames baseOpts (loadExts := true)
-  let n := mods.size
-  let mut out : Array Report := #[]
+  let n := misses.size
+  let mut fresh : Array Report := #[]
   for i in [0:n] do
-    let m := mods[i]!
+    let m := misses[i]!
     if n > 30 && i % 25 == 0 && i > 0 then IO.eprintln s!"heron-lint: linted [{i}/{n}]…"
     try
       let ictx := mkInputContext m.src m.file
@@ -232,15 +296,22 @@ def lintMods (all : Bool) (mods : Array Mod) : IO (Array Report) := do
       -- Isolate stdout/stderr so any stray output from elaboration can't corrupt `--json`/`--apply`.
       let (_, (fixes, _)) ← IO.FS.withIsolatedStreams
         (((collectLoop all false #[]).run { inputCtx := ictx }).run fst)
-      out := out.push { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
+      fresh := fresh.push { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
       IO.eprintln s!"heron-lint: [{i + 1}/{n}] {m.name}: {e.toString}"
-  return out
+  -- Persist updated cache (old hits keep their entries; misses get fresh ones).
+  if useCache then
+    let mut newCache := cache
+    for r in fresh do
+      if let some path := r.path then
+        newCache := newCache.insert path { hash := hash r.fileMap.source, fixes := r.fixes }
+    saveCache newCache
+  return hits ++ fresh
 
 /-- Lint explicit files/dirs as the local set (module names derived from paths). -/
-def lintShared (all : Bool) (files : Array String) : IO (Array Report) := do
+def lintShared (all useCache : Bool) (files : Array String) : IO (Array Report) := do
   let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
-  lintMods all mods
+  lintMods all useCache mods
 
 /-! ## Rendering -/
 
@@ -348,6 +419,7 @@ structure Cli where
   json : Bool := false
   all : Bool := false
   color : Option Bool := none
+  noCache : Bool := false
   paths : List String := []
   stdin : Bool := false
 
@@ -359,13 +431,14 @@ def parseArgs : List String → Except String Cli
   | "--all" :: r => do pure { (← parseArgs r) with all := true }
   | "--color" :: r => do pure { (← parseArgs r) with color := some true }
   | "--no-color" :: r => do pure { (← parseArgs r) with color := some false }
+  | "--no-cache" :: r => do pure { (← parseArgs r) with noCache := true }
   | "-" :: r => do pure { (← parseArgs r) with stdin := true }
   | arg :: r =>
     if arg.startsWith "-" then .error s!"unknown flag: {arg}"
     else do let c ← parseArgs r; pure { c with paths := arg :: c.paths }
 
 def usage : String :=
-  "usage: heron-lint [--fix | --apply | --json] [--all] [--color|--no-color] <path|-> ..."
+  "usage: heron-lint [--fix | --apply | --json] [--all] [--no-cache] [--color|--no-color] <path|-> ..."
 
 end HeronLint
 
@@ -389,14 +462,15 @@ unsafe def main (args : List String) : IO UInt32 := do
       let (fm, fixes) ← lintSource cli.all "<stdin>" src
       reports := reports.push { path := none, label := "<stdin>", fileMap := fm, fixes }
     catch e => IO.eprintln s!"heron-lint: <stdin>: {e.toString}"
+  let useCache := !cli.noCache
   if !files.isEmpty then
     -- Explicit paths/dirs: lint just those as the local set.
-    reports := reports ++ (← lintShared cli.all files)
+    reports := reports ++ (← lintShared cli.all useCache files)
   else if !cli.stdin then
     -- No input: lint the whole project tree (every `.lean` under the root, skipping
     -- `.lake`/dotdirs), sharing one env. All project source is elaborated; the base is
     -- purely the built dependency packages.
-    reports := reports ++ (← lintShared cli.all (← expandPaths ["."]))
+    reports := reports ++ (← lintShared cli.all useCache (← expandPaths ["."]))
   -- Colour: forced flags win; otherwise on for a terminal unless NO_COLOR is set.
   let plain := cli.json || cli.apply
   let useColor ← match cli.color with
