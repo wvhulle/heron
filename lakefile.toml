@@ -5,6 +5,10 @@ defaultTargets = ["Heron"]
 [[lean_lib]]
 name = "Heron"
 globs = ["Heron.*"]
+# Heron doubles as a `lean --plugin`: building the lib also emits the plugin shared library
+# (`libheron_Heron.so`) out of the box, so the `heron` reporter can load it without the user
+# locating or pre-building anything.
+defaultFacets = ["shared"]
 
 [[lean_lib]]
 name = "Demo"

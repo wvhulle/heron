@@ -28,7 +28,9 @@ private meta instance : Check RedundantLetWildcardMatch where
   replacements := fun m => return #[{
     emphasizedSyntax := m.doLetStx
     oldSyntax := m.doLetStx
-    newSyntax := m.rhs
+    -- Drop the rhs's trailing trivia: a trailing comment lives there but sits *outside*
+    -- `doLetStx`'s replaced range, so keeping it would duplicate the comment in the output.
+    newSyntax := m.rhs.unsetTrailing
     inlineViolationLabel := m!"let _ ←"
   }]
 

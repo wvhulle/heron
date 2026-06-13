@@ -49,10 +49,10 @@ def main (args : List String) : IO UInt32 := do
   let fixDir : System.FilePath := ".lake" / "build" / "heron-fixes"
   let targets ← if cli.paths.isEmpty then localLibNames else pure cli.paths.toArray
   unless cli.noBuild do
-    match ← findPluginSo with
+    match ← ensurePluginSo with
     | none =>
-      IO.eprintln "heron: cannot locate libheron_Heron.so (build heron, or set HERON_PLUGIN_SO); \
-                   use --no-build to read an existing sink"
+      IO.eprintln "heron: could not build or locate libheron_Heron.so \
+                   (set HERON_PLUGIN_SO, or use --no-build to read an existing sink)"
       return 1
     | some so => runBuild so fixDir.toString targets
   let reports ← readSink fixDir cli.paths

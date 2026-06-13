@@ -8,7 +8,6 @@ public import Heron.Check.UnnecessaryMut
 public import Heron.Check.BoolMatchToIf
 public import Heron.Check.MergeMatchArms
 public import Heron.Check.MergeBinders
-public import Heron.Check.NestedMonadToJoin
 public import Heron.Check.OptionToOptionT
 public import Heron.Check.ExceptToExceptT
 public import Heron.Check.RedundantLetWildcard

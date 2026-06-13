@@ -38,6 +38,27 @@ def findPluginSo : IO (Option String) := do
   let cand := (← IO.appDir) / ".." / "lib" / "libheron_Heron.so"
   (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
+/-- Build Heron's plugin shared library (`heron/Heron:shared`) in the current workspace, so the
+plugin is provided out of the box — the user never has to locate or pre-build the `.so`. The target
+is package-qualified (`heron/Heron`) so it resolves whether Heron is the root package or a
+dependency. Build output is forwarded to stderr; failures are non-fatal (we still try to locate a
+pre-existing `.so`). -/
+def buildPluginSo : IO Unit := do
+  IO.eprintln "heron: building the Heron plugin (heron/Heron:shared)…"
+  let child ← IO.Process.spawn {
+    cmd := "lake", args := #["build", "heron/Heron:shared"], stdout := .piped }
+  let out ← child.stdout.readToEnd
+  let rc ← child.wait
+  unless out.isEmpty do IO.eprint out
+  unless rc == 0 do
+    IO.eprintln s!"heron: building the plugin exited with code {rc}; will try an existing .so"
+
+/-- Ensure the plugin `.so` exists (building it if necessary) and return its path. -/
+def ensurePluginSo : IO (Option String) := do
+  if let some p ← findPluginSo then return some p
+  buildPluginSo
+  findPluginSo
+
 /-- Run `lake build <targets>` with the Heron plugin + sink enabled. Build stdout is forwarded to
 our stderr (so progress/errors stay visible) keeping our stdout clean for `--json`/`--apply`. A
 non-zero exit (some target failed) is reported but non-fatal. -/

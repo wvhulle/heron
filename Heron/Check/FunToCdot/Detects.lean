@@ -14,3 +14,9 @@ meta import Heron.Check.FunToCdot
     List.filter (fun x => x > 0) [1, 2, 3] becomes
   `(def g :=
       List.filter (· > 0) [1, 2, 3])
+
+-- Unparenthesised lambda site: the fix must add its own parens, else the bare
+-- `· + 1` mis-parses / rescopes `·`.
+#assertCheck funToCdot in
+  def h := fun x => x + 1 becomes
+  `(def h := (· + 1))

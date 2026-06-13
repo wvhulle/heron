@@ -17,6 +17,19 @@ set_option linter.unusedVariables false
     List.map (fun x => f (x + 1))
       [1, 2, 3]
 
+-- Ignore: parameter used via a projection/field (`s.field` is not a replaceable bare ident;
+-- rewriting only the bare `s` would leave `s.field` dangling)
+#assertIgnore funToCdot in
+  def kproj (g : Nat → Nat) :=
+    List.map (fun s => g s + s.succ)
+      [1, 2, 3]
+
+-- Ignore: record update where the parameter is also projected
+#assertIgnore funToCdot in
+  def kupd :=
+    List.map (fun s => { s with fst := s.fst + 1 })
+      [({ fst := 0, snd := 0 } : Nat × Nat)]
+
 -- Ignore: multiple parameters
 #assertIgnore funToCdot in
   def m :=

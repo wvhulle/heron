@@ -44,8 +44,6 @@ set_option linter.mergeIntros false
 
 ## Installation
 
-Heron requires the [patched Lean fork](https://github.com/wvhulle/lean4) — a few rules (notably the import-analysis checks) and the diagnostic-data wiring rely on fork-only extensions.
-
 Add the Lake dependency:
 
 ```toml
@@ -53,6 +51,65 @@ Add the Lake dependency:
 name = "heron"
 git = "https://codeberg.org/wvhulle/heron"
 rev = "main"
+```
+
+You then have two ways to surface Heron's diagnostics in your project.
+
+### Per-file (editor / LSP)
+
+Import Heron and enable its rules in the files you want linted:
+
+```lean
+import Heron
+set_option linter.heron true
+```
+
+### Whole project, no imports (recommended)
+
+Load Heron as a `lean --plugin` so its linter runs on **every** module your build compiles — no
+`import Heron` in any source file. Heron's `Heron` library defaults to the `shared` facet, so its
+plugin shared library is emitted as part of a normal build. Wire it up once in the consumer's
+`lakefile.lean`:
+
+```lean
+package «your_pkg» where
+  -- enable the rules everywhere (`weak.` = no-op if the plugin is absent)
+  leanOptions := #[⟨`weak.linter.heron, true⟩]
+  -- load Heron for every compiled module; `weakLeanArgs` keeps the path out of the build trace
+  weakLeanArgs := #["--plugin", ".lake/packages/heron/.lake/build/lib/libheron_Heron.so"]
+
+require heron from git "https://codeberg.org/wvhulle/heron" @ "main"
+```
+
+Bootstrap (or refresh, after updating Heron) the plugin library with:
+
+```sh
+lake build heron/Heron:shared
+```
+
+After that, a plain `lake build` reports Heron's fixes inline on every module.
+
+## Headless reporters (CI, scripts, batch fixing)
+
+Heron ships two executables that surface fixes outside the editor. Because Lake exposes a
+dependency's executables by name, you can run them from **any project that requires Heron** with
+`lake exe …` — no extra wiring:
+
+| Command | What it does |
+| --- | --- |
+| `lake exe heron` | Build-integrated (clippy model). Builds your targets with Heron loaded as a plugin, then prints the fixes. Builds the plugin `.so` itself if missing. Rides Lake's incremental cache. |
+| `lake exe heron-scan` | Self-contained. Imports the dependency closure once and elaborates the targets itself (own incremental cache + parallelism). Needs no lakefile changes; also reads from stdin (`-`). |
+
+Common flags (both): `--json` (machine-readable), `--fix`/`--apply` (rewrite files in place),
+`--color`/`--no-color`. `heron` adds `--no-build` (read an existing sink); `heron-scan` adds
+`--per-file`, `--no-cache`, `--no-parallel`.
+
+```sh
+lake exe heron                       # report all fixes across the workspace's libraries
+lake exe heron Sparkle.Analog        # restrict to lake targets
+lake exe heron --json | jq           # machine-readable
+lake exe heron-scan --fix Foo/Bar.lean   # apply fixes to specific files
+echo 'def f := fun x => x + 1' | lake exe heron-scan -   # lint from stdin
 ```
 
 ## Development
