@@ -10,6 +10,7 @@ public meta import Lean.Elab.Command
 -- through private helpers.
 public meta import Heron.Rule
 public meta import Heron.Lsp
+public meta import Heron.Fix
 -- Private: only used by the elaborator-internal helper `elabAssertResult` for
 -- `Syntax.getQuotContent`, which is available without re-exporting.
 meta import Lean.Elab.Quotation
@@ -47,22 +48,7 @@ private meta def runRule (cmd : Syntax) (linterName : Name)
       modify fun s => { s with messages := savedMessages }
       pure result
 
-/-- Apply an array of non-overlapping LSP `TextEdit`s to a source string.
-
-Edits are sorted by range start descending and applied back-to-front so that
-earlier byte offsets remain valid, matching the LSP specification that all
-ranges refer to the original document. -/
-private meta def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
-  let sorted := edits.qsort fun a b =>
-    let aStart := text.lspPosToUtf8Pos a.range.start
-    let bStart := text.lspPosToUtf8Pos b.range.start
-    bStart < aStart
-  sorted.foldl (init := text.source) fun src edit =>
-    let startPos := text.lspPosToUtf8Pos edit.range.start
-    let endPos := text.lspPosToUtf8Pos edit.range.end
-    let pre := String.Pos.Raw.extract src 0 startPos
-    let post := String.Pos.Raw.extract src endPos src.rawEndPos
-    pre ++ edit.newText ++ post
+-- `applyEdits` (used below) is shared from `Heron.Fix` (opened via `open … Heron`).
 
 /-- Verify that a rule fires on `cmd`, optionally checking that applying all
 its edits produces the text in `expectedQuot?`. When `expectedQuot?` is

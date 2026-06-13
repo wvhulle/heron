@@ -10,13 +10,26 @@ globs = ["Heron.*"]
 name = "Demo"
 globs = ["Demo"]
 
+# Shared engines/rendering for the two reporter binaries (per-file, shared-env, build-sink).
+[[lean_lib]]
+name = "Reporter"
+globs = ["Reporter.*"]
+
 [[lean_exe]]
 name = "dump-ast"
 root = "DumpAst"
 
+# Build-integrated reporter: drives `lake build` with Heron as a `lean --plugin` + reads the sink.
 [[lean_exe]]
-name = "heron-lint"
-root = "HeronLint"
-# Loading the target's Lake workspace (to enumerate libraries) evaluates its lakefile
-# via the interpreter, which needs the Lean/Lake native symbols available.
+name = "heron-build"
+root = "HeronBuild"
+# Loading the target's Lake workspace (to enumerate libraries) evaluates its lakefile via the
+# interpreter, which needs the Lean/Lake native symbols available.
+supportInterpreter = true
+
+# Self-contained reporter: imports Heron and elaborates the target files itself.
+[[lean_exe]]
+name = "standalone"
+root = "Standalone"
+# Detection runs imported modules' initializers / rule meta-code via the interpreter.
 supportInterpreter = true

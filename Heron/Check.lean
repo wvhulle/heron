@@ -2,6 +2,7 @@ module
 
 public meta import Heron.Rule
 public meta import Heron.Lsp
+public meta import Heron.Fix
 public meta import Lean.Server.CodeActions.Basic
 
 public section
@@ -212,37 +213,48 @@ private meta def buildDispatchTable (handlers : Array RuleHandler) :
     h.kinds.foldl (init := tbl) fun tbl k =>
       tbl.insert k ((tbl[k]?.getD #[]).push h.visit)
 
+/-- Run the enabled rules against `cmd` and return a `FixRecord` per suggested replacement —
+the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. With
+`all := false` only **checks** (`heronRuleRegistry`, gated by `isEnabled`) run; with `all := true`
+the manual **refactors** (`testRunnerRegistry` entries that aren't checks) are added too. Shared by
+the build sink (below) and the standalone `heron-lint` driver. -/
+meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array FixRecord) := do
+  let fileMap ← getFileMap
+  let entries ← heronRuleRegistry.get
+  let opts ← getOptions
+  let checkNames := entries.map (·.name)
+  let mut out : Array FixRecord := #[]
+  for entry in entries do
+    if entry.isEnabled opts then
+      for (msg, repls) in (← entry.findActions stx) do
+        let title := (← msg.toString).trimAscii.toString
+        for repl in repls do
+          if let some edit ← liftCoreM (repl.toTextEdit fileMap) then
+            out := out.push { rule := entry.name.toString, message := title, range := edit.range, newText := edit.newText }
+  if all then
+    let runners ← testRunnerRegistry.get
+    for (name, runner) in runners.toList do
+      unless checkNames.contains name do
+        for edit in (← runner stx).edits do
+          out := out.push { rule := name.toString, message := "", range := edit.range, newText := edit.newText }
+  return out
+
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
 process-global ref suffices; it is (re)written to the sink as the linter runs. -/
-meta initialize heronFixAccum : IO.Ref (Array Json) ← IO.mkRef #[]
+meta initialize heronFixAccum : IO.Ref (Array FixRecord) ← IO.mkRef #[]
 
 /-- When `HERON_FIX_DIR` is set, append this command's fixes to `${HERON_FIX_DIR}/<module>.json`,
-turning a normal `lake build` into a fix-collecting pass (consumed by the `heron-lint` tool).
-The fixes use the same `findActions` → `toTextEdit` path as the code-action provider, run against
-the build's live elaboration — no re-elaboration. The file is rewritten on each command (the first
-truncates any stale content) and stamped with the source hash for freshness checks. No-op when the
-env var is unset, so ordinary builds are unaffected. -/
-private meta def writeFixSink (active : Array RuleEntry) (stx : Syntax) : CommandElabM Unit := do
+turning a normal `lake build` into a fix-collecting pass (consumed by the `heron-lint` tool). Run
+against the build's live elaboration — no re-elaboration. The file is rewritten on each command
+(the first truncates any stale content) and stamped with the source hash for freshness checks.
+No-op when the env var is unset, so ordinary builds are unaffected. -/
+private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
   let some dir ← IO.getEnv "HERON_FIX_DIR" | return
-  let fileMap ← getFileMap
-  let mut newFixes : Array Json := #[]
-  for entry in active do
-    for (msg, repls) in (← entry.findActions stx) do
-      let title := (← msg.toString).trimAscii.toString
-      for repl in repls do
-        if let some edit ← liftCoreM (repl.toTextEdit fileMap) then
-          let s := fileMap.lspPosToUtf8Pos edit.range.start
-          let e := fileMap.lspPosToUtf8Pos edit.range.end
-          let pos := fileMap.toPosition s
-          let before := String.Pos.Raw.extract fileMap.source s e
-          newFixes := newFixes.push <| Json.mkObj
-            [ ("rule", entry.name.toString), ("message", title)
-            , ("line", (pos.line : Nat)), ("col", (pos.column + 1 : Nat))
-            , ("range", toJson edit.range)
-            , ("before", before), ("after", edit.newText) ]
-  let all ← heronFixAccum.modifyGet fun a => let a := a ++ newFixes; (a, a)
+  let recs ← collectFixRecords (all := false) stx
+  let all ← heronFixAccum.modifyGet fun a => let a := a ++ recs; (a, a)
   let mod ← getMainModule
-  let payload := Json.mkObj [("source", ((hash fileMap.source).toNat : Nat)), ("fixes", Json.arr all)]
+  let payload := Json.mkObj
+    [ ("source", ((hash (← getFileMap).source).toNat : Nat)), ("fixes", Json.arr (all.map (toJson ·))) ]
   try
     IO.FS.createDirAll dir
     IO.FS.writeFile (System.FilePath.mk dir / s!"{mod}.json") payload.compress
@@ -266,7 +278,7 @@ private meta def heronMasterLinter : Linter where
       if h.kinds.isEmpty then h.visit stx
     walkDispatch (buildDispatchTable handlers) stx
     for h in handlers do h.emit
-    writeFixSink active stx
+    writeFixSink stx
 
 meta initialize lintersRef.modify (·.push heronMasterLinter)
 
