@@ -17,3 +17,6 @@ root = "DumpAst"
 [[lean_exe]]
 name = "heron-lint"
 root = "HeronLint"
+# Loading the target's Lake workspace (to enumerate libraries) evaluates its lakefile
+# via the interpreter, which needs the Lean/Lake native symbols available.
+supportInterpreter = true

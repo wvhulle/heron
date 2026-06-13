@@ -1,4 +1,6 @@
 import Lean
+import Lake
+import Lake.Load.Workspace
 
 /-!
 # `heron-lint` — build-integrated fix reporter
@@ -65,7 +67,8 @@ def fixOfJson? (j : Json) : Except String Fix := do
 
 /-- Read `${dir}/<module>.json` sink files into `Report`s. Each is matched to its current source
 file; if the source changed since the build wrote the sink (hash mismatch) it is skipped with a
-note (rebuild to refresh). `filter` (path prefixes) limits which modules are reported. -/
+note (rebuild to refresh). `filter` (module-name prefixes, i.e. lake targets like `Sparkle.Analog`)
+limits which modules are reported; empty = all. -/
 def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) := do
   unless ← dir.pathExists do return #[]
   let mut out : Array Report := #[]
@@ -73,7 +76,7 @@ def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) 
     if f.extension != some "json" then continue
     let mod := (f.fileStem).getD ""
     let srcPath := moduleSrcPath mod
-    unless filter.isEmpty || filter.any (fun p => srcPath == p || srcPath.startsWith (p ++ "/")) do
+    unless filter.isEmpty || filter.any (fun t => mod == t || mod.startsWith (t ++ ".")) do
       continue
     unless ← (System.FilePath.mk srcPath).pathExists do continue
     let src ← IO.FS.readFile srcPath
@@ -89,6 +92,19 @@ def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) 
 
 /-! ## Build driver -/
 
+/-- Load the Lake workspace from the current directory (mirrors the `lake` CLI bootstrap) and
+return the **root package's** library names — the targets to build/lint by default. -/
+def localLibNames : IO (Array String) := do
+  let (elan?, lean?, lake?) ← Lake.findInstall?
+  let some leanInstall := lean? | throw <| IO.userError "lake: no Lean install found"
+  let some lakeInstall := lake? | throw <| IO.userError "lake: no Lake install found"
+  let env ← (Lake.Env.compute lakeInstall leanInstall elan? none).toIO
+    (fun m => IO.userError s!"lake env: {m}")
+  let cfg : Lake.LoadConfig := { lakeEnv := env, wsDir := ← IO.currentDir }
+  let some ws ← (Lake.loadWorkspace cfg).toBaseIO
+    | throw <| IO.userError "lake: failed to load workspace"
+  return ws.root.leanLibs.map (·.name.toString)
+
 /-- Locate Heron's plugin shared library relative to this executable
 (`…/.lake/build/bin/heron-lint` → `…/.lake/build/lib/libheron_Heron.so`), overridable with
 `HERON_PLUGIN_SO`. -/
@@ -97,13 +113,13 @@ def findPluginSo : IO (Option String) := do
   let cand := (← IO.appDir) / ".." / "lib" / "libheron_Heron.so"
   (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
-/-- Run `lake build` with the Heron plugin + sink enabled. Build stdout is discarded so it can't
-corrupt our `--json`/`--apply`; stderr (progress, warnings, errors) is inherited. -/
-def runBuild (so fixDir : String) : IO Unit := do
-  IO.eprintln "heron-lint: building (lake build -KheronPlugin … --reconfigure)…"
+/-- Run `lake build <targets>` with the Heron plugin + sink enabled. Build stdout is discarded so
+it can't corrupt our `--json`/`--apply`; stderr (progress, warnings, errors) is inherited. -/
+def runBuild (so fixDir : String) (targets : Array String) : IO Unit := do
+  IO.eprintln s!"heron-lint: building {targets.size} target(s) under the Heron plugin…"
   let child ← IO.Process.spawn {
     cmd := "lake"
-    args := #["build", s!"-KheronPlugin={so}", "--reconfigure"]
+    args := #["build"] ++ targets ++ #[s!"-KheronPlugin={so}", "--reconfigure"]
     env := #[("HERON_FIX_DIR", some fixDir)]
     stdout := .null
   }
@@ -205,7 +221,8 @@ def parseArgs : List String → Except String Cli
     else do let c ← parseArgs r; pure { c with paths := arg :: c.paths }
 
 def usage : String :=
-  "usage: heron-lint [--fix | --apply | --json] [--no-build] [--color|--no-color] [<path-prefix> ...]"
+  "usage: heron-lint [--fix | --apply | --json] [--no-build] [--color|--no-color] [<lake-target> ...]\n\
+   (no targets ⇒ all libraries in the workspace; e.g. `heron-lint Sparkle.Analog IP.RV32`)"
 
 end HeronLint
 
@@ -216,6 +233,8 @@ def main (args : List String) : IO UInt32 := do
     | .error e => do IO.eprintln s!"heron-lint: {e}\n{usage}"; return 1
     | .ok c => pure c
   let fixDir : System.FilePath := ".lake" / "build" / "heron-fixes"
+  -- Targets: explicit lake targets if given, else every library in the workspace's root package.
+  let targets ← if cli.paths.isEmpty then localLibNames else pure cli.paths.toArray
   -- Drive the build (unless told to just read the existing sink).
   unless cli.noBuild do
     match ← findPluginSo with
@@ -223,8 +242,8 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln "heron-lint: cannot locate libheron_Heron.so (build heron, or set HERON_PLUGIN_SO); \
                    use --no-build to read an existing sink"
       return 1
-    | some so => runBuild so fixDir.toString
-  -- Read + render the sink.
+    | some so => runBuild so fixDir.toString targets
+  -- Report: filter to the requested targets (empty = all sink modules).
   let reports ← readSink fixDir cli.paths
   let plain := cli.json || cli.apply
   let useColor ← match cli.color with
