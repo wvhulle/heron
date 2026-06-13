@@ -144,9 +144,12 @@ structure RuleEntry where
   isEnabled : Options → Bool
   setup : CommandElabM RuleHandler
   /-- Re-run detection over the given command syntax and return one
-  `(title, replacements)` per match. Used by `heronCheckFixProvider` to build
-  quick-fix code actions without embedding edits in diagnostics. -/
-  findActions : Syntax → CommandElabM (Array (MessageData × Array Replacement))
+  `(title, explanation, replacements)` per match. Used by `heronCheckFixProvider` to
+  build quick-fix code actions and by `collectFixRecords` to carry the hover-popup
+  explanation into the CLI's `FixRecord`. -/
+  findActions : Syntax → CommandElabM (Array (MessageData × MessageData × Array Replacement))
+  /-- The rule's external-documentation reference, if any (rule-level constant). -/
+  reference? : Option Reference
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 
@@ -226,17 +229,20 @@ meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array Fix
   let mut out : Array FixRecord := #[]
   for entry in entries do
     if entry.isEnabled opts then
-      for (msg, repls) in (← entry.findActions stx) do
+      let refTopic := (entry.reference?.map (·.topic)).getD ""
+      let refUrl := (entry.reference?.map (·.url)).getD ""
+      for (msg, expl, repls) in (← entry.findActions stx) do
         let title := (← msg.toString).trimAscii.toString
+        let explStr := (← expl.toString).trimAscii.toString
         for repl in repls do
           if let some edit ← liftCoreM (repl.toTextEdit fileMap) then
-            out := out.push { rule := entry.name.toString, message := title, range := edit.range, newText := edit.newText }
+            out := out.push { rule := entry.name.toString, message := title, edit, explanation := explStr, referenceTopic := refTopic, referenceUrl := refUrl }
   if all then
     let runners ← testRunnerRegistry.get
     for (name, runner) in runners.toList do
       unless checkNames.contains name do
         for edit in (← runner stx).edits do
-          out := out.push { rule := name.toString, message := "", range := edit.range, newText := edit.newText }
+          out := out.push { rule := name.toString, message := "", edit }
   return out
 
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
@@ -288,11 +294,11 @@ meta initialize lintersRef.modify (·.push heronMasterLinter)
 displayable title and computed replacements. This is the read-only twin of
 `Check.makeHandler`'s emit phase, used by the code-action provider. -/
 private meta def Check.findActions [Check α] (stx : Syntax) :
-    CommandElabM (Array (MessageData × Array Replacement)) := do
+    CommandElabM (Array (MessageData × MessageData × Array Replacement)) := do
   let detected ← Rule.detectAll (α := α) stx
   detected.mapM fun m => do
     let repls ← Rule.replacements (α := α) m
-    return (Rule.message (α := α) m, repls)
+    return (Rule.message (α := α) m, Check.explanation (α := α) m, repls)
 
 /-- Register a `Check` instance: linter option, registry entry, and test runner. -/
 meta def Check.register [Check α] : IO Unit := do
@@ -303,7 +309,8 @@ meta def Check.register [Check α] : IO Unit := do
       { name
         isEnabled := Rule.isEnabled (α := α)
         setup := Check.makeHandler (α := α)
-        findActions := Check.findActions (α := α) }
+        findActions := Check.findActions (α := α)
+        reference? := Check.reference (α := α) }
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
@@ -320,7 +327,7 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
     let entries := allEntries.filter (·.isEnabled opts)
     entries.flatMapM fun entry => do
       let detected ← entry.findActions snap.stx
-      detected.mapM fun (msg, repls) => do
+      detected.mapM fun (msg, _expl, repls) => do
         let edits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
         return (msg, repls, edits)
   let results ← runCommandElabM snap collect

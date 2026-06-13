@@ -32,51 +32,124 @@ def Palette.blue (p : Palette) (s : String) : String := p.code "1;34" s
 def Palette.green (p : Palette) (s : String) : String := p.code "1;32" s
 def Palette.bold (p : Palette) (s : String) : String := p.code "1" s
 def Palette.dim (p : Palette) (s : String) : String := p.code "2" s
+/-- Italic, used for replacement text so it reads as the suggested code, not the source. -/
+def Palette.italic (p : Palette) (s : String) : String := p.code "3" s
+/-- Dim italic, used for the `replace with` label so it reads with the replacement. -/
+def Palette.dimItalic (p : Palette) (s : String) : String := p.code "2;3" s
+/-- Underlined cyan, used for URLs so they stand out as links. -/
+def Palette.url (p : Palette) (s : String) : String := p.code "4;36" s
+
+/-- Wrap `text` in an OSC 8 hyperlink to `url` (so terminals that support it make it
+clickable), gated on the same `on` flag as colour. Empty `url` ⇒ plain text. -/
+private def osc8 (on : Bool) (url text : String) : String :=
+  if on && !url.isEmpty then s!"{esc}]8;;{url}{esc}\\{text}{esc}]8;;{esc}\\" else text
 
 private def spaces (n : Nat) : String := String.ofList (List.replicate n ' ')
 
-/-- One `cargo clippy`-style diagnostic block for a fix. -/
-def renderFix (pal : Palette) (file : String) (fm : FileMap)
-    (srcLines : Array String) (fix : FixRecord) : String := Id.run do
-  let s := fm.lspPosToUtf8Pos fix.range.start
-  let e := fm.lspPosToUtf8Pos fix.range.end
-  let sp := fm.toPosition s
-  let ep := fm.toPosition e
-  let header := if fix.message.isEmpty then s!"applicable refactor: {fix.rule}" else fix.message
-  let gw := (toString ep.line).length
-  let gnum (n : Nat) : String := spaces (gw - (toString n).length) ++ toString n
-  let bar := pal.blue (spaces gw ++ " |")
-  let trimmed := fix.newText.trimAscii.toString
+/-- Pre-computed framing shared by every line of one diagnostic block: the blank-gutter
+`bar`/`eq` leads and the line-number column, sized to the widest line shown. -/
+private structure Gutter where
+  pal : Palette
+  width : Nat
+
+/-- The `|` continuation gutter (blank line-number column). -/
+private def Gutter.bar (g : Gutter) : String := g.pal.blue (spaces g.width ++ " |")
+/-- The `=` lead used for the metadata notes. -/
+private def Gutter.eq (g : Gutter) : String := g.pal.blue (spaces g.width ++ " = ")
+/-- A right-aligned line number followed by the `|` gutter. -/
+private def Gutter.num (g : Gutter) (n : Nat) : String :=
+  g.pal.blue (spaces (g.width - (toString n).length) ++ toString n ++ " |")
+
+/-- The classified replacement: whether it deletes, and whether it is short enough to
+annotate inline beside the caret rather than in a block below. -/
+private structure Suggestion where
+  newText : String
+  trimmed : String
+  isDelete : Bool
+  inlineFix : Bool
+
+private def Suggestion.of (newText : String) : Suggestion :=
+  let trimmed := newText.trimAscii.toString
   let isDelete := trimmed.isEmpty
-  let isSingle := !fix.newText.any (· == '\n')
-  let helpInline :=
-    if isDelete then pal.green "help: remove this"
-    else if isSingle then pal.green s!"help: replace with `{trimmed}`"
-    else ""
-  let mut ls : Array String := #[]
-  ls := ls.push (pal.warn "warning" ++ pal.bold s!": {header}")
-  ls := ls.push (pal.blue (spaces gw ++ "--> ") ++ s!"{file}:{sp.line}:{sp.column + 1}")
-  ls := ls.push bar
-  for ln in [sp.line:ep.line + 1] do
-    let lineText := srcLines.getD (ln - 1) ""
-    ls := ls.push (pal.blue (gnum ln ++ " |") ++ " " ++ lineText)
+  let isSingle := !newText.any (· == '\n')
+  -- Short single-line replacements ride the caret line; long or multi-line ones go in a
+  -- block below to avoid wrapping.
+  { newText, trimmed, isDelete, inlineFix := isSingle && !isDelete && trimmed.length ≤ 40 }
+
+/-- The annotation appended to the caret line (empty unless this is a delete or a short
+inline replacement). -/
+private def Suggestion.inlineHelp (s : Suggestion) (pal : Palette) : String :=
+  if s.isDelete then " " ++ pal.dim "remove this"
+  else if s.inlineFix then " " ++ pal.dimItalic "replace with " ++ pal.italic s!"`{s.trimmed}`"
+  else ""
+
+/-- The replacement block for multi-line / long single-line fixes, set off by a leading
+blank line ([] for deletes and inline fixes). -/
+private def Suggestion.block (s : Suggestion) (g : Gutter) : List String :=
+  if s.isDelete || s.inlineFix then []
+  else "" :: (g.eq ++ g.pal.dimItalic "replace with:")
+    :: (s.newText.splitOn "\n").map (fun rl => g.bar ++ "   " ++ g.pal.italic rl)
+
+/-- The opening lines: `warning: <message> [heron::rule]`, the `--> file:line:col`
+location, and the leading gutter bar. -/
+private def headerLines (g : Gutter) (file fileUri : String) (fix : FixRecord) (sp : Position) :
+    List String :=
+  let header := if fix.message.isEmpty then s!"applicable refactor: {fix.rule}" else fix.message
+  let lineCol := s!"{sp.line}:{sp.column + 1}"
+  let loc := s!"{file}:{lineCol}"
+  -- Point the hyperlink at the exact line:col so a click jumps there, not just to the file.
+  let target := if fileUri.isEmpty then "" else s!"{fileUri}:{lineCol}"
+  [ g.pal.warn "warning" ++ g.pal.bold s!": {header}" ++ " " ++ g.pal.dim s!"[heron::{fix.rule}]"
+  , g.pal.blue (spaces g.width ++ "--> ") ++ osc8 g.pal.on target (g.pal.url loc)
+  , g.bar ]
+
+/-- One source line, plus a caret row underlining the span when `ln` falls within
+`[sp.line, ep.line]`. The inline help rides the caret on the final span line. -/
+private def sourceLine (g : Gutter) (sp ep : Position) (lineText : String) (ln : Nat)
+    (inlineHelp : String) : List String :=
+  let src := g.num ln ++ " " ++ lineText
+  if sp.line ≤ ln && ln ≤ ep.line then
     let startCol := if ln == sp.line then sp.column else 0
     let endCol := if ln == ep.line then ep.column else lineText.length
-    let caret := pal.warn (String.ofList (List.replicate (max 1 (endCol - startCol)) '^'))
-    let trailing := if ln == ep.line && !helpInline.isEmpty then " " ++ helpInline else ""
-    ls := ls.push (bar ++ " " ++ spaces startCol ++ caret ++ trailing)
-  unless isSingle || isDelete do
-    ls := ls.push bar
-    ls := ls.push (pal.blue (spaces gw ++ " = ") ++ pal.green "help: replace with:")
-    for rl in fix.newText.splitOn "\n" do
-      ls := ls.push (bar ++ "   " ++ pal.green rl)
-  ls := ls.push (pal.blue (spaces gw ++ " = ") ++ pal.dim s!"note: heron::{fix.rule}")
-  ls := ls.push ""
-  return String.intercalate "\n" ls.toList
+    let caret := g.pal.warn (String.ofList (List.replicate (max 1 (endCol - startCol)) '^'))
+    let trailing := if ln == ep.line then inlineHelp else ""
+    [src, g.bar ++ " " ++ spaces startCol ++ caret ++ trailing]
+  else [src]
+
+/-- The hover-popup detail, preceded by a blank line: the explanation `note` (or the rule
+id when absent), an optional reference, and the disable hint. -/
+private def notesLines (g : Gutter) (fix : FixRecord) : List String :=
+  let note :=
+    if fix.explanation.isEmpty then g.eq ++ g.pal.bold "note: " ++ g.pal.dim s!"heron::{fix.rule}"
+    else g.eq ++ g.pal.bold "note: " ++ g.pal.dim fix.explanation
+  let refs : List String :=
+    if fix.referenceUrl.isEmpty then []
+    else
+      let topic := if fix.referenceTopic.isEmpty then "" else g.pal.dim s!" ({fix.referenceTopic})"
+      [g.eq ++ g.pal.bold "reference: " ++ osc8 g.pal.on fix.referenceUrl (g.pal.url fix.referenceUrl) ++ topic]
+  let help := g.eq ++ g.pal.bold "help: " ++ g.pal.dim s!"disable with `set_option linter.{fix.rule} false`"
+  ("" :: note :: refs) ++ [help]
+
+/-- One `cargo clippy`-style diagnostic block for a fix. -/
+def renderFix (pal : Palette) (file fileUri : String) (fm : FileMap)
+    (srcLines : Array String) (fix : FixRecord) : String :=
+  let sp := fm.toPosition (fm.lspPosToUtf8Pos fix.edit.range.start)
+  let ep := fm.toPosition (fm.lspPosToUtf8Pos fix.edit.range.end)
+  -- Show two lines of source on each side of the span for orientation.
+  let ctx := 2
+  let firstLn := max 1 (sp.line - ctx)
+  let lastLn := min srcLines.size (ep.line + ctx)
+  let g : Gutter := { pal, width := (toString lastLn).length }
+  let sugg := Suggestion.of fix.edit.newText
+  let inlineHelp := sugg.inlineHelp pal
+  let source := (List.range' firstLn (lastLn + 1 - firstLn)).flatMap fun ln =>
+    sourceLine g sp ep (srcLines.getD (ln - 1) "") ln inlineHelp
+  String.intercalate "\n"
+    (headerLines g file fileUri fix sp ++ source ++ sugg.block g ++ notesLines g fix ++ [""])
 
 def fixToJson (file : String) (fm : FileMap) (fix : FixRecord) : Json :=
-  let s := fm.lspPosToUtf8Pos fix.range.start
-  let e := fm.lspPosToUtf8Pos fix.range.end
+  let s := fm.lspPosToUtf8Pos fix.edit.range.start
+  let e := fm.lspPosToUtf8Pos fix.edit.range.end
   let pos := fm.toPosition s
   let before := String.Pos.Raw.extract fm.source s e
   Json.mkObj
@@ -86,7 +159,7 @@ def fixToJson (file : String) (fm : FileMap) (fix : FixRecord) : Json :=
     , ("line", (pos.line : Nat))
     , ("col", (pos.column + 1 : Nat))
     , ("before", before)
-    , ("after", fix.newText) ]
+    , ("after", fix.edit.newText) ]
 
 /-! ## Colour decision + uniform output (shared by both binaries) -/
 
@@ -128,8 +201,14 @@ def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO U
     for r in reports do
       total := total + r.fixes.size
       let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
+      -- Absolute `file://` URI so the location line can be a clickable OSC 8 hyperlink.
+      let fileUri ← match r.path with
+        | some p => do
+          let abs ← (try IO.FS.realPath p catch _ => pure (System.FilePath.mk p))
+          pure s!"file://{abs}"
+        | none => pure ""
       for f in r.fixes do
-        IO.println (renderFix pal r.label r.fileMap srcLines f)
+        IO.println (renderFix pal r.label fileUri r.fileMap srcLines f)
     IO.eprintln (pal.warn s!"heron: {total} fix(es) across {reports.size} file(s)")
   return 0
 
