@@ -42,7 +42,7 @@ def findPluginSo : IO (Option String) := do
 our stderr (so progress/errors stay visible) keeping our stdout clean for `--json`/`--apply`. A
 non-zero exit (some target failed) is reported but non-fatal. -/
 def runBuild (so fixDir : String) (targets : Array String) : IO Unit := do
-  IO.eprintln s!"heron-build: building {targets.size} target(s) under the Heron plugin…"
+  IO.eprintln s!"heron: building {targets.size} target(s) under the Heron plugin…"
   let child ← IO.Process.spawn {
     cmd := "lake"
     args := #["build"] ++ targets ++ #[s!"-KheronPlugin={so}", "--reconfigure"]
@@ -53,7 +53,7 @@ def runBuild (so fixDir : String) (targets : Array String) : IO Unit := do
   let rc ← child.wait
   unless out.isEmpty do IO.eprint out
   unless rc == 0 do
-    IO.eprintln s!"heron-build: lake build exited with code {rc} — some target failed; \
+    IO.eprintln s!"heron: lake build exited with code {rc} — some target failed; \
                   reporting fixes for the targets that did build"
 
 /-- Read `${dir}/<module>.json` sink files into `Report`s. Each is matched to its current source;
@@ -72,7 +72,7 @@ def readSink (dir : System.FilePath) (filter : List String) : IO (Array Report) 
     let .ok json := Json.parse (← IO.FS.readFile f) | continue
     let stored := (json.getObjValAs? Nat "source").toOption.getD 0
     if hash src != UInt64.ofNat stored then
-      IO.eprintln s!"heron-build: {srcPath} changed since last build — rebuild to refresh"
+      IO.eprintln s!"heron: {srcPath} changed since last build — rebuild to refresh"
       continue
     let fixes := (json.getObjValAs? (Array FixRecord) "fixes").toOption.getD #[]
     out := out.push { path := some srcPath, label := srcPath, fileMap := (Lean.Parser.mkInputContext src srcPath).fileMap, fixes }

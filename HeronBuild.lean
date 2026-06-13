@@ -2,18 +2,18 @@ import Reporter.Render
 import Reporter.BuildSink
 
 /-!
-# `heron-build` — build-integrated Heron fix reporter (clippy model)
+# `heron` — build-integrated Heron fix reporter (clippy model)
 
 Drives `lake build` with Heron loaded as a `lean --plugin` so the linter runs on every module and
 writes its fixes to a sink during the build, then reads + renders them. Lake's incremental build is
 the cache — no re-elaboration, no cache of our own. Requires the project's lakefile to honour
 `-KheronPlugin` (see Sparkle's `lakefile.lean`).
 
-    lake env heron-build                  # build all libraries + report all fixes
-    lake env heron-build Sparkle.Analog   # restrict build + report to lake targets
-    lake env heron-build --json | jq
-    lake env heron-build --fix            # rewrite files in place
-    lake env heron-build --no-build       # read the existing sink only
+    lake env heron                  # build all libraries + report all fixes
+    lake env heron Sparkle.Analog   # restrict build + report to lake targets
+    lake env heron --json | jq
+    lake env heron --fix            # rewrite files in place
+    lake env heron --no-build       # read the existing sink only
 -/
 
 open Reporter
@@ -39,19 +39,19 @@ def parseArgs : List String → Except String Cli
     else do let c ← parseArgs r; pure { c with paths := arg :: c.paths }
 
 def usage : String :=
-  "usage: heron-build [--fix | --apply | --json] [--no-build] [--color|--no-color] [<lake-target> ...]\n\
-   (no targets ⇒ all libraries in the workspace; e.g. `heron-build Sparkle.Analog IP.RV32`)"
+  "usage: heron [--fix | --apply | --json] [--no-build] [--color|--no-color] [<lake-target> ...]\n\
+   (no targets ⇒ all libraries in the workspace; e.g. `heron Sparkle.Analog IP.RV32`)"
 
 def main (args : List String) : IO UInt32 := do
   let cli ← match parseArgs args with
-    | .error e => do IO.eprintln s!"heron-build: {e}\n{usage}"; return 1
+    | .error e => do IO.eprintln s!"heron: {e}\n{usage}"; return 1
     | .ok c => pure c
   let fixDir : System.FilePath := ".lake" / "build" / "heron-fixes"
   let targets ← if cli.paths.isEmpty then localLibNames else pure cli.paths.toArray
   unless cli.noBuild do
     match ← findPluginSo with
     | none =>
-      IO.eprintln "heron-build: cannot locate libheron_Heron.so (build heron, or set HERON_PLUGIN_SO); \
+      IO.eprintln "heron: cannot locate libheron_Heron.so (build heron, or set HERON_PLUGIN_SO); \
                    use --no-build to read an existing sink"
       return 1
     | some so => runBuild so fixDir.toString targets

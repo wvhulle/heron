@@ -21,7 +21,7 @@ root = "DumpAst"
 
 # Build-integrated reporter: drives `lake build` with Heron as a `lean --plugin` + reads the sink.
 [[lean_exe]]
-name = "heron-build"
+name = "heron"
 root = "HeronBuild"
 # Loading the target's Lake workspace (to enumerate libraries) evaluates its lakefile via the
 # interpreter, which needs the Lean/Lake native symbols available.
