@@ -37,13 +37,6 @@ structure Fix where
   message : String
   edit : Lsp.TextEdit
 
-/-- Elaborate a command while swallowing diagnostics, so rules that consult info
-trees fire. Mirrors `Heron.Assert`'s elaboration helper. -/
-meta def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
-  withScope (fun scope => { scope with opts := Elab.async.set scope.opts false }) do
-    withReader ({ · with snap? := none }) do
-      try elabCommand cmd catch _ => pure ()
-
 /-- Run Heron's rules against `cmd`, returning a `Fix` per suggested replacement.
 
 **Checks** (the rules the linter actually emits) are always collected from
@@ -55,8 +48,11 @@ from `testRunnerRegistry`. -/
 meta def collectFixes (all : Bool) (cmd : Syntax) : CommandElabM (Array Fix) := do
   let saved := (← get).messages
   let fileMap ← getFileMap
+  -- No pre-elaboration: 23 of Heron's 25 checks are purely syntactic (they match on
+  -- `Syntax`), and the 2 that need types (`exceptToExceptT`/`optionToOptionT`) self-elaborate
+  -- their candidates via `Rule.collectInfoTrees`. So detection costs only a parse, never a
+  -- full elaboration of every declaration. `withoutModifyingEnv` isolates any such self-elab.
   let result ← withoutModifyingEnv do
-    elabCommandSilently cmd
     let entries ← Heron.heronRuleRegistry.get
     let opts ← getOptions
     let checkNames := entries.map (·.name)
@@ -95,10 +91,17 @@ def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
     pre ++ edit.newText ++ post
 
 /-- Walk every top-level command, gathering a `Fix` for each suggested edit.
-Detection runs in the command's *pre*-state (before its real elaboration is
-committed), matching how the live linter observes each command; the real
-elaboration that follows keeps `namespace`/`open`/`variable` scope correct for
-subsequent commands. -/
+
+Each command is elaborated **once** (`elabCommandAtFrontend`), which both advances the
+env/scope for subsequent commands and populates the info trees the two type-aware rules
+(`exceptToExceptT`/`optionToOptionT`) consult. Detection then runs *after* that single
+elaboration, reusing those trees (no second elaboration). `#eval`/`#eval!` are never
+elaborated (they execute user code: printing, writing files); `initialize`/
+`builtin_initialize` are skipped in imported mode (already present — re-elaboration panics
+in `addDeclarationRanges`).
+
+`commitInit := true` (growing-env `lintSource`/stdin mode) commits `initialize` too, since
+declarations there are not pre-imported. -/
 partial def collectLoop (all commitInit : Bool) (acc : Array Fix) : FrontendM (Array Fix) := do
   updateCmdPos
   let cmdState ← getCommandState
@@ -110,17 +113,12 @@ partial def collectLoop (all commitInit : Bool) (acc : Array Fix) : FrontendM (A
   let (cmd, ps, messages) := parseCommand ictx pmctx pstate cmdState.messages
   setParserState ps
   setMessages messages
-  -- Skip elaborating commands that we must not run or cannot re-run:
-  --  * `#eval`/`#eval!` execute user code (printing, writing files) — linting must not run it;
-  --  * `initialize`/`builtin_initialize`, in imported mode, already exist in the env, and
-  --    re-elaborating them panics in `addDeclarationRanges` (decl belongs to an imported
-  --    module). They don't affect scope and never produce fixes, so skip entirely.
-  let skip := cmd.isOfKind ``Lean.Parser.Command.eval
-    || cmd.isOfKind ``Lean.Parser.Command.evalBang
-    || (!commitInit && cmd.isOfKind ``Lean.Parser.Command.initialize)
-  let acc ← if skip then pure acc else do
-    let found ← runCommandElabM (collectFixes all cmd)
+  let imported := !commitInit
+  let isEval := cmd.isOfKind ``Lean.Parser.Command.eval || cmd.isOfKind ``Lean.Parser.Command.evalBang
+  let isInit := cmd.isOfKind ``Lean.Parser.Command.initialize
+  let acc ← if isEval || (imported && isInit) then pure acc else do
     elabCommandAtFrontend cmd
+    let found ← runCommandElabM (collectFixes all cmd)
     pure (acc ++ found)
   if isTerminalCommand cmd then return acc else collectLoop all commitInit acc
 
