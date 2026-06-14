@@ -4,6 +4,9 @@ public meta import Heron.Rule
 public meta import Heron.Lsp
 public meta import Heron.Fix
 public meta import Lean.Server.CodeActions.Basic
+-- `withSetOptionIn` lives in `Lean.Linter.Basic`; under newer toolchains it is no
+-- longer pulled in transitively, so import it directly (see `heronMasterLinter`).
+meta import Lean.Linter.Basic
 
 public section
 
