@@ -40,6 +40,9 @@ public import Heron.Check.FunctorMapMapToSingleMap
 public import Heron.Check.FunctorIdMapToArgument
 public import Heron.Check.PureBindToApplication
 public import Heron.Check.BindPureToArgument
+public import Heron.Check.UnusedImport
+public import Heron.Check.UnnecessaryPublicImport
+public import Heron.Check.UnnecessaryMetaImport
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
