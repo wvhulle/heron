@@ -1,0 +1,39 @@
+when:
+  - event: [push, pull_request, manual, tag]
+
+variables:
+  - &build_flake_check_named_after_step
+    image: nixos/nix:2.34.9
+    environment:
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        accept-flake-config = true
+        sandbox = false
+      CACHIX_AUTH_TOKEN:
+        from_secret: cachix_auth_token
+    commands:
+      - |
+        check=".#checks.x86_64-linux.$${CI_STEP_NAME}"
+        if [ -n "$${CACHIX_AUTH_TOKEN}" ]; then
+          nix run --inputs-from . nixpkgs#cachix -- watch-exec wvhulle -- nix build -L --no-link "$check"
+        else
+          nix build -L --no-link "$check"
+        fi
+
+steps:
+  - name: build-library-with-rule-tests
+    <<: *build_flake_check_named_after_step
+  - name: build-lint-driver
+    <<: *build_flake_check_named_after_step
+  - name: build-heron-scan
+    <<: *build_flake_check_named_after_step
+  - name: build-dump-ast
+    <<: *build_flake_check_named_after_step
+  - name: build-heron-scan-app
+    <<: *build_flake_check_named_after_step
+  - name: test-plugin-and-lake-lint
+    <<: *build_flake_check_named_after_step
+  - name: test-heron-scan
+    <<: *build_flake_check_named_after_step
+  - name: test-plugin-cold-build
+    <<: *build_flake_check_named_after_step
