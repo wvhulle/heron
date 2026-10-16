@@ -3,6 +3,7 @@ import Lake
 import Lake.Load.Workspace
 import Heron.Fix
 import Reporter.Render
+import Reporter.PluginSo
 
 /-! **Build-sink engine (clippy model).** Heron's linter runs during `lake build` and writes each
 module's fixes to `$HERON_FIX_DIR/<module>.json` (see `Heron/Check.lean`). This drives that build
@@ -29,14 +30,6 @@ def localLibNames : IO (Array String) := do
   let some ws ← (Lake.loadWorkspace cfg).toBaseIO
     | throw <| IO.userError "lake: failed to load workspace"
   return ws.root.leanLibs.map (·.name.toString)
-
-/-- Locate Heron's plugin shared library relative to this executable
-(`…/.lake/build/bin/<exe>` → `…/.lake/build/lib/libheron_Heron.so`), overridable with
-`HERON_PLUGIN_SO`. -/
-def findPluginSo : IO (Option String) := do
-  if let some p ← IO.getEnv "HERON_PLUGIN_SO" then return some p
-  let cand := (← IO.appDir) / ".." / "lib" / "libheron_Heron.so"
-  (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
 /-- Build Heron's plugin shared library (`heron/Heron:shared`) in the current workspace, so the
 plugin is provided out of the box — the user never has to locate or pre-build the `.so`. The target
