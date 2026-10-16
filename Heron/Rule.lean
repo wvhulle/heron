@@ -2,7 +2,7 @@ module
 
 public meta import Lean.Elab.Command
 public meta import Lean.Elab.BuiltinCommand
-public meta import Lean.Server.InfoUtils
+public meta import Lean.Elab.InfoTree.Util
 public meta import Lean.PrettyPrinter
 public meta import Heron.Source
 
