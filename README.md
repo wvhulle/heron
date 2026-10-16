@@ -51,7 +51,6 @@ Checks (enabled by `linter.heron`):
 | Rule | Suggests |
 | --- | --- |
 | `adjacentGetSetToModify` | `modify` instead of `get` directly followed by `set` |
-| `filterOnSomeToGuard` | `guard` in an `Option` `do`-block instead of `some _ \|>.filter _` |
 | `lambdaMatchToPatternMatchingLambda` | `fun \| …` pattern-matching syntax |
 | `matchOnBoolToIfThenElse` | `if … then … else …` instead of matching on `Bool` |
 | `mergeBindersWithSameType` | merging binders with the same type |

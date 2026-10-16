@@ -22,7 +22,6 @@ public import Heron.Check.SingleUseLambdaToCdotFunction
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern
-public import Heron.Check.FilterOnSomeToGuard
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
