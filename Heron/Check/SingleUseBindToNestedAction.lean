@@ -16,7 +16,7 @@ private meta def singleIdentBind? : TSyntax `doElem → Option (TSyntax `ident �
   | _ => none
 
 private meta def nestedAction (action : Term) : CommandElabM Term := do
-  `(term| (← $action))
+  `(term| (← $(← `(doElem| $action:term))))
 
 private meta def singleUseInNext? (x : Ident) (next : TSyntax `doElem) (rest : Array (TSyntax `doElem)) :
     CommandElabM (Option Syntax) := do
