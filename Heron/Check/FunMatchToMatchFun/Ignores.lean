@@ -24,3 +24,8 @@ meta import Heron.Check.FunMatchToMatchFun
   def k := fun
     | 0 => "zero"
     | _ => "other"
+
+#assertIgnore funMatchToMatchFun in
+def armUsesParameter := fun (x : Nat) => match x with
+  | 0 => x
+  | _ => 1
