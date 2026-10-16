@@ -106,6 +106,20 @@ meta def applyDiagnosticTags (tags : Array Lsp.DiagnosticTag) (msg : MessageData
     | .unnecessary => MessageData.tagged `Lean.Linter.linter.unusedVariables acc
     | .deprecated  => MessageData.tagged `Lean.Linter.deprecatedAttr acc
 
+/-- Build the JSON-encoded `DiagnosticHoverData` payload consumed by Lean's
+hover handler. The hover handler pretty-prints `hoverTitle` in bold, then
+the body in markdown (see `Lean.Server.FileWorker.RequestHandling`). -/
+private meta def buildHoverData (title : String) (body : MessageData) : CommandElabM String := do
+  let bodyStr := (← (← addMessageContext body).format).pretty
+  -- DiagnosticHoverData's derived FromJson requires every field to be present;
+  -- defaults aren't applied for missing JSON fields without `?`-suffixed names.
+  let json : Json := Json.mkObj [
+    ("hoverTitle", title),
+    ("hoverTags", Json.arr #[]),
+    ("hoverBody", bodyStr)
+  ]
+  return json.compress
+
 /-- Emit a check diagnostic. The published `Diagnostic.message` carries only the
 short headline. The explanation / reference / disable hint are packed into
 `Diagnostic.data?` as `DiagnosticHoverData`, which Lean's hover handler renders
@@ -116,22 +130,21 @@ at LSP request time. Per-replacement labels and any extra labels flow into
 `Diagnostic.relatedInformation` via the patched `BaseMessage.relatedInformation?`. -/
 meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData)
+    (relatedInformation : Array Lsp.DiagnosticRelatedInformation := #[])
     (reference : Option Reference := none) : CommandElabM Unit := do
   let taggedMsg := applyDiagnosticTags tags message
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
+  let msgData ← addMessageContext (taggedMsg.tagWithErrorName (lspName ruleName))
+  let titleStr := (← (← addMessageContext message).format).pretty
   let referenceMd : MessageData := match reference with
     | some ref => m!"**Reference ({ref.topic}):** {ref.url}\n\n"
     | none => m!""
   let disableMd : MessageData := m!"_Disable with `set_option {optName} false`._"
-  -- Stock Lean has no `Message.diagnosticData?` channel for a separate hover
-  -- popup (a fork-only extension), so fold the explanation / reference / disable
-  -- hint directly into the published diagnostic message instead.
-  let body : MessageData :=
-    taggedMsg ++ m!"\n\n" ++ explanation ++ m!"\n\n" ++ referenceMd ++ disableMd
-  let msgData ← addMessageContext (body.tagWithErrorName (lspName ruleName))
+  let hoverBody : MessageData := explanation ++ m!"\n\n" ++ referenceMd ++ disableMd
+  let hoverData ← buildHoverData titleStr hoverBody
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
   let msg : Message :=
     { fileName := ← getFileName
@@ -139,7 +152,9 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Ls
       endPos := fileMap.toPosition endPos
       keepFullRange := true
       data := msgData
-      severity }
+      severity
+      diagnosticData? := some hoverData
+      relatedInformation? := if relatedInformation.isEmpty then none else some relatedInformation }
   logMessage msg
 
 /-- Emit one `.information`-severity diagnostic per label so that LSP clients
@@ -229,12 +244,16 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
     emit := do
       let collected ← matchesRef.get
       let detectEnd ← IO.monoNanosNow
+      let fileMap ← getFileMap
+      let uri : Lsp.DocumentUri := System.Uri.pathToUri (System.FilePath.mk (← getFileName))
       for m in collected do
         let repls ← Rule.replacements (α := α) m
+        let related ← collectRelatedInformation (α := α) m repls fileMap uri
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
             (message := Rule.message m) (explanation := Check.explanation m)
+            (relatedInformation := related)
             (reference := Check.reference (α := α))
         let primaryRange? := (Check.emphasize m).getRange?
         let replacementRanges := repls.filterMap (·.oldSyntax.getRange?)
