@@ -10,7 +10,7 @@ package heron where
   homepage := "https://codeberg.org/wvhulle/heron"
   license := "Apache-2.0"
 
-require Cli from git "https://github.com/leanprover/lean4-cli" @ "v4.31.0"
+require Cli from git "https://github.com/leanprover/lean4-cli" @ "v4.30.0"
 
 @[default_target] lean_lib Heron where
   globs := #[`Heron.*]
