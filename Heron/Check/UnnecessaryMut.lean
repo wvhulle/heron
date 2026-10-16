@@ -16,13 +16,21 @@ private meta def matchMutLet? : Syntax → Option UnnecessaryMutMatch
     some { doLetStx := stx, ident := x, valStx := v }
   | _ => none
 
-/-- Collect every `x := e` reassignment target appearing anywhere under `stx`,
+private meta partial def patternIdents (pat : Syntax) : Std.HashSet Name :=
+  let here : Std.HashSet Name := if pat.isIdent then ({} : Std.HashSet Name).insert pat.getId else {}
+  pat.getArgs.foldl (init := here) fun acc child => acc.union (patternIdents child)
+
+private meta def reassignedHere : Syntax → Std.HashSet Name
+  | `(doElem| $x:ident := $_) => patternIdents x
+  | `(doElem| $x:ident ← $_) => patternIdents x
+  | `(doElem| $pat:term := $_) => patternIdents pat
+  | `(doElem| $pat:term ← $_) => patternIdents pat
+  | _ => {}
+
+/-- Collect every reassignment target appearing anywhere under `stx`,
 including nested do blocks. -/
 private meta partial def collectReassigned (stx : Syntax) : Std.HashSet Name :=
-  let here : Std.HashSet Name :=
-    match stx with
-    | `(doElem| $x:ident := $_) => ({} : Std.HashSet Name).insert x.getId
-    | _ => {}
+  let here := reassignedHere stx
   stx.getArgs.foldl (init := here) fun acc child => acc.union (collectReassigned child)
 
 /-- Detect `let mut x := e` where x is never reassigned in `doSeq`. -/
