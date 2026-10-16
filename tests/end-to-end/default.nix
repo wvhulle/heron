@@ -9,7 +9,7 @@ let
   runInConsumerFixture =
     {
       name,
-      heronArtifacts,
+      heronArtifacts ? null,
       script,
       scriptArgs ? [ ],
     }:
@@ -22,10 +22,12 @@ let
       ];
       buildPhase = ''
         runHook preBuild
-        cp -R ${heronArtifacts}/.lake .
-        chmod -R +w .lake
+        ${pkgs.lib.optionalString (heronArtifacts != null) ''
+          cp -R ${heronArtifacts}/.lake .
+          chmod -R +w .lake
+        ''}
         cd tests/end-to-end/consumer
-        nu ../${script} ../expected-fixes.json ${pkgs.lib.escapeShellArgs scriptArgs}
+        nu ../${script} ${pkgs.lib.escapeShellArgs scriptArgs}
         runHook postBuild
       '';
       installPhase = "touch $out";
@@ -36,12 +38,21 @@ in
     name = "test-plugin-and-lake-lint";
     heronArtifacts = lint-driver;
     script = "plugin-and-lake-lint.nu";
+    scriptArgs = [ "../expected-fixes.json" ];
   };
 
   test-heron-scan = runInConsumerFixture {
     name = "test-heron-scan";
     heronArtifacts = heron-scan-unwrapped;
     script = "heron-scan.nu";
-    scriptArgs = [ "${heron-scan-unwrapped}/bin/heron-scan" ];
+    scriptArgs = [
+      "../expected-fixes.json"
+      "${heron-scan-unwrapped}/bin/heron-scan"
+    ];
+  };
+
+  test-plugin-cold-build = runInConsumerFixture {
+    name = "test-plugin-cold-build";
+    script = "plugin-cold-build.nu";
   };
 }
