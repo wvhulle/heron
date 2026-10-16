@@ -14,13 +14,6 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
-/-- Register a `Refactor` instance: linter option and test runner.
-Code action provider registration is handled by `@[code_action_provider]` in rule files. -/
-meta def Refactor.register [Refactor α] : IO Unit := do
-  let name := Rule.name (α := α)
-  registerLinterOption name
-  testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
-
 open Server RequestM Lsp in
 meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
   fun params snap => do
@@ -63,5 +56,13 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             { textDocument := doc.versionedIdentifier, edits := textEdits }
         })
       }
+
+/-- Register a `Refactor` instance: linter option, test runner and code action provider. -/
+meta def Refactor.register [Refactor α] : IO Unit := do
+  let name := Rule.name (α := α)
+  registerLinterOption name
+  testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
+  Server.addBuiltinCodeActionProvider (`Heron.refactorProvider ++ name)
+    (Refactor.toCodeActionProvider (α := α))
 
 end Heron

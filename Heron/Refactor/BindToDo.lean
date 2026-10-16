@@ -51,7 +51,4 @@ private meta instance : Refactor BindToDoMatch where
     }]
   codeActionKind := "refactor.rewrite"
 
-@[code_action_provider]
-public meta def bindToDoProvider := Refactor.toCodeActionProvider (α := BindToDoMatch)
-
 meta initialize Refactor.register (α := BindToDoMatch)

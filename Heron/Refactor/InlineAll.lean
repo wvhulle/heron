@@ -88,9 +88,6 @@ private meta instance : Refactor InlineAllConstMatch where
           inlineViolationLabel := m! "Inline all usages of '{m.constName}'" }
   codeActionKind := "refactor.inline"
 
-@[code_action_provider]
-public meta def inlineAllConstProvider := Refactor.toCodeActionProvider (α := InlineAllConstMatch)
-
 meta initialize Refactor.register (α := InlineAllConstMatch)
 
 private meta def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
@@ -113,7 +110,6 @@ private meta def buildReplacements (declIdStx : Syntax) (defStx : Syntax) (usage
       newSyntax := .missing, inlineViolationLabel := label }
   usages.push defRemoval
 
-@[code_action_provider]
 meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap => do
   let doc ← RequestM.readDoc
   let some declIdStx := cursorOnDeclId? params doc.meta.text snap.stx |
@@ -145,3 +141,6 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
               { title, kind? := "refactor.inline"
                 edit? :=
                   some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits := textEdits } }) }]
+
+meta initialize unsafe
+  addBuiltinCodeActionProvider ``inlineAllFromDefProvider inlineAllFromDefProvider

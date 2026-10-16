@@ -363,7 +363,6 @@ meta def Check.register [Check α] : IO Unit := do
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
-@[code_action_provider]
 meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
   let doc ← readDoc
   let text := doc.meta.text
@@ -401,5 +400,7 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
         edit? := some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits }
         diagnostics? }
     return some { eager := { full with edit? := none }, lazy? := some (pure full) }
+
+meta initialize Server.addBuiltinCodeActionProvider ``heronCheckFixProvider heronCheckFixProvider
 
 end Heron

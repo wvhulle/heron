@@ -85,7 +85,4 @@ private meta instance : Refactor InlineMatch where
   }]
   codeActionKind := "refactor.inline"
 
-@[code_action_provider]
-public meta def inlineProvider := Refactor.toCodeActionProvider (α := InlineMatch)
-
 meta initialize Refactor.register (α := InlineMatch)

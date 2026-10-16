@@ -38,7 +38,4 @@ private meta instance : Refactor FlipIfMatch where
   ]
   codeActionKind := "refactor.rewrite"
 
-@[code_action_provider]
-public meta def flipIfProvider := Refactor.toCodeActionProvider (α := FlipIfMatch)
-
 meta initialize Refactor.register (α := FlipIfMatch)
