@@ -31,12 +31,36 @@
         src = ./.;
         inherit lakeDeps;
         installArtifacts = true;
+        buildPhase = ''
+          runHook preBuild
+          lake build Heron heron heron-scan dump-ast
+          runHook postBuild
+        '';
       };
+
+      inProjectEnv =
+        exe:
+        pkgs.writeShellApplication {
+          name = exe;
+          runtimeInputs = [ pkgs.lean.lean-all ];
+          text = ''exec lake env ${heron}/bin/${exe} "$@"'';
+        };
+
+      heronScanInProject = inProjectEnv "heron-scan";
     in
     {
       packages.${system} = {
         inherit heron;
-        default = heron;
+        heron-scan = heronScanInProject;
+        default = heronScanInProject;
+      };
+
+      apps.${system} = rec {
+        heron-scan = {
+          type = "app";
+          program = "${heronScanInProject}/bin/heron-scan";
+        };
+        default = heron-scan;
       };
 
       devShells.${system} = rec {

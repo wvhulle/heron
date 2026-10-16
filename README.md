@@ -107,6 +107,23 @@ import Heron
 set_option linter.heron true
 ```
 
+### Without touching your project (Nix)
+
+The flake packages `heron-scan` with the toolchain from Heron's `lean-toolchain` (via
+[lean4-nix](https://github.com/lenianiva/lean4-nix)) and runs it inside your project's
+`lake env`. Build your project first, then run the Heron ref that matches your toolchain:
+
+```sh
+lake build
+nix run github:wvhulle/heron/lean/v4.31.0 -- Consumer       # lint a library / directory
+nix run github:wvhulle/heron/lean/v4.31.0 -- --fix Foo.lean  # apply fixes
+```
+
+This needs no `require`, no plugin and no `import`. It re-elaborates the files itself, though,
+so it is slower than the plugin setup on large projects. The flake follows lean4-nix, which
+lags a little behind Lean releases. A ref whose toolchain lean4-nix doesn't package yet fails to
+evaluate with `attribute '"vX.Y.Z"' missing`.
+
 ## Reporting fixes from the command line (CI, scripts, batch fixing)
 
 With the plugin setup above, `lake lint` builds your libraries and prints every fix in a
