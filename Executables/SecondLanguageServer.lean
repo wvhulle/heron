@@ -1,8 +1,8 @@
-import Reporter.PluginSo
+import Executables.HeronPluginLocation
 import Lean.Data.Lsp.Communication
 import Std.Data.HashMap
 
-open System Reporter Lean JsonRpc
+open System Executables Lean JsonRpc
 
 def heronRepository : String := "https://github.com/wvhulle/heron"
 

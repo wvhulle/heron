@@ -16,19 +16,19 @@ package heron where
 
 lean_lib Demo
 
-lean_lib Reporter where globs := #[`Reporter.*]
+lean_lib Executables where globs := #[`Executables.*]
 
 lean_exe «dump-ast» where root := `Bin.DumpAst
 
 lean_exe heron where
-  root := `Bin.Build
+  root := `Executables.LakeLintDriver
   supportInterpreter := true
 
 lean_exe «heron-scan» where
-  root := `Bin.Scan
+  root := `Executables.StandaloneScan
   supportInterpreter := true
 
-lean_exe «heron-language-server» where root := `Bin.LeanServer
+lean_exe «heron-language-server» where root := `Executables.SecondLanguageServer
 
 lean_exe «heron-lsp-probe» where root := `Bin.LspProbe
 

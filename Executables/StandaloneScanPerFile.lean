@@ -1,7 +1,7 @@
 import Lean
 import Heron
-import Reporter.Render
-import Reporter.Frontend
+import Executables.FixReportRendering
+import Executables.StandaloneScanElaboration
 
 /-! **Per-file engine.** Import each file's own full environment (`processHeader`) and detect.
 Simplest and most faithful per file (and backs stdin), but re-imports the whole environment
@@ -9,7 +9,7 @@ Simplest and most faithful per file (and backs stdin), but re-imports the whole 
 
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 
-namespace Reporter
+namespace Executables
 
 /-- Lint one source (labelled `label`, written back to `path` if given). Seeds `linter.heron := true`
 to match Sparkle's repo-wide enable; in-file `set_option`s still apply. Throws if imports fail. -/
@@ -32,4 +32,4 @@ def lintPerFile (all : Bool) (file : String) : IO Report := do
 def lintStdin (all : Bool) (source : String) : IO Report :=
   lintSourceCore all none "<stdin>" source
 
-end Reporter
+end Executables

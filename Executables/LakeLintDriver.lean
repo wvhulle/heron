@@ -1,5 +1,5 @@
-import Reporter.Render
-import Reporter.BuildSink
+import Executables.FixReportRendering
+import Executables.LakeLintBuildFixSink
 
 /-!
 # `heron` — build-integrated Heron fix reporter (clippy model)
@@ -17,7 +17,7 @@ makes it the project's `lake lint`.
     lake lint -- --no-build         # read the existing sink only
 -/
 
-open Reporter
+open Executables
 
 structure Cli where
   fix : Bool := false
