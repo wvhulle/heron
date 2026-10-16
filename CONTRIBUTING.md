@@ -1,5 +1,41 @@
 # Contributing to Heron
 
+## Adding New Rules
+
+Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in [`Heron/Refactor/`](./Heron/Refactor). Each rule file contains:
+
+- A match data struct describing what was detected
+- A `detect` function that scans user source code
+- A set of `replacements` to fix a single match
+- Inline tests for false positives, replacements, and negatives
+
+## Testing
+
+Tests use compile-time assertion commands that verify rules at build time. Failures appear as errors in the build output.
+
+`#assertCheck` verifies that a check rule transforms a command into the expected result:
+
+```lean
+#assertCheck mergeIntros in
+example : Nat → Nat → True := by intro a; intro b; exact trivial
+becomes `(example : Nat → Nat → True := by intro a b; exact trivial)
+```
+
+`#assertRefactor` does the same for refactor rules:
+
+```lean
+#assertRefactor inline in
+example : Nat := myConst
+becomes `(example : Nat := (42))
+```
+
+`#assertIgnore` verifies that a rule produces no edits for the given command:
+
+```lean
+#assertIgnore rflToExactRfl in
+example (a : Nat) : a = a + 0 := by simp
+```
+
 ## Things not to use in rule implementations
 
 You likely should not access the `raw` field of syntax objects. You can attach extra information to patterns inside quotations so that the extracted object has the data you need without raw access.
