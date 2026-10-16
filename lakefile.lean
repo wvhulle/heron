@@ -14,11 +14,11 @@ package heron where
   globs := #[`Heron.*]
   defaultFacets := #[`lean_lib.shared]
 
-lean_lib Demo
+lean_lib DeveloperTools where globs := #[`DeveloperTools.*]
 
 lean_lib Executables where globs := #[`Executables.*]
 
-lean_exe «dump-ast» where root := `Bin.DumpAst
+lean_exe «dump-syntax-tree» where root := `DeveloperTools.DumpSyntaxTree
 
 lean_exe heron where
   root := `Executables.LakeLintDriver

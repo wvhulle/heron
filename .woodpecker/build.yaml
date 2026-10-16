@@ -27,7 +27,7 @@ steps:
     <<: *build_flake_check_named_after_step
   - name: build-heron-scan
     <<: *build_flake_check_named_after_step
-  - name: build-dump-ast
+  - name: developer-tools
     <<: *build_flake_check_named_after_step
   - name: build-heron-scan-app
     <<: *build_flake_check_named_after_step

@@ -83,9 +83,9 @@
         lakeArtifacts = library;
       };
 
-      dump-ast = buildLakeTargets {
-        name = "heron-dump-ast";
-        targets = "dump-ast";
+      developer-tools = buildLakeTargets {
+        name = "heron-developer-tools";
+        targets = "dump-syntax-tree DeveloperTools.RuleShowcase";
         lakeArtifacts = library;
       };
 
@@ -119,7 +119,7 @@
           library
           lint-driver
           heron-scan-unwrapped
-          dump-ast
+          developer-tools
           heron-language-server
           heron-lsp-probe
           ;
@@ -150,7 +150,7 @@
         build-library-with-rule-tests = library;
         build-lint-driver = lint-driver;
         build-heron-scan = heron-scan-unwrapped;
-        build-dump-ast = dump-ast;
+        developer-tools = developer-tools;
         build-heron-scan-app = heronScanInProject;
         build-heron-language-server = heron-language-server;
         build-heron-lsp-probe = heron-lsp-probe;

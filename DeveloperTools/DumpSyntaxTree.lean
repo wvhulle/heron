@@ -27,7 +27,7 @@ def main (args : List String) : IO Unit := do
       readStdin
     | _ =>
       do
-        IO.eprintln "Usage: dump-ast [--input <string> | <file> | stdin]"
+        IO.eprintln "Usage: dump-syntax-tree [--input <string> | <file> | stdin]"
         IO.Process.exit 1
   match runParserCategory env `command input with
   | .ok stx =>
