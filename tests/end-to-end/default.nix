@@ -4,7 +4,7 @@
   heronSource,
   lint-driver,
   heron-scan-unwrapped,
-  heron-lean-server,
+  heron-language-server,
   heron-lsp-probe,
 }:
 let
@@ -41,7 +41,7 @@ let
     file: probeFlags:
     [
       "${heron-lsp-probe}/bin/heron-lsp-probe"
-      "${pkgs.lib.getExe heron-lean-server}"
+      "${pkgs.lib.getExe heron-language-server}"
       file
     ]
     ++ probeFlags;

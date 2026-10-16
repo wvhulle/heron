@@ -91,7 +91,7 @@ The checks were renamed to longer, descriptive names (for example `funToCdot` is
 
 ### Editor only, without changing your project
 
-`heron-lean-server` is a second Lean language server that runs next to your normal one. It
+`heron-language-server` is a second Lean language server that runs next to your normal one. It
 starts its own `lake serve` with Heron loaded as a plugin and passes on only Heron's warnings,
 quick fixes and refactors. Every Lean project then gets Heron's hints without a `require`, plugin
 or `import`, and your normal Lean server stays untouched. Each open file is elaborated twice, once
@@ -109,14 +109,14 @@ home-manager.users.<you> = {
 };
 ```
 
-With other editor setups, add the package `heron-lean-server` as an extra Lean language server,
+With other editor setups, add the package `heron-language-server` as an extra Lean language server,
 for example in Helix:
 
 ```toml
 # languages.toml
 [language-server.heron]
 command = "nix"
-args = ["run", "github:wvhulle/heron#heron-lean-server"]
+args = ["run", "github:wvhulle/heron#heron-language-server"]
 
 [[language]]
 name = "lean"
@@ -128,8 +128,8 @@ binary:
 
 ```sh
 git clone --branch main https://github.com/wvhulle/heron && cd heron
-lake build Heron:shared heron-lean-server
-# editor command: <checkout>/.lake/build/bin/heron-lean-server
+lake build Heron:shared heron-language-server
+# editor command: <checkout>/.lake/build/bin/heron-language-server
 ```
 
 The server runs `lean --version` in the project and loads the plugin built for that Lean

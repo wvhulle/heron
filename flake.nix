@@ -95,17 +95,17 @@
         text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
       };
 
-      lean-server-build = buildLakeTargets {
-        name = "heron-lean-server-build";
-        targets = "heron-lean-server";
+      language-server-build = buildLakeTargets {
+        name = "heron-language-server-build";
+        targets = "heron-language-server";
         lakeArtifacts = library;
       };
 
-      heron-lean-server =
-        pkgs.runCommand "heron-lean-server" { meta.mainProgram = "heron-lean-server"; }
+      heron-language-server =
+        pkgs.runCommand "heron-language-server" { meta.mainProgram = "heron-language-server"; }
           ''
-            install -Dm755 ${lean-server-build}/.lake/build/bin/heron-lean-server $out/bin/heron-lean-server
-            install -Dm644 ${lean-server-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
+            install -Dm755 ${language-server-build}/.lake/build/bin/heron-language-server $out/bin/heron-language-server
+            install -Dm644 ${language-server-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
           '';
 
       heron-lsp-probe = buildLakeTargets {
@@ -120,7 +120,7 @@
           lint-driver
           heron-scan-unwrapped
           dump-ast
-          heron-lean-server
+          heron-language-server
           heron-lsp-probe
           ;
         heron-scan = heronScanInProject;
@@ -134,7 +134,7 @@
             lib.mkEnableOption "a second Lean language server with Heron's hints and quick fixes for every Lake project";
 
           config = lib.mkIf config.programs.heron.enable {
-            services.toolchain.langs.lean.servers.heron.package = heron-lean-server;
+            services.toolchain.langs.lean.servers.heron.package = heron-language-server;
           };
         };
 
@@ -152,7 +152,7 @@
         build-heron-scan = heron-scan-unwrapped;
         build-dump-ast = dump-ast;
         build-heron-scan-app = heronScanInProject;
-        build-heron-lean-server = heron-lean-server;
+        build-heron-language-server = heron-language-server;
         build-heron-lsp-probe = heron-lsp-probe;
       }
       // import ./tests/end-to-end {
@@ -160,7 +160,7 @@
           pkgs
           lint-driver
           heron-scan-unwrapped
-          heron-lean-server
+          heron-language-server
           heron-lsp-probe
           ;
         leanToolchain = pkgs.lean.lean-all;

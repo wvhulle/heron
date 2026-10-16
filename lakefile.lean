@@ -28,7 +28,7 @@ lean_exe «heron-scan» where
   root := `Bin.Scan
   supportInterpreter := true
 
-lean_exe «heron-lean-server» where root := `Bin.LeanServer
+lean_exe «heron-language-server» where root := `Bin.LeanServer
 
 lean_exe «heron-lsp-probe» where root := `Bin.LspProbe
 

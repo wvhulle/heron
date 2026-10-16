@@ -7,7 +7,7 @@ open System Reporter Lean JsonRpc
 def heronRepository : String := "https://github.com/wvhulle/heron"
 
 def fail (message : String) : IO α :=
-  throw <| IO.userError s!"heron-lean-server: {message}"
+  throw <| IO.userError s!"heron-language-server: {message}"
 
 def parseLeanVersion (versionOutput : String) : Option String :=
   match versionOutput.splitOn "(version " with
@@ -54,7 +54,7 @@ def checkoutTargetsVersion (checkout : FilePath) (version : String) : IO Bool :=
 def cloneBranchFor (version : String) (checkout : FilePath) : IO Bool := do
   for branch in [s!"lean/v{version}", "main"] do
     if ← checkout.pathExists then IO.FS.removeDirAll checkout
-    IO.eprintln s!"heron-lean-server: fetching Heron branch {branch} for Lean {version}"
+    IO.eprintln s!"heron-language-server: fetching Heron branch {branch} for Lean {version}"
     let cloned ← runReportingToStderr "git"
       #["clone", "--quiet", "--depth", "1", "--branch", branch, heronRepository, checkout.toString]
     if cloned && (← checkoutTargetsVersion checkout version) then return true
@@ -64,7 +64,7 @@ def cloneBranchFor (version : String) (checkout : FilePath) : IO Bool := do
 def buildCachedPlugin (version : String) (checkout : FilePath) : IO (Option String) := do
   unless ← checkoutTargetsVersion checkout version do
     unless ← cloneBranchFor version checkout do return none
-  IO.eprintln s!"heron-lean-server: building the Heron plugin for Lean {version} in {checkout}"
+  IO.eprintln s!"heron-language-server: building the Heron plugin for Lean {version} in {checkout}"
   unless ← runReportingToStderr "lake" #["build", "Heron:shared"] checkout do return none
   let plugin := builtPlugin checkout
   return if ← plugin.pathExists then some plugin.toString else none
@@ -95,7 +95,7 @@ def lakefileLoadsHeronPlugin : IO Bool :=
 
 def pluginForProject : IO (Option String) := do
   if ← lakefileLoadsHeronPlugin then
-    IO.eprintln "heron-lean-server: the lakefile already loads @heron/plugin, so the Lean server \
+    IO.eprintln "heron-language-server: the lakefile already loads @heron/plugin, so the Lean server \
       shows Heron's hints itself"
     return none
   try
@@ -191,5 +191,5 @@ def main (serveArgs : List String) : IO UInt32 := do
   match ← pluginForProject with
   | some plugin => serveHeronOnly plugin serveArgs
   | none =>
-    IO.eprintln "heron-lean-server: serving no Heron hints for this project"
+    IO.eprintln "heron-language-server: serving no Heron hints for this project"
     serveNothing (← IO.getStdin) (← IO.getStdout)
