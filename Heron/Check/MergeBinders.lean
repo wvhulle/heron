@@ -12,23 +12,25 @@ private structure MergeBinders.Binder where
 private structure MergeBindersMatch where
   secondBinder : Syntax
   fullRange : Syntax
-  first : MergeBinders.Binder
-  second : MergeBinders.Binder
+  run : Array MergeBinders.Binder
 
 /-- Match a `(x y … : T)` explicit binder with a type annotation and no default. -/
 private meta def matchExplicitBinder? : Syntax → Option MergeBinders.Binder
   | stx@`(bracketedBinder| ($names* : $ty)) => some { stx, names, ty }
   | _ => none
 
-private meta def pairWithSharedType? (prev next : Syntax) : Option MergeBindersMatch := do
-  let first ← matchExplicitBinder? prev
-  let second ← matchExplicitBinder? next
-  guard (first.ty == second.ty)
+private meta def sharesType (prev next : Syntax) : Bool :=
+  match matchExplicitBinder? prev, matchExplicitBinder? next with
+  | some first, some second => first.ty == second.ty
+  | _, _ => false
+
+private meta def runWithSharedType? (run : List Syntax) : Option MergeBindersMatch := do
+  guard (run.length ≥ 2)
+  let binders ← run.toArray.mapM matchExplicitBinder?
   return {
-    secondBinder := next
-    fullRange := mkNullNode #[prev, next]
-    first
-    second
+    secondBinder := (← binders[1]?).stx
+    fullRange := mkNullNode (binders.map (·.stx))
+    run := binders
   }
 
 private meta instance : Check MergeBindersMatch where
@@ -38,15 +40,15 @@ private meta instance : Check MergeBindersMatch where
   category := .style
   detect := fun stx => pure <|
     let binders := (stx.getArg 0).getArgs
-    let pairs := (List.range (binders.size.pred)).map fun i => (binders[i]!, binders[i+1]!)
-    pairs.toArray.filterMap fun (a, b) => pairWithSharedType? a b
+    (binders.toList.splitBy sharesType).toArray.filterMap runWithSharedType?
   message := fun _ => m!"Merge binders with the same type"
   emphasize := fun m => m.secondBinder
   reference := some { topic := "Shared binders", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }
   explanation := fun _ => m!"Consecutive explicit binders with the same type can be merged into a single binder group."
   replacements := fun m => do
-    let allNames := m.first.names ++ m.second.names
-    let ty := m.first.ty
+    let allNames := m.run.flatMap (·.names)
+    let some first := m.run[0]? | return #[]
+    let ty := first.ty
     let repl ← `(bracketedBinder| ($allNames* : $ty))
     return #[{
       emphasizedSyntax := m.secondBinder

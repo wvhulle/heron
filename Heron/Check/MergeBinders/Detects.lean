@@ -12,3 +12,7 @@ becomes `(def f (x y : Nat) := x + y)
 #assertCheck mergeBinders in
 def g (a b : Nat) (c : Nat) := a + b + c
 becomes `(def g (a b c : Nat) := a + b + c)
+
+#assertCheck mergeBinders in
+def threeBinders (a : Nat) (b : Nat) (c : Nat) : Nat := a + b + c
+becomes `(command| def threeBinders (a b c : Nat) : Nat := a + b + c)
