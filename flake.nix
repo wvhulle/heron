@@ -101,6 +101,11 @@
         build-heron-scan = heron-scan-unwrapped;
         build-dump-ast = dump-ast;
         build-heron-scan-app = heronScanInProject;
+      }
+      // import ./tests/end-to-end {
+        inherit pkgs lint-driver;
+        leanToolchain = pkgs.lean.lean-all;
+        heronSource = ./.;
       };
 
       devShells.${system} = rec {
