@@ -46,3 +46,12 @@ set_option linter.unusedVariables false
 #assertIgnore funToCdot in
   def p :=
     List.map (fun x => 42) [1, 2, 3]
+
+#assertIgnore funToCdot in
+def insideTuple := List.map (fun x => Prod.fst (x, 1)) [1, 2]
+
+#assertIgnore funToCdot in
+def insideTypeAscription := List.map (fun x => Nat.succ (x : Nat)) [1, 2]
+
+#assertIgnore funToCdot in
+def shadowedByInnerLambda (g : (Nat → Nat) → Nat) := fun (x : Nat) => g fun x => x

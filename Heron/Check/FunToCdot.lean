@@ -14,9 +14,12 @@ private structure FunToCdotMatch where
   body : Syntax
   paramName : Name
 
+private meta def bindsCdot (kind : SyntaxNodeKind) : Bool :=
+  kind == ``Term.paren || kind == ``Term.tuple || kind == ``Term.typeAscription
+
 /-- Count how many times `name` appears as a replaceable bare identifier in `stx`.
 Returns `none` (ineligible) when `·` could not faithfully stand in for the parameter:
-- an occurrence nested inside `Term.paren` (which would change `·` scoping), or
+- an occurrence nested inside a parenthesis, tuple or type ascription (which would change `·` scoping), or
 - a projection/dotted use like `s.field` (`replaceM` only rewrites the bare `s`, so
   rewriting would leave `s.field` referencing the now-removed binder). -/
 private meta partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideParens := false) : Option Nat :=
@@ -33,7 +36,7 @@ private meta partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideP
         fun acc child =>
         do
         let n ← acc
-        let m ← cdotEligibleCount name child (insideParens || kind == ``Term.paren)
+        let m ← cdotEligibleCount name child (insideParens || bindsCdot kind)
         return n + m
     | _ => some 0
 
@@ -66,14 +69,14 @@ private meta instance : Check FunToCdotMatch where
     | _ => match matchEligibleFun? stx with
       | some (body, p) => #[{ funStx := stx, replaceStx := stx, body, paramName := p }]
       | none => #[]
-  message := fun _ => m!"Use `·` (term-level hole) instead of explicit lambda"
+  message := fun _ => m!"Use `·` function shorthand instead of explicit lambda"
   emphasize := fun m => m.funStx
   reference :=
     some
       { topic := "Centered dot",
         url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
   explanation := fun _ =>
-    m!"Simple lambdas like `fun x => x + 1` can be written as `(· + 1)` using Lean's term-level hole syntax."
+    m!"Simple lambdas like `fun x => x + 1` can be written as `(· + 1)` using Lean's `·` function shorthand, which abstracts over the nearest enclosing parentheses."
   replacements := fun m => do
     let name := m.paramName
     let newBody ← m.body.replaceM fun stx => pure (if stx.isIdent && stx.getId == name then some (mkAtom "·") else none)
