@@ -62,6 +62,7 @@ Checks (enabled by `linter.heron`):
 | `nestedExceptToExceptTransformer` | `ExceptT` instead of nesting `Except` in a signature |
 | `nestedExprAppToMkAppN` | `mkAppN` instead of nested `Expr.app` |
 | `nestedOptionToOptionTransformer` | `OptionT` instead of nesting `Option` in a signature |
+| `qualifiedConstructorToLeadingDot` | `.leaf` instead of `BinTree.leaf` where the expected type is known |
 | `removeElsePureUnit` | dropping a redundant `else pure ()` |
 | `removeIdRunWithoutEffects` | removing an unnecessary `Id.run do` |
 | `removeLetWildcardOnUnitAction` | dropping `let _ ←` before an action returning `Unit` |

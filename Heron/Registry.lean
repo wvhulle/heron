@@ -22,6 +22,7 @@ public import Heron.Check.SingleUseLambdaToCdotFunction
 public import Heron.Check.LambdaSymbolToFun
 public import Heron.Check.StringConcatenationToInterpolation
 public import Heron.Check.SingleUseBindToNestedAction
+public import Heron.Check.QualifiedConstructorToLeadingDot
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern
