@@ -17,9 +17,29 @@
     }:
     let
       system = "x86_64-linux";
+
+      toolchainTag = builtins.head (
+        builtins.match "[[:space:]]*leanprover/lean4:([^[:space:]]+)[[:space:]]*" (
+          builtins.readFile ./lean-toolchain
+        )
+      );
+
+      vendoredManifestOverlay =
+        manifest: final: prev:
+        (manifest.overlay final prev)
+        // {
+          lean = (final.callPackage "${lean4-nix}/lib/toolchain.nix" { }).fetchBinaryLean manifest;
+        };
+
+      leanOverlay =
+        if lean4-nix.tags ? ${toolchainTag} then
+          lean4-nix.readToolchainFile ./lean-toolchain
+        else
+          vendoredManifestOverlay (import ./nix/lean4-nix-manifests/${toolchainTag}.nix lean4-nix);
+
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ (lean4-nix.readToolchainFile ./lean-toolchain) ];
+        overlays = [ leanOverlay ];
       };
 
       lake2nix = pkgs.callPackage lean4-nix.lake { };
