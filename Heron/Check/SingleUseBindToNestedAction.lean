@@ -82,7 +82,8 @@ private meta instance : Check SingleUseBindToNestedActionMatch where
        statement can be replaced by the nested action. Nested actions run left to right; the \
        rewrite is only offered when this keeps the order of effects."
   replacements := fun m => do
-    let nested ← `(term| (← $m.action))
+    let actionStatement ← `(doElem| $m.action:term)
+    let nested ← `(term| (← $actionStatement))
     return #[
       { emphasizedSyntax := m.bindStx
         oldSyntax := m.removedRange
