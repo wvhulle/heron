@@ -1,7 +1,6 @@
 module
 
 -- Checks
-public import Heron.Check.RflToExactRfl
 public import Heron.Check.MergeIntros
 public import Heron.Check.UnnecessaryIdRun
 public import Heron.Check.UnnecessaryMut

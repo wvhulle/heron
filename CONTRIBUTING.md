@@ -32,8 +32,8 @@ becomes `(example : Nat := (42))
 `#assertIgnore` verifies that a rule produces no matches for the given command:
 
 ```lean
-#assertIgnore rflToExactRfl in
-example (a : Nat) : a = a + 0 := by simp
+#assertIgnore mergeIntros in
+example : Nat → Nat → True := by intro a; skip; intro b; exact trivial
 ```
 
 ## Things not to use in rule implementations

@@ -66,7 +66,6 @@ Checks (enabled by `linter.heron`):
 | `optionWrapFilter` | `guard` in an `Option` `do`-block instead of `some _ \|>.filter _` |
 | `redundantElsePureUnit` | dropping a redundant `else pure ()` |
 | `redundantLetWildcard` | dropping a redundant `let _ ←` |
-| `rflToExactRfl` | `exact rfl` instead of `rfl` |
 | `syntaxKindCheck` | antiquotation patterns instead of comparing `Syntax.getKind` |
 | `syntaxRawAccess` | a typed pattern or method instead of `.raw` on `TSyntax` |
 | `tupleMatchToSimultaneous` | simultaneous matching instead of matching on a tuple |
