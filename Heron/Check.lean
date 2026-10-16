@@ -250,7 +250,7 @@ meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array Fix
 
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
 process-global ref suffices; it is (re)written to the sink as the linter runs. -/
-meta initialize heronFixAccum : IO.Ref (Array FixRecord) ← IO.mkRef #[]
+meta initialize heronFixAccum : Std.Mutex (Array FixRecord) ← Std.Mutex.new #[]
 
 /-- Append this command's fixes to `<dir>/<module>.json`, turning a normal `lake build` into a
 fix-collecting pass (consumed by the `heron` reporter). `dir` defaults to `.lake/build/heron-fixes`
@@ -262,14 +262,17 @@ inside the linter, i.e. only when `linter.heron` is enabled. -/
 private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
   let dir := (← IO.getEnv "HERON_FIX_DIR").getD ".lake/build/heron-fixes"
   let recs ← collectFixRecords (all := false) stx
-  let all ← heronFixAccum.modifyGet fun a => let a := a ++ recs; (a, a)
   let mod ← getMainModule
-  let payload := Json.mkObj
-    [ ("source", ((hash (← getFileMap).source).toNat : Nat)), ("fixes", Json.arr (all.map (toJson ·))) ]
-  try
-    IO.FS.createDirAll dir
-    IO.FS.writeFile (System.FilePath.mk dir / s!"{mod}.json") payload.compress
-  catch _ => pure ()
+  let sourceHash := (hash (← getFileMap).source).toNat
+  heronFixAccum.atomically (m := IO) do
+    modify (· ++ recs)
+    let all ← get
+    let payload := Json.mkObj
+      [ ("source", (sourceHash : Nat)), ("fixes", Json.arr (all.map (toJson ·))) ]
+    try
+      IO.FS.createDirAll dir
+      IO.FS.writeFile (System.FilePath.mk dir / s!"{mod}.json") payload.compress
+    catch _ => pure ()
 
 /-- The single linter Heron registers with Lean. It activates every enabled
 rule, builds one handler per rule, walks the command syntax once via kind-keyed
