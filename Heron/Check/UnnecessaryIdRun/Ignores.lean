@@ -23,3 +23,6 @@ example : Nat := Id.run do
 example : Nat := Id.run do
   if true then return 1
   return 2
+
+#assertIgnore unnecessaryIdRun in
+def pureTail (x : Nat) : Nat := Id.run do pure x

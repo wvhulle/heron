@@ -21,9 +21,11 @@ private meta def matchPureLet? : Syntax → Option LetBinding
   | `(doElem| let $x:ident := $val) => some { ident := x, val }
   | _ => none
 
-/-- Match the tail of a pure do-sequence: `return $e` or a bare expression. -/
+/-- Match the tail of a pure do-sequence: `return $e` or a bare expression other
+than `pure $e`, which would have no monad to resolve once `Id.run` is removed. -/
 private meta def matchTail? : Syntax → Option (TSyntax `term)
   | `(doElem| return $e) => some e
+  | `(doElem| pure $_) => none
   | `(doElem| $e:term) => some e
   | _ => none
 
