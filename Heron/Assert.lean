@@ -117,16 +117,16 @@ syntax (name := assertIgnoreCmd)
 
 @[command_elab assertIgnoreCmd] meta def elabAssertIgnore : CommandElab
   | stx@`(command| #assertIgnore $linterName in $cmd) => do
-    let { edits, .. } ← runRule cmd linterName.getId
-    unless edits.isEmpty do
+    let { edits, matchCount } ← runRule cmd linterName.getId
+    unless matchCount == 0 do
       let text ← getFileMap
       let descriptions := edits.map fun edit =>
         let startPos := text.lspPosToUtf8Pos edit.range.start
         let endPos := text.lspPosToUtf8Pos edit.range.end
         let before := String.Pos.Raw.extract text.source startPos endPos
         s!"  `{before.trimAscii}` => `{edit.newText.trimAscii}`"
-      logWarningAt stx
-        m!"expected no replacements but got {edits.size}:\n{"\n".intercalate descriptions.toList}"
+      logErrorAt stx
+        m!"expected no matches but got {matchCount} with {edits.size} replacements:\n{"\n".intercalate descriptions.toList}"
   | _ => throwUnsupportedSyntax
 
 end Heron.Assert

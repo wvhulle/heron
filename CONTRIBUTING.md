@@ -29,7 +29,7 @@ example : Nat := myConst
 becomes `(example : Nat := (42))
 ```
 
-`#assertIgnore` verifies that a rule produces no edits for the given command:
+`#assertIgnore` verifies that a rule produces no matches for the given command:
 
 ```lean
 #assertIgnore rflToExactRfl in
