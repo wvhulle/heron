@@ -5,20 +5,13 @@
     extra-trusted-public-keys = [ "wvhulle.cachix.org-1:heXx8DZMiRsKUx6l1TxNoF+Nmtmz66QEdsonQzc1ir0=" ];
   };
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    lean4 = {
-
-      url = "github:wvhulle/lean4";
-
-      # url = "git+file:/home/wvhulle/Code/lean4";
-    };
     lean4-nix.url = "github:lenianiva/lean4-nix";
+    nixpkgs.follows = "lean4-nix/nixpkgs";
   };
 
   outputs =
     {
       nixpkgs,
-      lean4,
       lean4-nix,
       ...
     }:
@@ -26,13 +19,10 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
+        overlays = [ (lean4-nix.readToolchainFile ./lean-toolchain) ];
       };
 
-      lake2nix = pkgs.callPackage lean4-nix.lake {
-        lean = {
-          lean-all = lean4.packages.${system}.lake;
-        };
-      };
+      lake2nix = pkgs.callPackage lean4-nix.lake { };
 
       lakeDeps = lake2nix.buildDeps { src = ./.; };
 
@@ -50,11 +40,8 @@
       };
 
       devShells.${system} = rec {
-        # Fork lean managed by Nix flake input.
-        managed-fork = pkgs.mkShell {
-          packages = [
-            lean4.packages.${system}.lake
-          ];
+        managed-stock = pkgs.mkShell {
+          packages = [ pkgs.lean.lean-all ];
         };
 
         # Standard Lean via elan — unmanaged, for building the vanilla Heron target.
@@ -86,7 +73,7 @@
             '';
           };
 
-        default = managed-fork;
+        default = unmanaged-vanilla;
       };
     };
 }
