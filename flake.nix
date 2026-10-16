@@ -26,31 +26,63 @@
 
       lakeDeps = lake2nix.buildDeps { src = ./.; };
 
-      heron = lake2nix.mkPackage {
-        name = "Heron";
-        src = ./.;
-        inherit lakeDeps;
-        installArtifacts = true;
-        buildPhase = ''
-          runHook preBuild
-          lake build Heron heron heron-scan dump-ast
-          runHook postBuild
-        '';
+      buildLakeTargets =
+        {
+          name,
+          targets,
+          lakeArtifacts ? null,
+        }:
+        lake2nix.mkPackage (
+          {
+            inherit name lakeDeps;
+            src = ./.;
+            installArtifacts = true;
+            buildPhase = ''
+              runHook preBuild
+              lake build ${targets}
+              runHook postBuild
+            '';
+          }
+          // pkgs.lib.optionalAttrs (lakeArtifacts != null) { inherit lakeArtifacts; }
+        );
+
+      library = buildLakeTargets {
+        name = "heron-library";
+        targets = "Heron Heron:shared";
       };
 
-      inProjectEnv =
-        exe:
-        pkgs.writeShellApplication {
-          name = exe;
-          runtimeInputs = [ pkgs.lean.lean-all ];
-          text = ''exec lake env ${heron}/bin/${exe} "$@"'';
-        };
+      lint-driver = buildLakeTargets {
+        name = "heron-lint-driver";
+        targets = "heron";
+        lakeArtifacts = library;
+      };
 
-      heronScanInProject = inProjectEnv "heron-scan";
+      heron-scan-unwrapped = buildLakeTargets {
+        name = "heron-scan-unwrapped";
+        targets = "heron-scan";
+        lakeArtifacts = library;
+      };
+
+      dump-ast = buildLakeTargets {
+        name = "heron-dump-ast";
+        targets = "dump-ast";
+        lakeArtifacts = library;
+      };
+
+      heronScanInProject = pkgs.writeShellApplication {
+        name = "heron-scan";
+        runtimeInputs = [ pkgs.lean.lean-all ];
+        text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
+      };
     in
     {
       packages.${system} = {
-        inherit heron;
+        inherit
+          library
+          lint-driver
+          heron-scan-unwrapped
+          dump-ast
+          ;
         heron-scan = heronScanInProject;
         default = heronScanInProject;
       };
