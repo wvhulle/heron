@@ -6,14 +6,15 @@ import Reporter.BuildSink
 
 Drives `lake build` with Heron loaded as a `lean --plugin` so the linter runs on every module and
 writes its fixes to a sink during the build, then reads + renders them. Lake's incremental build is
-the cache — no re-elaboration, no cache of our own. Requires the project's lakefile to honour
-`-KheronPlugin` (see Sparkle's `lakefile.lean`).
+the cache — no re-elaboration, no cache of our own. Requires the consumer's `lakefile.lean` to load
+the plugin (`plugins := #[`@heron/plugin]`); registering it as `lintDriver := "heron/heron"`
+makes it the project's `lake lint`.
 
-    lake env heron                  # build all libraries + report all fixes
-    lake env heron Sparkle.Analog   # restrict build + report to lake targets
-    lake env heron --json | jq
-    lake env heron --fix            # rewrite files in place
-    lake env heron --no-build       # read the existing sink only
+    lake lint                       # build all libraries + report all fixes
+    lake lint -- Sparkle.Analog     # restrict build + report to lake targets
+    lake lint -- --json | jq
+    lake lint -- --fix              # rewrite files in place
+    lake lint -- --no-build         # read the existing sink only
 -/
 
 open Reporter

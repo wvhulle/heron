@@ -44,70 +44,79 @@ set_option linter.mergeIntros false
 
 ## Installation
 
-Add the Lake dependency:
+The repository is mirrored to GitHub (`https://github.com/wvhulle/heron`), so either URL works
+below.
+
+### Whole project, no imports (recommended)
+
+Load Heron as a `lean --plugin`, so its linter runs on **every** module your package compiles and
+no source file has to `import Heron`. In the consumer's `lakefile.lean`:
+
+```lean
+require heron from git "https://github.com/wvhulle/heron" @ "main"
+
+package «your_pkg» where
+  leanOptions := #[⟨`linter.heron, true⟩]
+  plugins := #[`@heron/plugin]
+  lintDriver := "heron/heron"
+```
+
+- `plugins` makes Lake build Heron's shared library on any platform and load it for every module.
+  There is nothing to bootstrap, and updating Heron rebuilds it.
+- `leanOptions` turns all rules on. Individual rules are switched off with
+  ``⟨`linter.<rule>, false⟩`` or `set_option linter.<rule> false` in a file.
+- `lintDriver` makes `lake lint` Heron's report command (next section).
+
+A plain `lake build` then prints Heron's diagnostics for every module, and the editor shows them
+with quick-fixes.
+
+`lakefile.toml` cannot refer to a dependency's targets. For TOML projects, either convert to
+`lakefile.lean` (`lake translate-config lean`) or use the per-file setup.
+
+### Per-file (editor / LSP)
+
+Add the dependency, in `lakefile.toml`:
 
 ```toml
 [[require]]
 name = "heron"
-git = "https://codeberg.org/wvhulle/heron"
+git = "https://github.com/wvhulle/heron"
 rev = "main"
 ```
 
-You then have two ways to surface Heron's diagnostics in your project.
-
-### Per-file (editor / LSP)
-
-Import Heron and enable its rules in the files you want linted:
+Then import Heron and enable its rules in the files you want linted:
 
 ```lean
 import Heron
 set_option linter.heron true
 ```
 
-### Whole project, no imports (recommended)
+## Reporting fixes from the command line (CI, scripts, batch fixing)
 
-Load Heron as a `lean --plugin` so its linter runs on **every** module your build compiles — no
-`import Heron` in any source file. Heron's `Heron` library defaults to the `shared` facet, so its
-plugin shared library is emitted as part of a normal build. Wire it up once in the consumer's
-`lakefile.lean`:
-
-```lean
-package «your_pkg» where
-  -- enable the rules everywhere (`weak.` = no-op if the plugin is absent)
-  leanOptions := #[⟨`weak.linter.heron, true⟩]
-  -- load Heron for every compiled module; `weakLeanArgs` keeps the path out of the build trace
-  weakLeanArgs := #["--plugin", ".lake/packages/heron/.lake/build/lib/libheron_Heron.so"]
-
-require heron from git "https://codeberg.org/wvhulle/heron" @ "main"
-```
-
-Bootstrap (or refresh, after updating Heron) the plugin library with:
+With the plugin setup above, `lake lint` builds your libraries and prints every fix in a
+cargo/clippy-style report. Lake's incremental build is the cache, so only changed modules are
+re-elaborated. Arguments after `--` go to the reporter:
 
 ```sh
-lake build heron/Heron:shared
+lake lint                            # report all fixes across the workspace's libraries
+lake lint -- Sparkle.Analog          # restrict to lake targets
+lake lint -- --json | jq             # machine-readable
+lake lint -- --fix                   # rewrite files in place
 ```
 
-After that, a plain `lake build` reports Heron's fixes inline on every module.
-
-## Headless reporters (CI, scripts, batch fixing)
-
-Heron ships two executables that surface fixes outside the editor. Because Lake exposes a
-dependency's executables by name, you can run them from **any project that requires Heron** with
-`lake exe …` — no extra wiring:
+Heron also ships executables, which run in any project that requires Heron through
+`lake exe …`:
 
 | Command | What it does |
 | --- | --- |
-| `lake exe heron` | Build-integrated (clippy model). Builds your targets with Heron loaded as a plugin, then prints the fixes. Builds the plugin `.so` itself if missing. Rides Lake's incremental cache. |
-| `lake exe heron-scan` | Self-contained. Imports the dependency closure once and elaborates the targets itself (own incremental cache + parallelism). Needs no lakefile changes; also reads from stdin (`-`). |
+| `lake exe heron` | What `lake lint` runs. Builds your targets with Heron loaded as a plugin, then prints the fixes. |
+| `lake exe heron-scan` | Self-contained. Imports the dependency closure once and elaborates the targets itself (own incremental cache + parallelism). Needs no plugin wiring; also reads from stdin (`-`). |
 
 Common flags (both): `--json` (machine-readable), `--fix`/`--apply` (rewrite files in place),
 `--color`/`--no-color`. `heron` adds `--no-build` (read an existing sink); `heron-scan` adds
 `--per-file`, `--no-cache`, `--no-parallel`.
 
 ```sh
-lake exe heron                       # report all fixes across the workspace's libraries
-lake exe heron Sparkle.Analog        # restrict to lake targets
-lake exe heron --json | jq           # machine-readable
 lake exe heron-scan --fix Foo/Bar.lean   # apply fixes to specific files
 echo 'def f := fun x => x + 1' | lake exe heron-scan -   # lint from stdin
 ```
