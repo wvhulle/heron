@@ -30,3 +30,7 @@ private def privateConst :=
 #assertRefactor inline in
 example : Nat := privateConst
 becomes `(example : Nat := (7))
+
+#assertRefactor inline in
+example : Nat := let x := 2; x + x
+becomes `(example : Nat := (2 + 2))

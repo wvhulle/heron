@@ -58,7 +58,8 @@ private meta def detectInlineOpportunities (stx : Syntax) : CommandElabM (Array 
         let parensed ← `(($delabbed))
         results := results.push { stx := ti.stx, newSyntax := parensed, kind := .const name }
       catch _ => pure ()
-  for (ci, ti) in infos do
+  let letCandidates := infos.filter fun (_, ti) => outsideDeclId declRange? ti && ti.expr.isLet
+  for (ci, ti) in deduplicateTermInfos letCandidates do
     if let .letE _ _ value body _ := ti.expr then
       try
         let delabbed ← runInfoMetaM ci ti.lctx (PrettyPrinter.delab (body.instantiate1 value))
