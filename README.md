@@ -44,6 +44,22 @@ set_option linter.mergeIntros false
 
 ## Installation
 
+### Pick the right version
+
+Heron hooks into the Lean compiler, so it must be built with **exactly** the Lean version your
+project uses. Use the ref that matches your `lean-toolchain`:
+
+| Your `lean-toolchain` | Heron ref |
+| --- | --- |
+| `leanprover/lean4:v4.35.0` | `main` |
+| `leanprover/lean4:v4.31.0` | `lean/v4.31.0` |
+| `leanprover/lean4:v4.30.0` | `lean/v4.30.0` |
+| `leanprover/lean4:v4.29.1` | `lean/v4.29.1` |
+| [wvhulle/lean4](https://github.com/wvhulle/lean4) fork | `lean-fork/v4.31.0` |
+
+The `lean-fork/v4.31.0` branch adds features that need the fork: hover popups, related-information labels
+and import-analysis checks.
+
 The repository is mirrored to GitHub (`https://github.com/wvhulle/heron`), so either URL works
 below.
 
