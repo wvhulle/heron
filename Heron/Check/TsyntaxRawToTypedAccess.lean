@@ -1,42 +1,48 @@
 module
 
 public meta import Heron.Check
+public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
 
 private structure TsyntaxRawToTypedAccessMatch where
   fullStx : Syntax
 
+private meta def accessesRawField (fieldPath : List Name) : Bool :=
+  fieldPath.any (· == `raw)
+
 private meta def isRawAccessSyntax : Syntax → Bool
-  | `(($_:term).raw) => true
-  | `($x:ident) => isDottedAccess `raw x.getId
+  | `(($_:term).$field:ident) => accessesRawField field.getId.components
+  | `($x:ident) => accessesRawField (x.getId.components.drop 1)
   | _ => false
+
+private meta def detectRawEscapesBeforePositionalAccess (cmd : Syntax) :
+    CommandElabM (Array TsyntaxRawToTypedAccessMatch) := do
+  let rawSites := (subtreeNodes cmd).filter isRawAccessSyntax
+  if rawSites.isEmpty then return #[]
+  unless ← usesPositionalSyntaxAccess cmd do return #[]
+  rawSites.filterMapM fun site => do
+    unless ← elaboratesMentioningProjection site ``Lean.TSyntax ``Lean.TSyntax.raw do return none
+    return some { fullStx := site }
 
 private meta instance : Check TsyntaxRawToTypedAccessMatch where
   name := `tsyntaxRawToTypedAccess
-  kinds := #[``Term.proj, identKind]
+  kinds := #[]
   severity := .information
   category := .style
-  detect := fun stx => do
-    unless isRawAccessSyntax stx do return #[]
-    unless ← elaboratesToApplicationOf stx ``Lean.TSyntax.raw do return #[]
-    return #[{ fullStx := stx }]
-  message := fun _ => m!"Avoid `.raw` on `TSyntax` — use a typed pattern or method instead"
+  detect := detectRawEscapesBeforePositionalAccess
+  message := fun _ => m!"Avoid `.raw` on `TSyntax` followed by positional child access — use a typed pattern instead"
   emphasize := fun m => m.fullStx
   reference := some
-    { topic := "TSyntax"
-      url := "https://leanprover-community.github.io/lean4-metaprogramming-book/main/06_macros.html" }
+    { topic := "Typed syntax"
+      url := "https://leanprover-community.github.io/lean4-metaprogramming-book/main/05_syntax.html#typed-syntax" }
   explanation := fun _ =>
-    m!"Reaching for `.raw` discards the syntax category bound by `TSyntax`, opening the door to \
-       brittle positional indexing or untyped equality on the underlying `Syntax`. Most uses are \
-       replaceable by:\n\
-       • a `:ident`/`:term`/category-constrained antiquotation in the surrounding pattern, which \
-       eliminates the need for `.raw.isIdent` / `.raw.getId` guards;\n\
-       • a method that already exists on `TSyntax` (e.g. `TSyntax.getId` for idents);\n\
-       • the `BEq` instance on `TSyntax`, instead of comparing `.raw == .raw`.\n\
-       Genuinely-needed downcasts to call stdlib APIs that only accept `Syntax` (e.g. \
-       `Syntax.getPos?`, `mkNullNode`) are the rare legitimate exception — disable this rule \
-       at the call site with `set_option linter.tsyntaxRawToTypedAccess false in`."
+    m!"Reaching for `.raw` discards the syntax category bound by `TSyntax`, and this declaration \
+       then indexes the underlying `Syntax` by position (`getArg`, `getArgs`, `stx[i]`), which \
+       silently breaks when the parser's layout changes. A `:ident`/`:term`/category-constrained \
+       antiquotation in a `` `(...) `` pattern binds the same children by name and is checked at \
+       compile time. `.raw` itself is fine for `Coe` instances between categories, for \
+       `getKind` dispatch, or to call APIs that only accept `Syntax`."
   replacements := fun _ => return #[]
 
 meta initialize Check.register (α := TsyntaxRawToTypedAccessMatch)

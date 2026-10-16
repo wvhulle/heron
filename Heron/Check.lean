@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Rule
+public meta import Heron.Monad
 public meta import Heron.Lsp
 public meta import Heron.Fix
 public meta import Lean.Server.CodeActions.Basic
@@ -32,6 +33,44 @@ meta instance : ToString Category where
 meta def isDottedAccess (field : Name) : Name → Bool
   | .str receiver last => !receiver.isAnonymous && last == field.toString
   | _ => false
+
+private meta def positionalSyntaxAccessors : Array Name :=
+  #[``Lean.Syntax.getArg, ``Lean.Syntax.getArgs, ``Lean.Syntax.getNumArgs, ``Lean.Syntax.getIdAt]
+
+private meta def indexingFunctions : Array Name :=
+  #[``GetElem.getElem, ``GetElem?.getElem?, ``GetElem?.getElem!]
+
+private meta def indexesIntoSyntax (e : Expr) : Bool :=
+  indexingFunctions.any e.isAppOf && e.getAppArgs[0]?.any (·.isConstOf ``Lean.Syntax)
+
+private meta def readsSyntaxChildByPosition (e : Expr) : Bool :=
+  (e.find? fun sub => positionalSyntaxAccessors.any sub.isConstOf || indexesIntoSyntax sub).isSome
+
+private meta def termInfosWithin (stx : Syntax) (isInside : Syntax.Range → Syntax.Range → Bool) :
+    CommandElabM (Array (ContextInfo × TermInfo)) := do
+  let some range := stx.getRange? | return #[]
+  let trees ← collectInfoTrees stx
+  return (trees.flatMap collectTermInfos).filter fun (_, ti) =>
+    ti.stx.getRange?.any (isInside range)
+
+meta def usesPositionalSyntaxAccess (cmd : Syntax) : CommandElabM Bool := do
+  let infos ← termInfosWithin cmd fun outer inner => outer.start ≤ inner.start && inner.stop ≤ outer.stop
+  infos.anyM fun (ci, ti) => runInfoMetaM ci ti.lctx do
+    return readsSyntaxChildByPosition (← instantiateMVars ti.expr)
+
+private meta def mentionsProjectionOf (structName constName : Name) (e : Expr) : Bool :=
+  (e.find? fun sub =>
+    sub.isConstOf constName ||
+      match sub with
+      | .proj projected _ _ => projected == structName
+      | _ => false).isSome
+
+meta def elaboratesMentioningProjection (stx : Syntax) (structName constName : Name) :
+    CommandElabM Bool := do
+  let enclosingAtSameStart ← termInfosWithin stx fun site info =>
+    info.start == site.start && site.stop ≤ info.stop
+  enclosingAtSameStart.anyM fun (ci, ti) => runInfoMetaM ci ti.lctx do
+    return mentionsProjectionOf structName constName (← instantiateMVars ti.expr)
 
 /-- A reference to external documentation that justifies a check rule. -/
 structure Reference where

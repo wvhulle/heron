@@ -12,3 +12,12 @@ private structure Token where
 
 #assertIgnore syntaxKindComparisonToQuotationPattern in
 def userGetKindField (t : Token) : Bool := t.getKind == 0
+
+#assertIgnore syntaxKindComparisonToQuotationPattern in
+def isDeclaration (stx : Lean.Syntax) : Bool := stx.isOfKind ``Lean.Parser.Command.declaration
+
+#assertIgnore syntaxKindComparisonToQuotationPattern in
+def isApplication (s : Lean.Syntax) : Bool := s.getKind == ``Lean.Parser.Term.app
+
+#assertIgnore syntaxKindComparisonToQuotationPattern in
+def isCheckCommand (c : Lean.TSyntax `command) : Bool := c.raw.getKind == ``Lean.Parser.Command.check
