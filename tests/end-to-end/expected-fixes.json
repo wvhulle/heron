@@ -1,0 +1,29 @@
+[
+  {
+    "after": "let y := x",
+    "before": "let mut y := x",
+    "col": 3,
+    "file": "Consumer/Basic.lean",
+    "line": 2,
+    "message": "Remove unnecessary `mut`",
+    "rule": "unnecessaryMut"
+  },
+  {
+    "after": "intro a b",
+    "before": "intro a; intro b",
+    "col": 34,
+    "file": "Consumer/Basic.lean",
+    "line": 5,
+    "message": "Merge intros",
+    "rule": "mergeIntros"
+  },
+  {
+    "after": "if let some v := o then increment v else 0",
+    "before": "match o with\n  | some v => increment v\n  | _ => 0",
+    "col": 47,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 3,
+    "message": "Use `if let` instead of two-arm `match` with wildcard",
+    "rule": "matchToIfLet"
+  }
+]

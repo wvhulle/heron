@@ -1,2 +1,4 @@
 /.lake/
+/tests/end-to-end/consumer/.lake/
+/tests/end-to-end/consumer/lean-toolchain
 /sgconfig.yml
