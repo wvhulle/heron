@@ -95,6 +95,14 @@
         default = heron-scan;
       };
 
+      checks.${system} = {
+        build-library-with-rule-tests = library;
+        build-lint-driver = lint-driver;
+        build-heron-scan = heron-scan-unwrapped;
+        build-dump-ast = dump-ast;
+        build-heron-scan-app = heronScanInProject;
+      };
+
       devShells.${system} = rec {
         managed-stock = pkgs.mkShell {
           packages = [ pkgs.lean.lean-all ];
