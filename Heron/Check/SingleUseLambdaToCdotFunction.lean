@@ -74,7 +74,7 @@ private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
   reference :=
     some
       { topic := "Centered dot",
-        url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
+        url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions" }
   explanation := fun _ =>
     m!"Simple lambdas like `fun x => x + 1` can be written as `(· + 1)` using Lean's `·` function shorthand, which abstracts over the nearest enclosing parentheses."
   replacements := fun m => do

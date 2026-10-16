@@ -59,7 +59,7 @@ private meta instance : Check RemoveIdRunWithoutEffectsMatch where
     | none => #[]
   message := fun _ => m!"Remove unnecessary `Id.run do`"
   emphasize := fun m => m.fullStx
-  reference := some { topic := "`Id.run`", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html#mutable-variables" }
+  reference := some { topic := "`Id.run`", url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#let-mut" }
   tags := #[.unnecessary]
   explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
   replacements := fun m => do

@@ -27,7 +27,7 @@ private meta instance : Check LambdaMatchToPatternMatchingLambdaMatch where
   reference :=
     some
       { topic := "Anonymous functions",
-        url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
+        url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions" }
   explanation := fun _ =>
     m!"`fun x => match x with | ...` can be simplified to `fun | ...` using Lean's pattern-matching lambda syntax, because no match arm refers to `x` itself."
   replacements := fun m => do

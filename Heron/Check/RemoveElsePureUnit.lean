@@ -30,7 +30,7 @@ private meta instance : Check RemoveElsePureUnitMatch where
   message := fun _ => m!"Redundant `else pure ()`"
   emphasize := fun m => m.elseBranch
   tags := #[.unnecessary]
-  reference := some { topic := "Single-branched if", url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/do.html" }
+  reference := some { topic := "Single-branched if", url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#single-branched-if" }
   explanation := fun _ => m!"In a do-block, `if cond then action else pure ()` can be simplified to `if cond then action`."
   replacements := fun m => do
     let cond : TSyntax `term := ⟨m.cond⟩

@@ -43,7 +43,7 @@ private meta instance : Check MergeBindersWithSameTypeMatch where
     (binders.toList.splitBy sharesType).toArray.filterMap runWithSharedType?
   message := fun _ => m!"Merge binders with the same type"
   emphasize := fun m => m.secondBinder
-  reference := some { topic := "Shared binders", url := "https://leanprover.github.io/functional_programming_in_lean/monads/conveniences.html" }
+  reference := some { topic := "Shared binders", url := "https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#shared-argument-types" }
   explanation := fun _ => m!"Consecutive explicit binders with the same type can be merged into a single binder group."
   replacements := fun m => do
     let allNames := m.run.flatMap (·.names)

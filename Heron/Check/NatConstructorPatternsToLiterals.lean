@@ -52,7 +52,7 @@ private meta instance : Check NatConstructorPatternsToLiteralsMatch where
   emphasize := fun
     | .zero s => s
     | .succ s .. => s
-  reference := some { topic := "Natural number patterns", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
+  reference := some { topic := "Natural number patterns", url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#natural-number-patterns" }
   explanation := fun
     | .zero .. => m!"Pattern `Nat.zero` can be written as the numeric literal `0`."
     | .succ .. => m!"Pattern `Nat.succ n` can be written as `n + 1`, and nested `Nat.succ` applications as `n + k`."

@@ -61,7 +61,7 @@ private meta instance : Check TupleMatchToSimultaneousMatchMatch where
     | _ => #[]
   message := fun _ => m!"Use simultaneous matching instead of matching on a tuple"
   emphasize := fun m => m.matchStx
-  reference := some { topic := "Simultaneous matching", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
+  reference := some { topic := "Simultaneous matching", url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#simultaneous-matching" }
   explanation := fun _ => m!"Matching on `(x, y)` hides the connection between discriminant and pattern from the termination checker. Use `match x, y with` instead."
   replacements := fun m => do
     let discrs : TSyntaxArray `term := m.discrElems
