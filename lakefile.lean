@@ -27,3 +27,8 @@ lean_exe heron where
 lean_exe «heron-scan» where
   root := `Bin.Scan
   supportInterpreter := true
+
+target plugin : Dynlib := do
+  let some heron ← findLeanLib? `Heron
+    | error "library `Heron` not found"
+  heron.shared.fetch
