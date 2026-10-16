@@ -5,6 +5,7 @@
     extra-trusted-public-keys = [ "wvhulle.cachix.org-1:heXx8DZMiRsKUx6l1TxNoF+Nmtmz66QEdsonQzc1ir0=" ];
   };
   inputs = {
+    lean4.url = "github:wvhulle/lean4";
     lean4-nix.url = "github:lenianiva/lean4-nix";
     nixpkgs.follows = "lean4-nix/nixpkgs";
   };
@@ -12,37 +13,20 @@
   outputs =
     {
       nixpkgs,
+      lean4,
       lean4-nix,
       ...
     }:
     let
       system = "x86_64-linux";
 
-      toolchainTag = builtins.head (
-        builtins.match "[[:space:]]*leanprover/lean4:([^[:space:]]+)[[:space:]]*" (
-          builtins.readFile ./lean-toolchain
-        )
-      );
+      pkgs = import nixpkgs { inherit system; };
 
-      vendoredManifestOverlay =
-        manifest: final: prev:
-        (manifest.overlay final prev)
-        // {
-          lean = (final.callPackage "${lean4-nix}/lib/toolchain.nix" { }).fetchBinaryLean manifest;
-        };
+      forkLean = lean4.packages.${system}.lake;
 
-      leanOverlay =
-        if lean4-nix.tags ? ${toolchainTag} then
-          lean4-nix.readToolchainFile ./lean-toolchain
-        else
-          vendoredManifestOverlay (import ./Lean4NixManifests/${toolchainTag}.nix lean4-nix);
-
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ leanOverlay ];
+      lake2nix = pkgs.callPackage lean4-nix.lake {
+        lean.lean-all = forkLean;
       };
-
-      lake2nix = pkgs.callPackage lean4-nix.lake { };
 
       lakeDeps = lake2nix.buildDeps { src = ./.; };
 
@@ -109,12 +93,12 @@
           lakeDeps
           ;
         heronSource = ./.;
-        runsEditorProbes = pkgs.lib.versionAtLeast (pkgs.lib.removePrefix "v" toolchainTag) "4.31.0";
+        runsEditorProbes = true;
       };
 
       devShells.${system} = rec {
-        managed-stock = pkgs.mkShell {
-          packages = [ pkgs.lean.lean-all ];
+        managed-fork = pkgs.mkShell {
+          packages = [ forkLean ];
         };
 
         # Standard Lean via elan — unmanaged, for building the vanilla Heron target.
