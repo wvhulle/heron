@@ -47,3 +47,27 @@ meta import Heron.Check.MergeMatchArms
       match x with
       | none | some 0 => 0
       | some _ => 1)
+
+#assertCheck mergeMatchArms in
+def threeArms (n : Nat) : Nat := match n with
+  | 0 => 5
+  | 1 => 5
+  | 2 => 5
+  | _ => 0
+becomes `(command| def threeArms (n : Nat) : Nat := match n with
+  | 0 | 1 | 2 => 5
+  | _ => 0)
+
+private inductive Shape where
+  | circle (r : Nat)
+  | square (r : Nat)
+  | dot
+
+#assertCheck mergeMatchArms in
+def radius (s : Shape) : Nat := match s with
+  | .circle r => r + 1
+  | .square r => r + 1
+  | .dot => 0
+becomes `(command| def radius (s : Shape) : Nat := match s with
+  | .circle r | .square r => r + 1
+  | .dot => 0)
