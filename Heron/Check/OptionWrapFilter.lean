@@ -19,7 +19,7 @@ private meta instance : Check OptionWrapFilterMatch where
     | `(some $value |>.filter $predicate) => #[{ fullStx := ⟨stx⟩, value, predicate }]
     | `((some $value).filter $predicate) => #[{ fullStx := ⟨stx⟩, value, predicate }]
     | _ => #[]
-  message := fun _ => m!"Replace `some _ |>.filter _` with a `guard` in an `Option` `do`-block"
+  message := fun _ => m!"Replace `some _ |>.filter _` with a `guard` in an `Option` `do`-block where the expected type is `Option _`"
   emphasize := fun m => m.fullStx
   reference := none
   explanation := fun _ =>
@@ -32,7 +32,8 @@ private meta instance : Check OptionWrapFilterMatch where
     let guardItem ← `(Parser.Term.doSeqItem| $guardCall:term)
     let returnItem ← `(Parser.Term.doSeqItem| return $m.value)
     let seq ← `(Parser.Term.doSeq| $(#[guardItem, returnItem])*)
-    let repl ← `(do $seq)
+    let doBlock ← `(do $seq)
+    let repl ← `(($doBlock))
     return #[{
       emphasizedSyntax := m.fullStx
       oldSyntax := m.fullStx

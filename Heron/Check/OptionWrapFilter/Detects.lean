@@ -6,6 +6,12 @@ meta import Heron.Check.OptionWrapFilter
 #assertCheck optionWrapFilter in
 example (xs : List Nat) (p : Nat → Bool) : Option Nat :=
   some xs.length |>.filter p
-becomes `(example (xs : List Nat) (p : Nat → Bool) : Option Nat := do
+becomes `(example (xs : List Nat) (p : Nat → Bool) : Option Nat := (do
   guard (p xs.length)
-  return xs.length)
+  return xs.length))
+
+#assertCheck optionWrapFilter in
+def filteredOrZero (x : Nat) : Nat := (some x |>.filter (· > 2) |>.getD 0)
+becomes `(command| def filteredOrZero (x : Nat) : Nat := ((do
+    guard ((· > 2) x)
+    return x) |>.getD 0))
