@@ -54,6 +54,7 @@ Checks (enabled by `linter.heron`):
 | `lambdaMatchToPatternMatchingLambda` | `fun \| …` pattern-matching syntax |
 | `lambdaSymbolToFun` | `fun` instead of `λ` |
 | `matchOnBoolToIfThenElse` | `if … then … else …` instead of matching on `Bool` |
+| `matchOnParametersToPatternMatchingDefinition` | `def f : A → B \| …` instead of naming parameters only to `match` on them |
 | `mergeBindersWithSameType` | merging binders with the same type |
 | `mergeConsecutiveIntros` | merging consecutive `intro`s |
 | `mergeMatchArmsWithSameBody` | merging match arms with identical right-hand sides |

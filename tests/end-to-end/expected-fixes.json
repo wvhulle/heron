@@ -18,6 +18,15 @@
     "rule": "mergeConsecutiveIntros"
   },
   {
+    "after": "def incrementOrZero : Option Nat → Nat\n  | some v => increment v\n  | _ => 0",
+    "before": "def incrementOrZero (o : Option Nat) : Nat := match o with\n  | some v => increment v\n  | _ => 0",
+    "col": 1,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 3,
+    "message": "Match on the parameters directly with `def f : A → B | pattern => …`",
+    "rule": "matchOnParametersToPatternMatchingDefinition"
+  },
+  {
     "after": "if let some v := o then increment v else 0",
     "before": "match o with\n  | some v => increment v\n  | _ => 0",
     "col": 47,

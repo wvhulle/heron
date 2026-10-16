@@ -23,6 +23,7 @@ public import Heron.Check.LambdaSymbolToFun
 public import Heron.Check.StringConcatenationToInterpolation
 public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
+public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern
