@@ -37,11 +37,14 @@ let
       installPhase = "touch $out";
     };
 
-  editorProbeArgs = file: [
-    "${heron-lsp-probe}/bin/heron-lsp-probe"
-    "${pkgs.lib.getExe heron-lean-server}"
-    file
-  ];
+  editorProbeArgs =
+    file: probeFlags:
+    [
+      "${heron-lsp-probe}/bin/heron-lsp-probe"
+      "${pkgs.lib.getExe heron-lean-server}"
+      file
+    ]
+    ++ probeFlags;
 in
 {
   test-plugin-and-lake-lint = runInConsumerFixture {
@@ -70,13 +73,24 @@ in
     name = "test-editor-without-project-changes";
     fixture = "vanilla";
     script = "editor-diagnostics.nu";
-    scriptArgs = editorProbeArgs "Vanilla/Basic.lean";
+    scriptArgs = editorProbeArgs "Vanilla/Basic.lean" [
+      "--expect"
+      "Merge intros"
+      "--expect"
+      "mut"
+      "--expect-quick-fix"
+      "--reject"
+      "increment (x : Nat)"
+    ];
   };
 
   test-editor-with-plugin-in-lakefile = runInConsumerFixture {
     name = "test-editor-with-plugin-in-lakefile";
     heronArtifacts = lint-driver;
     script = "editor-diagnostics.nu";
-    scriptArgs = editorProbeArgs "Consumer/Basic.lean";
+    scriptArgs = editorProbeArgs "Consumer/Basic.lean" [
+      "--reject"
+      "Merge intros"
+    ];
   };
 }

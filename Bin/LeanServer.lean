@@ -1,6 +1,8 @@
 import Reporter.PluginSo
+import Lean.Data.Lsp.Communication
+import Std.Data.HashMap
 
-open System Reporter
+open System Reporter Lean JsonRpc
 
 def heronRepository : String := "https://github.com/wvhulle/heron"
 
@@ -91,18 +93,103 @@ def lakefileLoadsHeronPlugin : IO Bool :=
     let config ← IO.FS.readFile lakefile <|> pure ""
     return config.contains "@heron/plugin"
 
-def heronServeArgs : IO (Array String) := do
-  if ← lakefileLoadsHeronPlugin then return #[]
-  let plugin ← resolvePlugin (← projectLeanVersion)
-  return #[s!"--plugin={plugin}", "-Dweak.linter.heron=true"]
-
-def main (serveArgs : List String) : IO UInt32 := do
+def pluginForProject : IO (Option String) := do
+  if ← lakefileLoadsHeronPlugin then
+    IO.eprintln "heron-lean-server: the lakefile already loads @heron/plugin, so the Lean server \
+      shows Heron's hints itself"
+    return none
   try
-    let server ← IO.Process.spawn {
-      cmd := "lake"
-      args := #["serve", "--"] ++ (← heronServeArgs) ++ serveArgs
-    }
-    server.wait
+    return some (← resolvePlugin (← projectLeanVersion))
   catch e =>
     IO.eprintln e
-    return 1
+    return none
+
+def isHeronName (json : Json) : Bool :=
+  match json.getStr? with
+  | .ok name => name.startsWith "heron."
+  | .error _ => false
+
+def isHeronDiagnostic (diagnostic : Json) : Bool :=
+  isHeronName (diagnostic.getObjValD "code")
+
+def isHeronCodeAction (action : Json) : Bool :=
+  isHeronName ((action.getObjValD "data").getObjValD "providerName")
+
+def keepArrayElements (keep : Json → Bool) (json : Json) : Json :=
+  match json.getArr? with
+  | .ok elements => Json.arr (elements.filter keep)
+  | .error _ => json
+
+def capabilitiesOfHeron (initializeResult : Json) : Json :=
+  let capabilities := initializeResult.getObjValD "capabilities"
+  let kept := ["positionEncoding", "textDocumentSync", "codeActionProvider"].filterMap fun key =>
+    (capabilities.getObjVal? key).toOption.map (key, ·)
+  initializeResult.setObjVal! "capabilities" (Json.mkObj kept)
+
+def restrictParams (restrict : Json → Json) (params : Json.Structured) : Json.Structured :=
+  match fromJson? (restrict (toJson params)) with
+  | .ok restricted => restricted
+  | .error _ => params
+
+def diagnosticsOfHeron (params : Json) : Json :=
+  params.setObjVal! "diagnostics" (keepArrayElements isHeronDiagnostic (params.getObjValD "diagnostics"))
+
+abbrev PendingRequests := IO.Ref (Std.HashMap RequestID String)
+
+def restrictToHeron (pending : PendingRequests) : Message → IO Message
+  | .response id result => do
+    let method ← pending.modifyGet fun requests => (requests.get? id, requests.erase id)
+    return .response id <| match method with
+      | some "initialize" => capabilitiesOfHeron result
+      | some "textDocument/codeAction" => keepArrayElements isHeronCodeAction result
+      | _ => result
+  | .notification "textDocument/publishDiagnostics" (some params) =>
+    return .notification "textDocument/publishDiagnostics" (restrictParams diagnosticsOfHeron params)
+  | message => return message
+
+partial def relayClientToServer (pending : PendingRequests) (client server : IO.FS.Stream) :
+    IO Unit := do
+  let message ← client.readLspMessage
+  if let .request id method _ := message then pending.modify (·.insert id method)
+  server.writeLspMessage message
+  unless message matches .notification "exit" _ do relayClientToServer pending client server
+
+partial def relayServerToClient (pending : PendingRequests) (server client : IO.FS.Stream) :
+    IO Unit := do
+  client.writeLspMessage (← restrictToHeron pending (← server.readLspMessage))
+  relayServerToClient pending server client
+
+def serveHeronOnly (plugin : String) (serveArgs : List String) : IO UInt32 := do
+  let lake ← IO.Process.spawn {
+    cmd := "lake"
+    args := #["serve", "--", s!"--plugin={plugin}", "-Dweak.linter.heron=true"] ++ serveArgs
+    stdin := .piped
+    stdout := .piped
+  }
+  let (lakeStdin, lake) ← lake.takeStdin
+  let pending ← IO.mkRef {}
+  let client ← IO.getStdin
+  let fromClient ← IO.asTask (prio := .dedicated)
+    (relayClientToServer pending client (IO.FS.Stream.ofHandle lakeStdin))
+  try relayServerToClient pending (IO.FS.Stream.ofHandle lake.stdout) (← IO.getStdout)
+  catch _ => pure ()
+  IO.cancel fromClient
+  lake.wait
+
+partial def serveNothing (client output : IO.FS.Stream) : IO UInt32 := do
+  match ← client.readLspMessage with
+  | .request id "initialize" _ =>
+    output.writeLspMessage (.response id (Json.mkObj [("capabilities", Json.mkObj [])]))
+    serveNothing client output
+  | .request id _ _ =>
+    output.writeLspMessage (.response id Json.null)
+    serveNothing client output
+  | .notification "exit" _ => return 0
+  | _ => serveNothing client output
+
+def main (serveArgs : List String) : IO UInt32 := do
+  match ← pluginForProject with
+  | some plugin => serveHeronOnly plugin serveArgs
+  | none =>
+    IO.eprintln "heron-lean-server: serving no Heron hints for this project"
+    serveNothing (← IO.getStdin) (← IO.getStdout)

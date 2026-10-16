@@ -131,14 +131,10 @@
         { config, lib, ... }:
         {
           options.programs.heron.enable =
-            lib.mkEnableOption "Heron hints and quick fixes in the Lean language server of every Lake project";
+            lib.mkEnableOption "a second Lean language server with Heron's hints and quick fixes for every Lake project";
 
           config = lib.mkIf config.programs.heron.enable {
-            services.toolchain.langs.lean.servers.lean4_lsp = {
-              package = heron-lean-server;
-              command = lib.mkForce (lib.getExe heron-lean-server);
-              args = lib.mkForce [ ];
-            };
+            services.toolchain.langs.lean.servers.heron.package = heron-lean-server;
           };
         };
 

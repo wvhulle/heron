@@ -3,3 +3,5 @@ def increment (x : Nat) : Nat := Id.run do
   return y + 1
 
 example : Nat → Nat → True := by intro a; intro b; exact trivial
+
+#check increment

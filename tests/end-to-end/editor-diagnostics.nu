@@ -1,4 +1,4 @@
-def main [probe: path, server: path, file: string]: nothing -> nothing {
+def --wrapped main [probe: path, server: path, file: string, ...probe_flags: string]: nothing -> nothing {
   lake build
-  ^$probe $file --expect "Merge intros" --expect "mut" --expect-quick-fix -- $server
+  ^$probe $file ...$probe_flags -- $server
 }
