@@ -52,6 +52,7 @@ Checks (enabled by `linter.heron`):
 | --- | --- |
 | `adjacentGetSetToModify` | `modify` instead of `get` directly followed by `set` |
 | `lambdaMatchToPatternMatchingLambda` | `fun \| …` pattern-matching syntax |
+| `lambdaSymbolToFun` | `fun` instead of `λ` |
 | `matchOnBoolToIfThenElse` | `if … then … else …` instead of matching on `Bool` |
 | `mergeBindersWithSameType` | merging binders with the same type |
 | `mergeConsecutiveIntros` | merging consecutive `intro`s |

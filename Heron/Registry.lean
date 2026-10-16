@@ -19,6 +19,7 @@ public import Heron.Check.NatConstructorPatternsToLiterals
 public import Heron.Check.LambdaMatchToPatternMatchingLambda
 public import Heron.Check.NestedExprAppToMkAppN
 public import Heron.Check.SingleUseLambdaToCdotFunction
+public import Heron.Check.LambdaSymbolToFun
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern
