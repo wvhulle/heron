@@ -15,3 +15,9 @@ meta import Heron.Check.MatchOnBoolToIfThenElse
     | 0 => 1
     | 1 => 2
     | _ => 3
+
+#assertIgnore matchOnBoolToIfThenElse in
+def natOrStringThree (b : Bool) : if b then Nat else String :=
+  match b with
+  | true => (3 : Nat)
+  | false => "three"

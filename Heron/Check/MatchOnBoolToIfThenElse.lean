@@ -1,48 +1,58 @@
 module
 
 public meta import Heron.Check
+public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
 
 private structure MatchOnBoolToIfThenElseMatch where
   matchStx : Syntax
   matchKw : Syntax
-  discr : Syntax
-  trueRhs : Syntax
-  falseRhs : Syntax
+  discr : TSyntax `term
+  trueRhs : TSyntax `term
+  falseRhs : TSyntax `term
 
-private meta instance : Check MatchOnBoolToIfThenElseMatch
-    where
+private meta def boolMatch? : Syntax → Option MatchOnBoolToIfThenElseMatch
+  | stx@`(match%$matchKw $discr:term with
+      | true => $rhs1:term
+      | false => $rhs2:term) =>
+    some { matchStx := stx, matchKw, discr, trueRhs := rhs1, falseRhs := rhs2 }
+  | stx@`(match%$matchKw $discr:term with
+      | false => $rhs1:term
+      | true => $rhs2:term) =>
+    some { matchStx := stx, matchKw, discr, trueRhs := rhs2, falseRhs := rhs1 }
+  | _ => none
+
+private meta def ifThenElse (m : MatchOnBoolToIfThenElseMatch) : CommandElabM (TSyntax `term) :=
+  `(if $m.discr then $m.trueRhs else $m.falseRhs)
+
+private meta def detectBoolMatchesWhoseIfRewriteElaborates (cmd : Syntax) :
+    CommandElabM (Array MatchOnBoolToIfThenElseMatch) :=
+  (subtreeNodes cmd).filterMapM fun node => do
+    let some m := boolMatch? node | return none
+    let probe := replaceSourceNode cmd m.matchStx (← ifThenElse m)
+    unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
+    return some m
+
+private meta instance : Check MatchOnBoolToIfThenElseMatch where
   name := `matchOnBoolToIfThenElse
-  kinds := #[``Term.match]
-  severity := .warning
+  kinds := #[]
+  severity := .information
   category := .simplification
-  detect := fun stx => pure <|
-    match stx with
-    | `(match%$matchKw $discr:term with
-        | true => $rhs1:term
-        | false => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs1, falseRhs := rhs2 }]
-    | `(match%$matchKw $discr:term with
-        | false => $rhs1:term
-        | true => $rhs2:term) =>
-      #[{ matchStx := stx, matchKw := matchKw, discr, trueRhs := rhs2, falseRhs := rhs1 }]
-    | _ => #[]
+  detect := detectBoolMatchesWhoseIfRewriteElaborates
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
   reference := none
   explanation := fun _ =>
-    m!"Pattern matching on `true`/`false` can be written as `if ... then ... else ...`, which is more concise and idiomatic."
+    m!"Pattern matching on `true`/`false` can be written as `if ... then ... else ...`, which is \
+       more concise. The rewrite is only offered where it type-checks: when the result type \
+       depends on the matched `Bool`, `match` is needed to refine it in each branch."
   replacements := fun m => do
-    let discr : TSyntax `term := ⟨m.discr⟩
-    let trueRhs : TSyntax `term := ⟨m.trueRhs⟩
-    let falseRhs : TSyntax `term := ⟨m.falseRhs⟩
-    let repl ← `(if $discr then $trueRhs else $falseRhs)
     return #[{
           emphasizedSyntax := m.matchStx
           oldSyntax := m.matchStx
-          newSyntax := repl
+          newSyntax := ← ifThenElse m
           inlineViolationLabel := m!"bool match" }]
 
 meta initialize

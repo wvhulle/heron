@@ -26,7 +26,7 @@ meta def getDoElems (doSeq : Syntax) : Array (TSyntax `doElem) :=
     | _ => #[]
   items.filterMap doSeqItemElem?
 
-private meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
+meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
   #[stx] ++ stx.getArgs.flatMap subtreeNodes
 
 meta partial def signatureNodes (cmd : Syntax) : Array Syntax :=
