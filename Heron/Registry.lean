@@ -24,6 +24,9 @@ public import Heron.Check.StringConcatenationToInterpolation
 public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
 public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
+public import Heron.Check.UnusedImport
+public import Heron.Check.UnnecessaryPublicImport
+public import Heron.Check.UnnecessaryMetaImport
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern
