@@ -10,9 +10,9 @@ meta import Heron.Check.ExprAppChainToMkAppN
       mkAppN a #[a, b])
 
 #assertCheck exprAppChainToMkAppN in
-  def g (a b : Lean.Expr) :=
+  def g (a b : Lean.Expr) : Lean.Expr :=
     .app (.app a a) b becomes
-  `(def g (a b : Lean.Expr) :=
+  `(def g (a b : Lean.Expr) : Lean.Expr :=
       mkAppN a #[a, b])
 
 #assertCheck exprAppChainToMkAppN in

@@ -12,3 +12,10 @@ meta import Heron.Check.ExprAppChainToMkAppN
 #assertIgnore exprAppChainToMkAppN in
   def k (a : Lean.Expr) (b : Array Lean.Expr) :=
     mkAppN a b
+
+private inductive Tm where
+  | var : Nat → Tm
+  | app : Tm → Tm → Tm
+
+#assertIgnore exprAppChainToMkAppN in
+def userAppChain : Tm := .app (.app (.var 0) (.var 1)) (.var 2)

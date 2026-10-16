@@ -2,7 +2,7 @@ module
 
 public meta import Heron.Check
 
-open Lean Elab Command Parser Heron
+open Lean Elab Command Meta Parser Heron
 
 private structure ExprAppChainToMkAppNMatch where
   fullStx : Syntax
@@ -27,8 +27,17 @@ private meta def stripParen : Syntax → Syntax
 /-- Match `Expr.app f a` or `.app f a`. -/
 private meta def matchApp? : Syntax → Option AppNode
   | `(Expr.app $fn $arg) => some { fn, arg }
+  | `(Lean.Expr.app $fn $arg) => some { fn, arg }
   | `(.app $fn $arg) => some { fn, arg }
   | _ => none
+
+private meta def namesExprApp : Syntax → Bool
+  | `(Expr.app $_ $_) => true
+  | `(Lean.Expr.app $_ $_) => true
+  | _ => false
+
+private meta def isExprTyped (e : Expr) : MetaM Bool := do
+  return (← whnfR (← instantiateMVars (← inferType e))).isConstOf ``Lean.Expr
 
 /-- Collect a chain of nested `Expr.app`/`.app` calls. -/
 private meta partial def collectAppChain (stx : Syntax) : Option AppChain := do
@@ -39,17 +48,21 @@ private meta partial def collectAppChain (stx : Syntax) : Option AppChain := do
   | none =>
     some { innermostFn := fn, args := #[arg] }
 
+private meta def detectExprAppChain (stx : Syntax) :
+    CommandElabM (Array ExprAppChainToMkAppNMatch) := do
+  let some { innermostFn, args } := collectAppChain stx | return #[]
+  unless args.size >= 2 do return #[]
+  unless namesExprApp stx do
+    let some true ← runMetaMForSyntax stx isExprTyped | return #[]
+  return #[{ fullStx := stx, fn := innermostFn, args }]
+
 private meta instance : Check ExprAppChainToMkAppNMatch
     where
   name := `exprAppChainToMkAppN
   kinds := #[``Term.app]
   severity := .information
   category := .simplification
-  detect := fun stx => pure <|
-    match collectAppChain stx with
-    | some { innermostFn, args } =>
-      if args.size >= 2 then #[{ fullStx := stx, fn := innermostFn, args }] else #[]
-    | none => #[]
+  detect := detectExprAppChain
   consumesSubtree := true
   message := fun _ => m!"Use `mkAppN` instead of nested `Expr.app`"
   emphasize := fun m => m.fullStx
