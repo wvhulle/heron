@@ -27,14 +27,12 @@ private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (de
   | some (_, ti) =>
     ti.expr.constName?
   | none =>
-    -- Fallback: construct the name from the identifier; try the private-mangled
-    -- variant if the plain name is not in the environment.
     let some plainIdent := declIdStx.find? (·.isIdent) | none
     let plainName := ns ++ plainIdent.getId
-    if env.find? plainName |>.isSome then some plainName
-    else infos.findSome? fun (_, ti) =>
-      ti.expr.constName?.bind fun n =>
-        if n.componentsRev.head? == plainName.componentsRev.head? then some n else none
+    if env.contains plainName then some plainName
+    else
+      let privateName := mkPrivateName env plainName
+      if env.contains privateName then some privateName else none
 
 private meta def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Option Syntax) := do
   let some expanded ← runInfoMetaM ci ti.lctx (expandConst? ti.expr) |
@@ -124,9 +122,11 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
   let ns := snap.cmdState.scopes.head!.currNamespace
   let some constName := resolveConstName? snapInfos declIdStx ns snap.env |
     return #[]
-  unless isInlineableConst snap.env constName do
+  unless isInlineableConst snap.env constName && isPrivateName constName do
     return #[]
-  let (allSnaps, _, _) ← doc.cmdSnaps.getFinishedPrefix
+  let (allSnaps, _, isComplete) ← doc.cmdSnaps.getFinishedPrefix
+  unless isComplete do
+    return #[]
   let trees := allSnaps.toArray.map (·.infoTree)
   let textEdits ←
     RequestM.runCommandElabM snap do
