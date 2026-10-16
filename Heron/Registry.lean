@@ -20,6 +20,7 @@ public import Heron.Check.LambdaMatchToPatternMatchingLambda
 public import Heron.Check.NestedExprAppToMkAppN
 public import Heron.Check.SingleUseLambdaToCdotFunction
 public import Heron.Check.LambdaSymbolToFun
+public import Heron.Check.StringConcatenationToInterpolation
 -- Meta-programming hygiene
 public import Heron.Check.TsyntaxRawToTypedAccess
 public import Heron.Check.SyntaxKindComparisonToQuotationPattern

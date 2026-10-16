@@ -67,6 +67,7 @@ Checks (enabled by `linter.heron`):
 | `removeLetWildcardOnUnitAction` | dropping `let _ ←` before an action returning `Unit` |
 | `removeMutWithoutReassignment` | removing an unnecessary `mut` |
 | `singleUseLambdaToCdotFunction` | `·` instead of an explicit lambda |
+| `stringConcatenationToInterpolation` | `s!"…{x}…"` instead of `"…" ++ toString x ++ "…"` |
 | `syntaxKindComparisonToQuotationPattern` | antiquotation patterns instead of a `Syntax.getKind` check followed by `getArg` |
 | `tsyntaxRawToTypedAccess` | a typed pattern instead of `.raw` on `TSyntax` followed by `getArg` |
 | `tupleMatchToSimultaneousMatch` | simultaneous matching instead of matching on a tuple |
