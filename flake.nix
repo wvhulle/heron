@@ -94,6 +94,24 @@
         runtimeInputs = [ pkgs.lean.lean-all ];
         text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
       };
+
+      lean-server-build = buildLakeTargets {
+        name = "heron-lean-server-build";
+        targets = "heron-lean-server";
+        lakeArtifacts = library;
+      };
+
+      heron-lean-server =
+        pkgs.runCommand "heron-lean-server" { meta.mainProgram = "heron-lean-server"; }
+          ''
+            install -Dm755 ${lean-server-build}/.lake/build/bin/heron-lean-server $out/bin/heron-lean-server
+            install -Dm644 ${lean-server-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
+          '';
+
+      heron-lsp-probe = buildLakeTargets {
+        name = "heron-lsp-probe";
+        targets = "heron-lsp-probe";
+      };
     in
     {
       packages.${system} = {
@@ -102,10 +120,27 @@
           lint-driver
           heron-scan-unwrapped
           dump-ast
+          heron-lean-server
+          heron-lsp-probe
           ;
         heron-scan = heronScanInProject;
         default = heronScanInProject;
       };
+
+      homeModules.default =
+        { config, lib, ... }:
+        {
+          options.programs.heron.enable =
+            lib.mkEnableOption "Heron hints and quick fixes in the Lean language server of every Lake project";
+
+          config = lib.mkIf config.programs.heron.enable {
+            services.toolchain.langs.lean.servers.lean4_lsp = {
+              package = heron-lean-server;
+              command = lib.mkForce (lib.getExe heron-lean-server);
+              args = lib.mkForce [ ];
+            };
+          };
+        };
 
       apps.${system} = rec {
         heron-scan = {
@@ -121,9 +156,17 @@
         build-heron-scan = heron-scan-unwrapped;
         build-dump-ast = dump-ast;
         build-heron-scan-app = heronScanInProject;
+        build-heron-lean-server = heron-lean-server;
+        build-heron-lsp-probe = heron-lsp-probe;
       }
       // import ./tests/end-to-end {
-        inherit pkgs lint-driver heron-scan-unwrapped;
+        inherit
+          pkgs
+          lint-driver
+          heron-scan-unwrapped
+          heron-lean-server
+          heron-lsp-probe
+          ;
         leanToolchain = pkgs.lean.lean-all;
         heronSource = ./.;
       };

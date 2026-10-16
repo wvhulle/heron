@@ -37,3 +37,11 @@ steps:
     <<: *build_flake_check_named_after_step
   - name: test-plugin-cold-build
     <<: *build_flake_check_named_after_step
+  - name: build-heron-lean-server
+    <<: *build_flake_check_named_after_step
+  - name: build-heron-lsp-probe
+    <<: *build_flake_check_named_after_step
+  - name: test-editor-without-project-changes
+    <<: *build_flake_check_named_after_step
+  - name: test-editor-with-plugin-in-lakefile
+    <<: *build_flake_check_named_after_step
