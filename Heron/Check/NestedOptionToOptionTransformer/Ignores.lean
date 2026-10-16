@@ -14,8 +14,4 @@ meta import Heron.Check.NestedOptionToOptionTransformer
     sorry
 
 #assertIgnore nestedOptionToOptionTransformer in
-def returnsNoneInBody : IO (Option Nat) := do
-  return none
-
-#assertIgnore nestedOptionToOptionTransformer in
 def nestedTypeInBody : Nat := (fun (_ : IO (Option Nat)) => 0) (pure none)

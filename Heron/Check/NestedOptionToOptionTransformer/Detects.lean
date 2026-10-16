@@ -16,3 +16,7 @@ becomes `(def validate (input : String) : OptionT (Except String) Nat := sorry)
 #assertCheck nestedOptionToOptionTransformer in
 def forwards (f : Nat → IO (Option Nat)) : IO (Option Nat) := f 0
 becomes `(command| def forwards (f : Nat → OptionT IO Nat) : OptionT IO Nat := f 0)
+
+#assertCheck nestedOptionToOptionTransformer in
+def returnsNoneInBody : IO (Option Nat) := do
+  return none

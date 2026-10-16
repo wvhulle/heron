@@ -7,7 +7,3 @@ meta import Heron.Check.NestedExceptToExceptTransformer
 #assertIgnore nestedExceptToExceptTransformer in
   def k : Except String Nat :=
     sorry
-
-#assertIgnore nestedExceptToExceptTransformer in
-def returnsErrorInBody : IO (Except String Nat) := do
-  return .error "failed"

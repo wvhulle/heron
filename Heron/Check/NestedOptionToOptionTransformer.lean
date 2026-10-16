@@ -11,6 +11,7 @@ private structure NestedOptionToOptionTransformerMatch where
   outerMonad : TSyntax `term
   /-- The `Option`'s value-type args (`α α₁ … αₙ`). -/
   valueArgs : TSyntaxArray `term
+  rewriteElaborates : Bool := false
 
 private meta def detectCandidate? :
     Syntax → CommandElabM (Option NestedOptionToOptionTransformerMatch)
@@ -31,8 +32,7 @@ private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
   let some m ← detectCandidate? node | return none
   let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
   let probe := replaceSourceNode cmd m.stx (← optionTType m)
-  unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
-  return some m
+  return some { m with rewriteElaborates := ← elaboratesWithoutErrorsInProbeNamespace probe }
 
 private meta instance : Check NestedOptionToOptionTransformerMatch where
   name := `nestedOptionToOptionTransformer
@@ -44,13 +44,16 @@ private meta instance : Check NestedOptionToOptionTransformerMatch where
   emphasize := fun m => m.stx
   reference := some
     { topic := "Monad transformers"
-      url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
-  explanation := fun _ =>
-    m!"This nested monad type in the signature is definitionally equal to its `OptionT` form, \
-       and the declaration still elaborates with the `OptionT` signature. Using the transformer \
-       enables do-notation with automatic effect handling. Callers in other declarations may \
-       need `.run` to get the nested type back."
+      url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#OptionT" }
+  explanation := fun m =>
+    m!"`OptionT m α` is defined as `m (Option α)`, so this signature already is the transformer \
+       type. Writing it as `OptionT` lets `do`-notation handle the failure case: `failure` \
+       short-circuits and a `let x ← act` binds the `α`, instead of matching on `some`/`none` \
+       after every action.{if m.rewriteElaborates then "" else " The body does not elaborate \
+       unchanged with the transformer type (it builds `Option` values by hand), so no automatic \
+       fix is offered."} Callers in other declarations may need `.run` to get the nested type back."
   replacements := fun m => do
+    unless m.rewriteElaborates do return #[]
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
                newSyntax := ← optionTType m

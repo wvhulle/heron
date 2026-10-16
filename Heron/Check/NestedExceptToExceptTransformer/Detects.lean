@@ -7,3 +7,7 @@ meta import Heron.Check.NestedExceptToExceptTransformer
 #assertCheck nestedExceptToExceptTransformer in
 def parseConfig (path : String) (strict : Bool) : IO (Except (List String) Nat) := sorry
 becomes `(def parseConfig (path : String) (strict : Bool) : ExceptT (List String) IO Nat := sorry)
+
+#assertCheck nestedExceptToExceptTransformer in
+def returnsErrorInBody : IO (Except String Nat) := do
+  return .error "failed"

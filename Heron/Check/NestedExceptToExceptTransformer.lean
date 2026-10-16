@@ -13,6 +13,7 @@ private structure NestedExceptToExceptTransformerMatch where
   errorType : TSyntax `term
   /-- The `Except`'s value-type args (`α α₁ … αₙ`). -/
   valueArgs : TSyntaxArray `term
+  rewriteElaborates : Bool := false
 
 private meta def detectCandidate? :
     Syntax → CommandElabM (Option NestedExceptToExceptTransformerMatch)
@@ -33,8 +34,7 @@ private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
   let some m ← detectCandidate? node | return none
   let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
   let probe := replaceSourceNode cmd m.stx (← exceptTType m)
-  unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
-  return some m
+  return some { m with rewriteElaborates := ← elaboratesWithoutErrorsInProbeNamespace probe }
 
 private meta instance : Check NestedExceptToExceptTransformerMatch where
   name := `nestedExceptToExceptTransformer
@@ -46,13 +46,17 @@ private meta instance : Check NestedExceptToExceptTransformerMatch where
   emphasize := fun m => m.stx
   reference := some
     { topic := "Monad transformers"
-      url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
-  explanation := fun _ =>
-    m!"This nested monad type in the signature is definitionally equal to its `ExceptT` form, \
-       and the declaration still elaborates with the `ExceptT` signature. Using the transformer \
-       enables do-notation with automatic effect handling. Callers in other declarations may \
-       need `.run` to get the nested type back."
+      url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#exceptions" }
+  explanation := fun m =>
+    m!"`ExceptT ε m α` is defined as `m (Except ε α)`, so this signature already is the \
+       transformer type. Writing it as `ExceptT` lets `do`-notation handle the error case: \
+       `throw` short-circuits and a `let x ← act` binds the `α`, instead of matching on \
+       `.ok`/`.error` after every action.{if m.rewriteElaborates then "" else " The body does \
+       not elaborate unchanged with the transformer type (it builds `Except` values by hand), so \
+       no automatic fix is offered."} Callers in other declarations may need `.run` to get the \
+       nested type back."
   replacements := fun m => do
+    unless m.rewriteElaborates do return #[]
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
                newSyntax := ← exceptTType m
