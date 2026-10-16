@@ -12,3 +12,7 @@ becomes `(def tryLookup {α : Type} (table : List (String × α)) (key : String)
 #assertCheck optionToOptionT in
 def validate (input : String) : Except String (Option Nat) := sorry
 becomes `(def validate (input : String) : OptionT (Except String) Nat := sorry)
+
+#assertCheck optionToOptionT in
+def forwards (f : Nat → IO (Option Nat)) : IO (Option Nat) := f 0
+becomes `(command| def forwards (f : Nat → OptionT IO Nat) : OptionT IO Nat := f 0)

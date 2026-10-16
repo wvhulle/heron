@@ -23,33 +23,37 @@ private meta def detectCandidate? :
     return some { stx := ⟨stx⟩, outerMonad, valueArgs := #[α] ++ αs }
   | _ => return none
 
-private meta def detectAtNode (stx : Syntax) :
-    CommandElabM (Array OptionToOptionTMatch) := do
-  let some m ← detectCandidate? stx | return #[]
-  let some hasMonad ← runMetaMForSyntax m.stx outerHasMonadInstance | return #[]
-  return if hasMonad then #[m] else #[]
+private meta def optionTType (m : OptionToOptionTMatch) : CommandElabM (TSyntax `term) :=
+  `($(mkIdent `OptionT) $(#[m.outerMonad] ++ m.valueArgs)*)
+
+private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
+    CommandElabM (Option OptionToOptionTMatch) := do
+  let some m ← detectCandidate? node | return none
+  let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
+  let probe := replaceSourceNode cmd m.stx (← optionTType m)
+  unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
+  return some m
 
 private meta instance : Check OptionToOptionTMatch where
   name := `optionToOptionT
-  kinds := #[``Term.app]
+  kinds := #[]
   severity := .information
   category := .style
-  detect := detectAtNode
+  detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
   message := fun _ => m!"Consider using `OptionT` instead of nesting `Option`"
   emphasize := fun m => m.stx
   reference := some
     { topic := "Monad transformers"
       url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
   explanation := fun _ =>
-    m!"This nested monad type is definitionally equal to its `OptionT` form. \
-       Using the transformer alias enables do-notation with automatic effect handling."
+    m!"This nested monad type in the signature is definitionally equal to its `OptionT` form, \
+       and the declaration still elaborates with the `OptionT` signature. Using the transformer \
+       enables do-notation with automatic effect handling. Callers in other declarations may \
+       need `.run` to get the nested type back."
   replacements := fun m => do
-    let optT := mkIdent `OptionT
-    let allArgs := #[m.outerMonad] ++ m.valueArgs
-    let repl ← `($optT $allArgs*)
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
-               newSyntax := repl
+               newSyntax := ← optionTType m
                inlineViolationLabel := m!"Option → OptionT" }]
 
 meta initialize Check.register (α := OptionToOptionTMatch)

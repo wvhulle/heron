@@ -25,33 +25,37 @@ private meta def detectCandidate? :
     return some { stx := ⟨stx⟩, outerMonad, errorType := ε, valueArgs := #[α] ++ αs }
   | _ => return none
 
-private meta def detectAtNode (stx : Syntax) :
-    CommandElabM (Array ExceptToExceptTMatch) := do
-  let some m ← detectCandidate? stx | return #[]
-  let some hasMonad ← runMetaMForSyntax m.stx outerHasMonadInstance | return #[]
-  return if hasMonad then #[m] else #[]
+private meta def exceptTType (m : ExceptToExceptTMatch) : CommandElabM (TSyntax `term) :=
+  `($(mkIdent `ExceptT) $(#[m.errorType, m.outerMonad] ++ m.valueArgs)*)
+
+private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
+    CommandElabM (Option ExceptToExceptTMatch) := do
+  let some m ← detectCandidate? node | return none
+  let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
+  let probe := replaceSourceNode cmd m.stx (← exceptTType m)
+  unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
+  return some m
 
 private meta instance : Check ExceptToExceptTMatch where
   name := `exceptToExceptT
-  kinds := #[``Term.app]
+  kinds := #[]
   severity := .information
   category := .style
-  detect := detectAtNode
+  detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
   message := fun _ => m!"Consider using `ExceptT` instead of nesting `Except`"
   emphasize := fun m => m.stx
   reference := some
     { topic := "Monad transformers"
       url := "https://leanprover.github.io/functional_programming_in_lean/monad-transformers/transformers.html" }
   explanation := fun _ =>
-    m!"This nested monad type is definitionally equal to its `ExceptT` form. \
-       Using the transformer alias enables do-notation with automatic effect handling."
+    m!"This nested monad type in the signature is definitionally equal to its `ExceptT` form, \
+       and the declaration still elaborates with the `ExceptT` signature. Using the transformer \
+       enables do-notation with automatic effect handling. Callers in other declarations may \
+       need `.run` to get the nested type back."
   replacements := fun m => do
-    let exceptT := mkIdent `ExceptT
-    let allArgs := #[m.errorType, m.outerMonad] ++ m.valueArgs
-    let repl ← `($exceptT $allArgs*)
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
-               newSyntax := repl
+               newSyntax := ← exceptTType m
                inlineViolationLabel := m!"Except → ExceptT" }]
 
 meta initialize Check.register (α := ExceptToExceptTMatch)

@@ -26,6 +26,24 @@ meta def getDoElems (doSeq : Syntax) : Array (TSyntax `doElem) :=
     | _ => #[]
   items.filterMap doSeqItemElem?
 
+private meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
+  #[stx] ++ stx.getArgs.flatMap subtreeNodes
+
+meta partial def signatureNodes (cmd : Syntax) : Array Syntax :=
+  match cmd with
+  | .node _ kind args =>
+    if kind == ``Parser.Command.declSig || kind == ``Parser.Command.optDeclSig then subtreeNodes cmd
+    else args.flatMap signatureNodes
+  | _ => #[]
+
+private meta def isSameSourceNode (candidate target : Syntax) : Bool :=
+  candidate.getKind == target.getKind &&
+    candidate.getPos? == target.getPos? && candidate.getTailPos? == target.getTailPos?
+
+meta def replaceSourceNode (cmd target replacement : Syntax) : Syntax :=
+  Id.run <| cmd.replaceM fun node =>
+    pure (if isSameSourceNode node target then some replacement else none)
+
 /-- Check if the outer part of a fully-applied expression — everything except
 the last argument — has a `Monad` instance. Used by transformer-detection rules
 to confirm `f a₁ … aₙ (Wrapped α)` has `f a₁ … aₙ` actually being a monad. -/

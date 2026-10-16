@@ -1,6 +1,7 @@
 module
 
 public meta import Lean.Elab.Command
+public meta import Lean.Elab.BuiltinCommand
 public meta import Lean.Server.InfoUtils
 public meta import Lean.PrettyPrinter
 public meta import Heron.Profiling
@@ -141,21 +142,33 @@ Uses the scoped `heron.reelaborating` option instead of clearing the global
 `lintersRef` to prevent recursive linter invocation. This is safe under
 concurrent (async) elaboration — `withScope` modifies only the current
 command's options, so other commands' linters are unaffected. -/
-private meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) := do
+private meta def reelaborateIsolated (stx : Syntax) (namespaceName : Name := .anonymous) :
+    CommandElabM (Array InfoTree × Bool) := do
   let savedInfoState ← getInfoState
   let savedMessages := (← get).messages
   setInfoState { enabled := true, trees := { } }
-  try
+  modify ({ · with messages := {} })
+  let threw ← try
     withoutModifyingEnv do
       withScope
         (fun scope =>
           { scope with opts := Heron.reelaboratingGuardOption.set (Elab.async.set scope.opts false) true })
-        do withReader ({ · with snap? := none }) (elabCommand stx)
-  catch _ => pure ()
+        do withReader ({ · with snap? := none }) do
+          if namespaceName.isAnonymous then elabCommand stx
+          else withNamespace namespaceName (elabCommand stx)
+    pure false
+  catch _ => pure true
   let trees := (← getInfoState).trees.toArray
+  let succeeded := !threw && !(← get).messages.hasErrors
   setInfoState savedInfoState
   modify ({ · with messages := savedMessages })
-  return trees
+  return (trees, succeeded)
+
+private meta def collectElabInfoTrees (stx : Syntax) : CommandElabM (Array InfoTree) :=
+  Prod.fst <$> reelaborateIsolated stx
+
+meta def elaboratesWithoutErrorsInProbeNamespace (stx : Syntax) : CommandElabM Bool :=
+  Prod.snd <$> reelaborateIsolated stx `Heron.Probe
 
 /-- Get existing info trees when available (LSP code action requests),
 falling back to re-elaboration when empty (e.g. `#assertRefactor` test flow). -/

@@ -12,3 +12,10 @@ meta import Heron.Check.OptionToOptionT
 #assertIgnore optionToOptionT in
   def l : Option (Option Nat) :=
     sorry
+
+#assertIgnore optionToOptionT in
+def returnsNoneInBody : IO (Option Nat) := do
+  return none
+
+#assertIgnore optionToOptionT in
+def nestedTypeInBody : Nat := (fun (_ : IO (Option Nat)) => 0) (pure none)
