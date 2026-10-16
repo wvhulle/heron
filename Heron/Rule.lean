@@ -249,4 +249,6 @@ private meta def ppExprFix? (ci : ContextInfo) (lctx : LocalContext) (e : Expr) 
   try return some s!"({← runInfoMetaM ci lctx (ppExpr e)})"
   catch _ => return none
 
+meta def lspName (name : Name) : Name := `heron ++ name
+
 end Heron

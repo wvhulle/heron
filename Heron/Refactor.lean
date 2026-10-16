@@ -62,7 +62,7 @@ meta def Refactor.register [Refactor α] : IO Unit := do
   let name := Rule.name (α := α)
   registerLinterOption name
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
-  Server.addBuiltinCodeActionProvider (`Heron.refactorProvider ++ name)
+  Server.addBuiltinCodeActionProvider (lspName (`refactor ++ name))
     (Refactor.toCodeActionProvider (α := α))
 
 end Heron

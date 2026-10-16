@@ -143,4 +143,4 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
                   some <| .ofTextDocumentEdit { textDocument := doc.versionedIdentifier, edits := textEdits } }) }]
 
 meta initialize unsafe
-  addBuiltinCodeActionProvider ``inlineAllFromDefProvider inlineAllFromDefProvider
+  addBuiltinCodeActionProvider (lspName `refactor.inlineAllFromDefinition) inlineAllFromDefProvider

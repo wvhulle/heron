@@ -117,7 +117,7 @@ at LSP request time. Per-replacement labels and any extra labels flow into
 meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData)
     (reference : Option Reference := none) : CommandElabM Unit := do
-  let taggedMsg := (applyDiagnosticTags tags message).tagWithErrorName ruleName
+  let taggedMsg := applyDiagnosticTags tags message
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
@@ -131,7 +131,7 @@ meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Ls
   -- hint directly into the published diagnostic message instead.
   let body : MessageData :=
     taggedMsg ++ m!"\n\n" ++ explanation ++ m!"\n\n" ++ referenceMd ++ disableMd
-  let msgData ← addMessageContext body
+  let msgData ← addMessageContext (body.tagWithErrorName (lspName ruleName))
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
   let msg : Message :=
     { fileName := ← getFileName
@@ -159,7 +159,7 @@ private meta def emitLabelHints (ruleName : Name) (primaryRange? : Option Syntax
     seen := seen.push range
     let pos := fileMap.toPosition range.start
     let endPos := fileMap.toPosition range.stop
-    let labelData ← addMessageContext ((l.text).tagWithErrorName ruleName)
+    let labelData ← addMessageContext ((l.text).tagWithErrorName (lspName ruleName))
     logMessage {
       fileName := ← getFileName
       pos
@@ -401,6 +401,6 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
         diagnostics? }
     return some { eager := { full with edit? := none }, lazy? := some (pure full) }
 
-meta initialize Server.addBuiltinCodeActionProvider ``heronCheckFixProvider heronCheckFixProvider
+meta initialize Server.addBuiltinCodeActionProvider (lspName `quickFix) heronCheckFixProvider
 
 end Heron
