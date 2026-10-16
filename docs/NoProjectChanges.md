@@ -52,8 +52,10 @@ For any version other than its own, it clones the matching Heron branch into
 first start on a new version therefore takes a few minutes, and the build log appears in the
 editor's language-server log.
 
-The server stays idle, and says why in that log, when Heron has no branch for the project's Lean
-version or when the project's `lakefile` already lists `@heron/plugin`.
+The server stays idle, and says why in one line of that log, when Heron has no branch for the
+project's Lean version or when the project's `lakefile` already lists `@heron/plugin`. It
+remembers a version it could not serve and only tries again once Heron's branches change, so an
+unsupported project costs one quick `git ls-remote` per start.
 
 Like the lakefile setup, the linter writes `.lake/build/heron-fixes/` in each project you open.
 
