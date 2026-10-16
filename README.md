@@ -66,6 +66,7 @@ Checks (enabled by `linter.heron`):
 | `removeIdRunWithoutEffects` | removing an unnecessary `Id.run do` |
 | `removeLetWildcardOnUnitAction` | dropping `let _ ←` before an action returning `Unit` |
 | `removeMutWithoutReassignment` | removing an unnecessary `mut` |
+| `singleUseBindToNestedAction` | `(← act)` instead of `let x ← act` used once in the next statement |
 | `singleUseLambdaToCdotFunction` | `·` instead of an explicit lambda |
 | `stringConcatenationToInterpolation` | `s!"…{x}…"` instead of `"…" ++ toString x ++ "…"` |
 | `syntaxKindComparisonToQuotationPattern` | antiquotation patterns instead of a `Syntax.getKind` check followed by `getArg` |
