@@ -1,5 +1,25 @@
 # Contributing to Heron
 
+## Repository layout
+
+- [`Heron/`](./Heron): the rules, built as the `@heron/plugin` shared library. Checks live in
+  [`Heron/Check/`](./Heron/Check), refactors in [`Heron/Refactor/`](./Heron/Refactor).
+- [`Executables/`](./Executables): the three user tools and their helpers. Each file name starts
+  with the tool it serves:
+  - `LakeLintDriver*`: `heron`, the driver behind `lake lint`.
+  - `StandaloneScan*`: `heron-scan`.
+  - `SecondLanguageServer`: `heron-language-server`.
+  - `FixReportRendering` and `HeronPluginLocation` are shared by several tools.
+- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree` and `RuleShowcase.lean`, see
+  [Developer tools](#developer-tools).
+- [`EndToEndTests/`](./EndToEndTests): one directory per usage scenario (`LakefileSetup`,
+  `PerFileImport`, `NoProjectChanges`), each a small Lake project with the Nu scripts that test
+  it. `SampleConsumerLibrary` holds the code the first and last scenarios run Heron on, and
+  `expected-fixes.json` the fixes Heron must report for it.
+- [`docs/`](./docs): user documentation linked from the README.
+- [`Lean4NixManifests/`](./Lean4NixManifests): Lean toolchains that lean4-nix does not package
+  yet.
+
 ## Adding New Rules
 
 Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in [`Heron/Refactor/`](./Heron/Refactor). Each rule file contains:
@@ -41,6 +61,22 @@ example : Nat → Nat → True := by intro a; skip; intro b; exact trivial
 You likely should not access the `raw` field of syntax objects. You can attach extra information to patterns inside quotations so that the extracted object has the data you need without raw access.
 
 Dont index into the fields of syntax objects with integer indices and unchecked access. Use anti-quotations instead.
+
+## End-to-end tests
+
+Each usage scenario has its own checks, named after it, which CI runs as separate steps:
+
+```sh
+nix build -L .#checks.x86_64-linux.no-project-changes-editor
+```
+
+The list is in [`.woodpecker/build.yaml`](./.woodpecker/build.yaml). The `rules` check builds
+the library with all `#assert*` tests above.
+
+## Developer tools
+
+Open [`DeveloperTools/RuleShowcase.lean`](./DeveloperTools/RuleShowcase.lean) in your editor to
+see every rule fire at once.
 
 ## Inspecting Lean syntax trees
 

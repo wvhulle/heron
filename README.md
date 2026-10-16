@@ -7,183 +7,28 @@ example : Nat → Nat → True := by intro a; intro b; exact trivial
 --                               ^^^^^^^^^^^^^^^^ Merge intros: replace with `intro a b`
 ```
 
-![The `Id.run` check in the editor](./screenshots/popup.png)
+![The `Id.run` check in the editor](./docs/images/editor-popup.png)
 
-## Quick start
+## Choose how to use Heron
 
-1. In your project's `lakefile.lean`, pick the Heron ref that matches your `lean-toolchain` (see
-   [Supported Lean versions](#supported-lean-versions)):
+| Setup | What you change in your project | What you get |
+| --- | --- | --- |
+| [Lakefile setup](docs/LakefileSetup.md) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
+| [Per-file import](docs/PerFileImport.md) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
+| [No project changes](docs/NoProjectChanges.md) | nothing | editor hints and quick fixes through `heron-language-server`; reports and fixes through `heron-scan` |
 
-   ```lean
-   require heron from git "https://github.com/wvhulle/heron" @ "main"
-
-   package «your_pkg» where
-     leanOptions := #[⟨`linter.heron, true⟩]
-     plugins := #[`@heron/plugin]
-     lintDriver := "heron/heron"
-   ```
-
-2. Run `lake build`. Heron's warnings appear for every module, without any `import Heron`.
-3. Run `lake lint` for a report of all fixes, or `lake lint -- --fix` to apply them.
-
-`lakefile.toml` cannot refer to a dependency's targets. Convert it with
-`lake translate-config lean`, or use the [per-file setup](#per-file-import).
-
-## What you get
-
-- **In the editor:** checks underline code and offer a quick-fix on the light bulb. Refactors
-  appear in the code-action menu when you select code. For editor-only use in any project
-  without changing it, see [Editor only](#editor-only-without-changing-your-project).
-- **On `lake build`:** every check is reported as a warning.
-- **With `lake lint`:** a cargo/clippy-style report of all fixes. Lake's incremental build is the
-  cache, so only changed modules are re-checked.
-
-  ```sh
-  lake lint                    # report fixes across the workspace's libraries
-  lake lint -- Sparkle.Analog  # restrict to lake targets
-  lake lint -- --json | jq     # machine-readable
-  lake lint -- --fix           # rewrite files in place
-  ```
-
-## Rules
-
-Checks (enabled by `linter.heron`):
-
-| Rule | Suggests |
-| --- | --- |
-| `adjacentGetSetToModify` | `modify` instead of `get` directly followed by `set` |
-| `lambdaMatchToPatternMatchingLambda` | `fun \| …` pattern-matching syntax |
-| `lambdaSymbolToFun` | `fun` instead of `λ` |
-| `matchOnBoolToIfThenElse` | `if … then … else …` instead of matching on `Bool` |
-| `matchOnParametersToPatternMatchingDefinition` | `def f : A → B \| …` instead of naming parameters only to `match` on them |
-| `mergeBindersWithSameType` | merging binders with the same type |
-| `mergeConsecutiveIntros` | merging consecutive `intro`s |
-| `mergeMatchArmsWithSameBody` | merging match arms with identical right-hand sides |
-| `natConstructorsToLiterals` | `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ` |
-| `negatedIfToUnless` | `unless` instead of `if not` |
-| `nestedExceptToExceptTransformer` | `ExceptT` instead of nesting `Except` in a signature |
-| `nestedExprAppToMkAppN` | `mkAppN` instead of nested `Expr.app` |
-| `nestedOptionToOptionTransformer` | `OptionT` instead of nesting `Option` in a signature |
-| `qualifiedConstructorToLeadingDot` | `.leaf` instead of `BinTree.leaf` where the expected type is known |
-| `removeElsePureUnit` | dropping a redundant `else pure ()` |
-| `removeIdRunWithoutEffects` | removing an unnecessary `Id.run do` |
-| `removeLetWildcardOnUnitAction` | dropping `let _ ←` before an action returning `Unit` |
-| `removeMutWithoutReassignment` | removing an unnecessary `mut` |
-| `singleUseBindToNestedAction` | `(← act)` instead of `let x ← act` used once in the next statement |
-| `singleUseLambdaToCdotFunction` | `·` instead of an explicit lambda |
-| `stringConcatenationToInterpolation` | `s!"…{x}…"` instead of `"…" ++ toString x ++ "…"` |
-| `syntaxKindComparisonToQuotationPattern` | antiquotation patterns instead of a `Syntax.getKind` check followed by `getArg` |
-| `tsyntaxRawToTypedAccess` | a typed pattern instead of `.raw` on `TSyntax` followed by `getArg` |
-| `tupleMatchToSimultaneousMatch` | simultaneous matching instead of matching on a tuple |
-| `wildcardMatchToIfLet` | `if let` instead of a two-arm `match` with a wildcard |
-
-Refactors (code actions on a selection): `bindToDo` (`>>=` to do-notation), `flipIf` (swap `if`
-branches), `inline` (inline a definition or `let`), `inlineAllConst` (inline every use of a
-definition).
-
-Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
-in `leanOptions`.
-
-The checks were renamed to longer, descriptive names (for example `funToCdot` is now
-`singleUseLambdaToCdotFunction`); the `linter.<rule>` options with the old names no longer exist.
-
-## Other ways to run Heron
-
-### Editor only, without changing your project
-
-`heron-language-server` is a second Lean language server that runs next to your normal one. It
-starts its own `lake serve` with Heron loaded as a plugin and passes on only Heron's warnings,
-quick fixes and refactors. Every Lean project then gets Heron's hints without a `require`, plugin
-or `import`, and your normal Lean server stays untouched. Each open file is elaborated twice, once
-per server, which costs extra CPU and memory on large projects. `lake build` and CI are
-unaffected; use the [Quick start](#quick-start) setup for those.
-
-With home-manager and the `services.toolchain.langs` module of
-[hm-dev-tools](https://codeberg.org/wvhulle/hm-dev-tools), import this flake's module and enable
-it. It adds a `heron` server to the Lean language:
-
-```nix
-home-manager.users.<you> = {
-  imports = [ heron.homeModules.default ];
-  programs.heron.enable = true;
-};
-```
-
-With other editor setups, add the package `heron-language-server` as an extra Lean language server,
-for example in Helix:
-
-```toml
-# languages.toml
-[language-server.heron]
-command = "nix"
-args = ["run", "github:wvhulle/heron#heron-language-server"]
-
-[[language]]
-name = "lean"
-language-servers = ["lean4_lsp", "heron"]
-```
-
-Without Nix, build it from the branch that matches your toolchain and point your editor at the
-binary:
-
-```sh
-git clone --branch main https://github.com/wvhulle/heron && cd heron
-lake build Heron:shared heron-language-server
-# editor command: <checkout>/.lake/build/bin/heron-language-server
-```
-
-The server runs `lean --version` in the project and loads the plugin built for that Lean
-version. For any version other than its own, it clones the matching Heron branch into
-`~/.cache/heron/<version>` (or `$HERON_CACHE_DIR`) and builds the plugin there on first use. The
-first start on a new version therefore takes a few minutes; the build log appears in the
-editor's language-server log. If Heron has no branch for the version, or the project's `lakefile`
-already lists `@heron/plugin`, the server stays idle and says why in that log.
-
-Like the plugin setup, the linter writes `.lake/build/heron-fixes/` in each project you open.
-
-### Per-file import
-
-Require Heron (also possible in `lakefile.toml`) and enable it in the files you want checked:
-
-```toml
-[[require]]
-name = "heron"
-git = "https://github.com/wvhulle/heron"
-rev = "main"
-```
+Most projects want the lakefile setup:
 
 ```lean
-import Heron
-set_option linter.heron true
+require heron from git "https://github.com/wvhulle/heron" @ "main"
+
+package «your_pkg» where
+  leanOptions := #[⟨`linter.heron, true⟩]
+  plugins := #[`@heron/plugin]
+  lintDriver := "heron/heron"
 ```
 
-### Without changing your project (Nix)
-
-Build your project, then run `heron-scan` from the Heron ref that matches your toolchain. It
-needs no `require`, plugin or `import`, but it re-elaborates the files itself, so it is slower
-than the plugin setup on large projects.
-
-```sh
-lake build
-nix run github:wvhulle/heron/main -- Consumer        # check a library or directory
-nix run github:wvhulle/heron/main -- --fix Foo.lean  # apply fixes
-```
-
-### Executables
-
-Any project that requires Heron can run its executables with `lake exe`:
-
-| Command | What it does |
-| --- | --- |
-| `lake exe heron` | What `lake lint` runs: builds your targets with the plugin, then prints the fixes. Adds `--no-build` to read the last build's results. |
-| `lake exe heron-scan` | Elaborates the targets itself; needs no plugin. Adds `--per-file`, `--no-cache`, `--no-parallel`, and reads stdin with `-`. |
-
-Both accept `--json`, `--fix`/`--apply` and `--color`/`--no-color`.
-
-```sh
-lake exe heron-scan --fix Foo/Bar.lean
-echo 'def f := fun x => x + 1' | lake exe heron-scan -
-```
+See [Rules](docs/Rules.md) for every check and refactor and how to turn them off.
 
 ## Supported Lean versions
 
@@ -204,10 +49,11 @@ GitHub, so `https://codeberg.org/wvhulle/heron` works as well.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for adding rules, testing and inspecting syntax trees.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the repository layout, adding rules, testing and the
+developer tools.
 
 ## Name
 
-![Heron](./heron.jpg)
+![Heron](./docs/images/heron.jpg)
 
 _Named after the [Heron](https://en.wikipedia.org/wiki/Heron) bird that watches over lakes since `lake` (in turn named after "Lean make") is the name of the build tool for Lean._
