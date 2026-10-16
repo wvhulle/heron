@@ -130,7 +130,7 @@
             '';
           };
 
-        default = unmanaged-vanilla;
+        default = unmanaged-fork;
       };
     };
 }
