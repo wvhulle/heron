@@ -35,7 +35,7 @@
         if lean4-nix.tags ? ${toolchainTag} then
           lean4-nix.readToolchainFile ./lean-toolchain
         else
-          vendoredManifestOverlay (import ./nix/lean4-nix-manifests/${toolchainTag}.nix lean4-nix);
+          vendoredManifestOverlay (import ./Lean4NixManifests/${toolchainTag}.nix lean4-nix);
 
       pkgs = import nixpkgs {
         inherit system;
@@ -115,14 +115,7 @@
     in
     {
       packages.${system} = {
-        inherit
-          library
-          lint-driver
-          heron-scan-unwrapped
-          developer-tools
-          heron-language-server
-          heron-lsp-probe
-          ;
+        inherit heron-language-server;
         heron-scan = heronScanInProject;
         default = heronScanInProject;
       };
@@ -137,14 +130,6 @@
             services.toolchain.langs.lean.servers.heron.package = heron-language-server;
           };
         };
-
-      apps.${system} = rec {
-        heron-scan = {
-          type = "app";
-          program = "${heronScanInProject}/bin/heron-scan";
-        };
-        default = heron-scan;
-      };
 
       checks.${system} = {
         build-library-with-rule-tests = library;
