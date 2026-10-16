@@ -32,7 +32,8 @@ example : Nat → Nat → True := by intro a; intro b; exact trivial
 ## What you get
 
 - **In the editor:** checks underline code and offer a quick-fix on the light bulb. Refactors
-  appear in the code-action menu when you select code.
+  appear in the code-action menu when you select code. For editor-only use in any project
+  without changing it, see [Editor only](#editor-only-without-changing-your-project).
 - **On `lake build`:** every check is reported as a warning.
 - **With `lake lint`:** a cargo/clippy-style report of all fixes. Lake's incremental build is the
   cache, so only changed modules are re-checked.
@@ -87,6 +88,52 @@ The checks were renamed to longer, descriptive names (for example `funToCdot` is
 `singleUseLambdaToCdotFunction`); the `linter.<rule>` options with the old names no longer exist.
 
 ## Other ways to run Heron
+
+### Editor only, without changing your project
+
+`heron-lean-server` replaces `lake serve` as your editor's Lean language server. It starts
+`lake serve` with Heron loaded as a plugin, so every Lean project gets Heron's warnings and
+quick fixes without a `require`, plugin or `import`. `lake build` and CI are unaffected; use the
+[Quick start](#quick-start) setup for those.
+
+With home-manager and the `services.toolchain.langs` module of
+[hm-dev-tools](https://codeberg.org/wvhulle/hm-dev-tools), import this flake's module and enable
+it. It replaces the `lake serve` command of the Lean language server:
+
+```nix
+home-manager.users.<you> = {
+  imports = [ heron.homeModules.default ];
+  programs.heron.enable = true;
+};
+```
+
+With other editor setups, use the package `heron-lean-server` as the Lean language server
+command, for example in Helix:
+
+```toml
+# languages.toml
+[language-server.lean4_lsp]
+command = "nix"
+args = ["run", "github:wvhulle/heron#heron-lean-server"]
+```
+
+Without Nix, build it from the branch that matches your toolchain and point your editor at the
+binary:
+
+```sh
+git clone --branch main https://github.com/wvhulle/heron && cd heron
+lake build Heron:shared heron-lean-server
+# editor command: <checkout>/.lake/build/bin/heron-lean-server
+```
+
+The server runs `lean --version` in the project and loads the plugin built for that Lean
+version. For any version other than its own, it clones the matching Heron branch into
+`~/.cache/heron/<version>` (or `$HERON_CACHE_DIR`) and builds the plugin there on first use. The
+first start on a new version therefore takes a few minutes; the build log appears in the
+editor's language-server log. If Heron has no branch for the version, the server exits with an
+error. Projects whose `lakefile` already lists `@heron/plugin` are served unchanged.
+
+Like the plugin setup, the linter writes `.lake/build/heron-fixes/` in each project you open.
 
 ### Per-file import
 
