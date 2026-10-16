@@ -3,6 +3,7 @@
   leanToolchain,
   heronSource,
   lint-driver,
+  heron-scan-unwrapped,
 }:
 let
   runInConsumerFixture =
@@ -35,5 +36,12 @@ in
     name = "test-plugin-and-lake-lint";
     heronArtifacts = lint-driver;
     script = "plugin-and-lake-lint.nu";
+  };
+
+  test-heron-scan = runInConsumerFixture {
+    name = "test-heron-scan";
+    heronArtifacts = heron-scan-unwrapped;
+    script = "heron-scan.nu";
+    scriptArgs = [ "${heron-scan-unwrapped}/bin/heron-scan" ];
   };
 }

@@ -103,7 +103,7 @@
         build-heron-scan-app = heronScanInProject;
       }
       // import ./tests/end-to-end {
-        inherit pkgs lint-driver;
+        inherit pkgs lint-driver heron-scan-unwrapped;
         leanToolchain = pkgs.lean.lean-all;
         heronSource = ./.;
       };
