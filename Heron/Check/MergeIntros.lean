@@ -9,13 +9,18 @@ private structure MergeIntrosMatch where
   fullRange : Syntax
   allIntros : Array (TSyntax `tactic)
 
-private meta partial def introIdents : Syntax → Array Syntax := fun stx =>
-  let here := if stx.isIdent || stx.getKind == ``Lean.Parser.Term.hole then #[stx] else #[]
-  here ++ stx.getArgs.flatMap introIdents
-
-private meta def isIntro : TSyntax `tactic → Bool
-  | `(tactic| intro $_*) => true
+private meta def isNameOrHole : TSyntax `term → Bool
+  | `($_:ident) => true
+  | `(_) => true
   | _ => false
+
+private meta def plainIntroNames? : TSyntax `tactic → Option (TSyntaxArray `term)
+  | `(tactic| intro $names*) =>
+    if !names.isEmpty && names.all isNameOrHole then some names else none
+  | _ => none
+
+private meta def isIntro (tac : TSyntax `tactic) : Bool :=
+  (plainIntroNames? tac).isSome
 
 /-- Pull out the tactic list of a `tacticSeq1Indented` or `tacticSeqBracketed`
 node. -/
@@ -47,10 +52,9 @@ private meta instance : Check MergeIntrosMatch where
   emphasize := fun m => m.secondIntro
   tags := #[.unnecessary]
   explanation := fun _ =>
-    m!"Multiple sequential `intro` tactics can be merged into one. This reduces tactic noise and is idiomatic Lean style."
+    m!"Sequential `intro` tactics that each name one or more hypotheses can be merged into a single `intro`. This reduces tactic noise and is idiomatic Lean style."
   replacements := fun m => do
-    let names : TSyntaxArray `ident :=
-      (m.allIntros.flatMap fun t => introIdents t).map (⟨·⟩)
+    let names := m.allIntros.flatMap fun t => (plainIntroNames? t).getD #[]
     let repl ← `(tactic| intro $names*)
     return #[{
           emphasizedSyntax := m.secondIntro

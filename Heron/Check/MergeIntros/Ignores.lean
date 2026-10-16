@@ -17,3 +17,21 @@ example : Nat → True → True := by
   skip
   intro b
   exact b
+
+#assertIgnore mergeIntros in
+example : Nat → Nat → True := by
+  intro (x : Nat)
+  intro y
+  exact trivial
+
+#assertIgnore mergeIntros in
+example : Nat × Nat → Nat → True := by
+  intro ⟨a, b⟩
+  intro c
+  exact trivial
+
+#assertIgnore mergeIntros in
+example : Nat → Nat → True := by
+  intro
+  intro x
+  exact trivial
