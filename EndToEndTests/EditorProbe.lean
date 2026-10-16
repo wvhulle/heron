@@ -25,7 +25,7 @@ def parseArgs : List String → Except String Cli
     else do pure { (← parseArgs rest) with file := arg }
 
 def usage : String :=
-  "usage: heron-lsp-probe FILE.lean [--expect SUBSTRING]... [--reject SUBSTRING]... \
+  "usage: lean --run EditorProbe.lean FILE.lean [--expect SUBSTRING]... [--reject SUBSTRING]... \
    [--expect-quick-fix] -- SERVER [ARGS...]"
 
 def diagnosticCode (diagnostic : Diagnostic) : String :=
@@ -79,12 +79,12 @@ def probe (cli : Cli) (file server : String) : IO UInt32 := do
         failures := failures.push s!"a diagnostic mentions `{substring}`"
     Ipc.shutdown 3
     discard Ipc.waitForExit
-    failures.forM (eprintln s!"heron-lsp-probe: {·}")
+    failures.forM (eprintln s!"EditorProbe: {·}")
     return if failures.isEmpty then 0 else 1
 
 def main (args : List String) : IO UInt32 := do
   match parseArgs args with
-  | .error message => eprintln s!"heron-lsp-probe: {message}\n{usage}"; return 1
+  | .error message => eprintln s!"EditorProbe: {message}\n{usage}"; return 1
   | .ok cli =>
     match cli.file, cli.server with
     | some file, some server => probe cli file server

@@ -30,8 +30,6 @@ lean_exe «heron-scan» where
 
 lean_exe «heron-language-server» where root := `Executables.SecondLanguageServer
 
-lean_exe «heron-lsp-probe» where root := `Bin.LspProbe
-
 target plugin : Dynlib := do
   let some heron ← findLeanLib? `Heron
     | error "library `Heron` not found"

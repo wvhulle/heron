@@ -1,7 +1,7 @@
 import Lake
 open Lake DSL
 
-package vanilla
+package noProjectChanges
 
 @[default_target]
-lean_lib Vanilla
+lean_lib Consumer

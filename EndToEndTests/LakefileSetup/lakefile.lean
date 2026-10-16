@@ -1,7 +1,7 @@
 import Lake
 open Lake DSL
 
-require heron from "../../.."
+require heron from "../.."
 
 package consumer where
   leanOptions := #[⟨`linter.heron, true⟩]

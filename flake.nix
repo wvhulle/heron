@@ -107,11 +107,6 @@
             install -Dm755 ${language-server-build}/.lake/build/bin/heron-language-server $out/bin/heron-language-server
             install -Dm644 ${language-server-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
           '';
-
-      heron-lsp-probe = buildLakeTargets {
-        name = "heron-lsp-probe";
-        targets = "heron-lsp-probe";
-      };
     in
     {
       packages.${system} = {
@@ -132,22 +127,16 @@
         };
 
       checks.${system} = {
-        build-library-with-rule-tests = library;
-        build-lint-driver = lint-driver;
-        build-heron-scan = heron-scan-unwrapped;
-        developer-tools = developer-tools;
-        build-heron-scan-app = heronScanInProject;
-        build-heron-language-server = heron-language-server;
-        build-heron-lsp-probe = heron-lsp-probe;
+        rules = library;
+        inherit developer-tools;
       }
-      // import ./tests/end-to-end {
+      // import ./EndToEndTests {
         inherit
           pkgs
           lint-driver
-          heron-scan-unwrapped
           heron-language-server
-          heron-lsp-probe
           ;
+        heron-scan = heronScanInProject;
         leanToolchain = pkgs.lean.lean-all;
         heronSource = ./.;
       };

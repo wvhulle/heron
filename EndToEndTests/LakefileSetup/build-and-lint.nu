@@ -1,4 +1,4 @@
-use reported-fixes.nu [parse-reported-fixes assert-matches-expected]
+use ../reported-fixes.nu [parse-reported-fixes assert-matches-expected]
 
 def main [expected_fixes: path]: nothing -> nothing {
   let build = (lake build | complete)

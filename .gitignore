@@ -1,4 +1,4 @@
 /.lake/
-/tests/end-to-end/*/.lake/
-/tests/end-to-end/*/lean-toolchain
+/EndToEndTests/*/.lake/
+/EndToEndTests/*/lean-toolchain
 /sgconfig.yml

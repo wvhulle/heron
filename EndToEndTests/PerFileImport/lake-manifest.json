@@ -6,8 +6,8 @@
    "name": "heron",
    "manifestFile": "lake-manifest.json",
    "inherited": false,
-   "dir": "../../..",
+   "dir": "../..",
    "configFile": "lakefile.lean"}],
- "name": "consumer",
+ "name": "perFileImport",
  "lakeDir": ".lake",
  "fixedToolchain": false}

@@ -21,27 +21,21 @@ variables:
         fi
 
 steps:
-  - name: build-library-with-rule-tests
-    <<: *build_flake_check_named_after_step
-  - name: build-lint-driver
-    <<: *build_flake_check_named_after_step
-  - name: build-heron-scan
+  - name: rules
     <<: *build_flake_check_named_after_step
   - name: developer-tools
     <<: *build_flake_check_named_after_step
-  - name: build-heron-scan-app
+  - name: lakefile-setup-build-and-lint
     <<: *build_flake_check_named_after_step
-  - name: test-plugin-and-lake-lint
+  - name: lakefile-setup-cold-build
     <<: *build_flake_check_named_after_step
-  - name: test-heron-scan
+  - name: lakefile-setup-editor
     <<: *build_flake_check_named_after_step
-  - name: test-plugin-cold-build
+  - name: per-file-import-build
     <<: *build_flake_check_named_after_step
-  - name: build-heron-language-server
+  - name: per-file-import-editor
     <<: *build_flake_check_named_after_step
-  - name: build-heron-lsp-probe
+  - name: no-project-changes-scan
     <<: *build_flake_check_named_after_step
-  - name: test-editor-without-project-changes
-    <<: *build_flake_check_named_after_step
-  - name: test-editor-with-plugin-in-lakefile
+  - name: no-project-changes-editor
     <<: *build_flake_check_named_after_step
