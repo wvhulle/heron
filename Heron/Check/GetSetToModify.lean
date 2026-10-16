@@ -43,32 +43,21 @@ private meta partial def containsName (varName : Name) (stx : Syntax) : Bool :=
   else
     stx.getArgs.any (containsName varName)
 
-/-- For a given get-binding at index `i`, find the matching set call. -/
+/-- For a get-binding at index `i`, match a `set` directly after it whose state
+binding is not used by any later element. -/
 private meta def findSetForGet (elems : Array (TSyntax `doElem)) (i : Nat)
     (getElem : TSyntax `doElem) (varNameStx : TSyntax `ident)
-    : Option GetSetToModifyMatch :=
+    : Option GetSetToModifyMatch := do
   let varName := varNameStx.getId
-  let rec go (j : Nat) : Option GetSetToModifyMatch :=
-    if h : j < elems.size then
-      match isSetWithStructUpdate? elems[j] varName with
-      | some (setElem, structInst) =>
-        -- Check that varName is not used between get and set
-        let usedBetween := (List.range (j - i - 1)).any fun k =>
-          containsName varName elems[i + 1 + k]!
-        if !usedBetween then
-          some {
-            getStx := getElem
-            setStx := setElem
-            fullRange := mkSpan getElem setElem |>.getD getElem
-            varName := varNameStx
-            structInst
-          }
-        else none
-      | none =>
-        if containsName varName elems[j] then none
-        else go (j + 1)
-    else none
-  go (i + 1)
+  let (setElem, structInst) ← isSetWithStructUpdate? (← elems[i + 1]?) varName
+  guard !((elems.extract (i + 2)).any fun later => containsName varName later)
+  return {
+    getStx := getElem
+    setStx := setElem
+    fullRange := mkSpan getElem setElem |>.getD getElem
+    varName := varNameStx
+    structInst
+  }
 
 private meta def detectGetSetToModify (doSeq : Syntax) : Array GetSetToModifyMatch :=
   let elems := getDoElems doSeq

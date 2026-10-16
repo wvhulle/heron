@@ -19,3 +19,15 @@ def f : StateM MyState Unit := do
 def g : StateM MyState Nat := do
   let s ← get
   pure s.count
+
+#assertIgnore getSetToModify in
+def setUsesLaterBinding (next : StateM MyState Nat) : StateM MyState Unit := do
+  let s ← get
+  let v ← next
+  set { s with count := v }
+
+#assertIgnore getSetToModify in
+def stateReadAfterSet : StateM MyState Nat := do
+  let s ← get
+  set { s with count := 1 }
+  return s.count
