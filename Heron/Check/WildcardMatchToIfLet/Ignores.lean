@@ -7,6 +7,9 @@ meta import Heron.Check.WildcardMatchToIfLet
 #assertIgnore wildcardMatchToIfLet in
 def h (x : Option Nat) : Nat := match x with | some v => v | none => 0
 
+#assertIgnore wildcardMatchToIfLet in
+def literalPattern (n : Nat) : Nat := match n with | 0 => 1 | _ => 2
+
 -- Ignore: more than 2 arms
 #assertIgnore wildcardMatchToIfLet in
 def k (n : Nat) : Nat := match n with | 0 => 1 | 1 => 2 | _ => 3

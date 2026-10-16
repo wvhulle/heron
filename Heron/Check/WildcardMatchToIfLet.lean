@@ -34,19 +34,28 @@ private meta def detectMatchToIfLet? : Syntax → Option WildcardMatchToIfLetMat
     return { matchStx := stx, matchKw, pat, discr, thenRhs, elseRhs }
   | _ => none
 
+private meta def patternBindsVariable (pat : Syntax) : CommandElabM Bool := do
+  let some range := pat.getRange? | return false
+  let trees ← collectInfoTrees pat
+  return (trees.flatMap collectTermInfos).any fun (_, ti) =>
+    ti.isBinder && ti.stx.getRange?.any fun r => range.start ≤ r.start && r.stop ≤ range.stop
+
 private meta instance : Check WildcardMatchToIfLetMatch where
   name := `wildcardMatchToIfLet
   kinds := #[``Term.match]
   severity := .information
   category := .style
-  detect := fun stx => pure <|
-    match detectMatchToIfLet? stx with
-    | some m => #[m]
-    | none => #[]
+  detect := fun stx => do
+    let some m := detectMatchToIfLet? stx | return #[]
+    unless ← patternBindsVariable m.pat do return #[]
+    return #[m]
   message := fun _ => m!"Use `if let` instead of two-arm `match` with wildcard"
   emphasize := fun m => m.matchStx
-  reference := some { topic := "if let", url := "https://leanprover.github.io/functional_programming_in_lean/getting-to-know/conveniences.html" }
-  explanation := fun _ => m!"A `match` with exactly two arms where one is `_` can be written more concisely as `if let`."
+  reference := some { topic := "if let", url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#if-let" }
+  explanation := fun _ =>
+    m!"When only one constructor of a sum type is of interest, `if let pat := e then … else …` \
+       states that directly, and in some contexts reads better than a two-arm `match` with a \
+       wildcard."
   replacements := fun m => do
     let repl ← `(if let $m.pat := $m.discr then $m.thenRhs else $m.elseRhs)
     return #[{
