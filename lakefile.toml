@@ -1,6 +1,9 @@
 name = "heron"
 version = "0.1.0"
 license = "Apache-2.0"
+description = "Refactoring and lint framework for Lean 4: checks with quick-fixes, refactor code actions, and clippy-style reporters"
+keywords = ["linter", "refactoring", "code-actions", "tooling"]
+homepage = "https://codeberg.org/wvhulle/heron"
 defaultTargets = ["Heron"]
 
 [[lean_lib]]
