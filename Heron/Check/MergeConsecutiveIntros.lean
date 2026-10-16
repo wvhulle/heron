@@ -45,7 +45,7 @@ private meta def detectIntrosAt (stx : Syntax) : Array MergeConsecutiveIntrosMat
 private meta instance : Check MergeConsecutiveIntrosMatch where
   name := `mergeConsecutiveIntros
   kinds := #[``Lean.Parser.Tactic.tacticSeq1Indented, ``Lean.Parser.Tactic.tacticSeqBracketed]
-  severity := .warning
+  severity := .information
   category := .simplification
   detect := fun stx => pure (detectIntrosAt stx)
   message := fun _ => m!"Merge intros"
