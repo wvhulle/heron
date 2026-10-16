@@ -29,6 +29,10 @@ meta instance : ToString Category where
     | .performance => "performance"
     | .correctness => "correctness"
 
+meta def isDottedAccess (field : Name) : Name → Bool
+  | .str receiver last => !receiver.isAnonymous && last == field.toString
+  | _ => false
+
 /-- A reference to external documentation that justifies a check rule. -/
 structure Reference where
   /-- Short topic description shown in parentheses, e.g. `` `rfl` tactic ``. -/

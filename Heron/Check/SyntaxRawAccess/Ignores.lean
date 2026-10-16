@@ -9,3 +9,6 @@ private structure Box where
 
 #assertIgnore syntaxRawAccess in
 example (b : Box) : Nat := b.raw + 1
+
+#assertIgnore syntaxRawAccess in
+def parenthesizedBoxField (b : Box) : Nat := (b).raw + 1

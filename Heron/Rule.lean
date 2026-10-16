@@ -224,6 +224,11 @@ meta def runMetaMForEachExactSyntax (stx : Syntax) (f : Expr → MetaM α) :
     ti.stx.getRange?.any fun r => r.start == range.start && r.stop == range.stop
   exactMatches.mapM fun (ci, ti) => runInfoMetaM ci ti.lctx (f ti.expr)
 
+meta def elaboratesToApplicationOf (stx : Syntax) (constName : Name) : CommandElabM Bool := do
+  let applications ← runMetaMForEachExactSyntax stx fun e =>
+    return (← instantiateMVars e).getAppFn.isConstOf constName
+  return applications.any id
+
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?

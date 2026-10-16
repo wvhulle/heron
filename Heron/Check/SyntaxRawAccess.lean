@@ -7,15 +7,20 @@ open Lean Elab Command Parser Heron
 private structure SyntaxRawAccessMatch where
   fullStx : Syntax
 
+private meta def isRawAccessSyntax : Syntax → Bool
+  | `(($_:term).raw) => true
+  | `($x:ident) => isDottedAccess `raw x.getId
+  | _ => false
+
 private meta instance : Check SyntaxRawAccessMatch where
   name := `syntaxRawAccess
-  kinds := #[``Term.proj]
+  kinds := #[``Term.proj, identKind]
   severity := .information
   category := .style
-  detect := fun stx => pure <|
-    match stx with
-    | `(($_:term).raw) => #[{ fullStx := stx }]
-    | _ => #[]
+  detect := fun stx => do
+    unless isRawAccessSyntax stx do return #[]
+    unless ← elaboratesToApplicationOf stx ``Lean.TSyntax.raw do return #[]
+    return #[{ fullStx := stx }]
   message := fun _ => m!"Avoid `.raw` on `TSyntax` — use a typed pattern or method instead"
   emphasize := fun m => m.fullStx
   reference := some
