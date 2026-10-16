@@ -6,7 +6,7 @@
     "file": "Consumer/Basic.lean",
     "line": 2,
     "message": "Remove unnecessary `mut`",
-    "rule": "unnecessaryMut"
+    "rule": "removeMutWithoutReassignment"
   },
   {
     "after": "intro a b",
@@ -15,7 +15,7 @@
     "file": "Consumer/Basic.lean",
     "line": 5,
     "message": "Merge intros",
-    "rule": "mergeIntros"
+    "rule": "mergeConsecutiveIntros"
   },
   {
     "after": "if let some v := o then increment v else 0",
@@ -24,6 +24,6 @@
     "file": "Consumer/UsesBasic.lean",
     "line": 3,
     "message": "Use `if let` instead of two-arm `match` with wildcard",
-    "rule": "matchToIfLet"
+    "rule": "wildcardMatchToIfLet"
   }
 ]

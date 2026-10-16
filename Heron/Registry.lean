@@ -1,28 +1,28 @@
 module
 
 -- Checks
-public import Heron.Check.MergeIntros
-public import Heron.Check.UnnecessaryIdRun
-public import Heron.Check.UnnecessaryMut
-public import Heron.Check.BoolMatchToIf
-public import Heron.Check.MergeMatchArms
-public import Heron.Check.MergeBinders
-public import Heron.Check.OptionToOptionT
-public import Heron.Check.ExceptToExceptT
-public import Heron.Check.RedundantLetWildcard
-public import Heron.Check.TupleMatchToSimultaneous
-public import Heron.Check.MatchToIfLet
-public import Heron.Check.GetSetToModify
-public import Heron.Check.RedundantElsePureUnit
-public import Heron.Check.IfNotToUnless
-public import Heron.Check.NatLiteralPatterns
-public import Heron.Check.FunMatchToMatchFun
-public import Heron.Check.ExprAppChainToMkAppN
-public import Heron.Check.FunToCdot
+public import Heron.Check.MergeConsecutiveIntros
+public import Heron.Check.RemoveIdRunWithoutEffects
+public import Heron.Check.RemoveMutWithoutReassignment
+public import Heron.Check.MatchOnBoolToIfThenElse
+public import Heron.Check.MergeMatchArmsWithSameBody
+public import Heron.Check.MergeBindersWithSameType
+public import Heron.Check.NestedOptionToOptionTransformer
+public import Heron.Check.NestedExceptToExceptTransformer
+public import Heron.Check.RemoveLetWildcardOnUnitAction
+public import Heron.Check.TupleMatchToSimultaneousMatch
+public import Heron.Check.WildcardMatchToIfLet
+public import Heron.Check.AdjacentGetSetToModify
+public import Heron.Check.RemoveElsePureUnit
+public import Heron.Check.NegatedIfToUnless
+public import Heron.Check.NatConstructorPatternsToLiterals
+public import Heron.Check.LambdaMatchToPatternMatchingLambda
+public import Heron.Check.NestedExprAppToMkAppN
+public import Heron.Check.SingleUseLambdaToCdotFunction
 -- Meta-programming hygiene
-public import Heron.Check.SyntaxRawAccess
-public import Heron.Check.SyntaxKindCheck
-public import Heron.Check.OptionWrapFilter
+public import Heron.Check.TsyntaxRawToTypedAccess
+public import Heron.Check.SyntaxKindComparisonToQuotationPattern
+public import Heron.Check.FilterOnSomeToGuard
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline

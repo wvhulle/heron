@@ -23,7 +23,7 @@ not use it: code actions go `Replacement → Lsp.TextEdit` directly, in-process.
 `before` text and screen positions are recomputed from the source + `edit.range` at
 render time, so they are intentionally not stored. -/
 structure FixRecord where
-  /-- Rule name, e.g. `funToCdot`. -/
+  /-- Rule name, e.g. `singleUseLambdaToCdotFunction`. -/
   rule : String
   /-- The rule's headline message. -/
   message : String

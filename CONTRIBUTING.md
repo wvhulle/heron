@@ -16,7 +16,7 @@ Tests use compile-time assertion commands that verify rules at build time. Failu
 `#assertCheck` verifies that a check rule transforms a command into the expected result:
 
 ```lean
-#assertCheck mergeIntros in
+#assertCheck mergeConsecutiveIntros in
 example : Nat → Nat → True := by intro a; intro b; exact trivial
 becomes `(example : Nat → Nat → True := by intro a b; exact trivial)
 ```
@@ -32,7 +32,7 @@ becomes `(example : Nat := (42))
 `#assertIgnore` verifies that a rule produces no matches for the given command:
 
 ```lean
-#assertIgnore mergeIntros in
+#assertIgnore mergeConsecutiveIntros in
 example : Nat → Nat → True := by intro a; skip; intro b; exact trivial
 ```
 

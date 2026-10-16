@@ -50,27 +50,27 @@ Checks (enabled by `linter.heron`):
 
 | Rule | Suggests |
 | --- | --- |
-| `boolMatchToIf` | `if … then … else …` instead of matching on `Bool` |
-| `exceptToExceptT` | `ExceptT` instead of nesting `Except` |
-| `exprAppChainToMkAppN` | `mkAppN` instead of nested `Expr.app` |
-| `funMatchToMatchFun` | `fun \| …` pattern-matching syntax |
-| `funToCdot` | `·` instead of an explicit lambda |
-| `getSetToModify` | `modify` instead of `get`/`set` |
-| `ifNotToUnless` | `unless` instead of `if not` |
-| `matchToIfLet` | `if let` instead of a two-arm `match` with a wildcard |
-| `mergeBinders` | merging binders with the same type |
-| `mergeIntros` | merging consecutive `intro`s |
-| `mergeMatchArms` | merging match arms with identical right-hand sides |
-| `natLiteralPatterns` | `0` and `n + 1` instead of `Nat.zero` and `Nat.succ n` |
-| `optionToOptionT` | `OptionT` instead of nesting `Option` |
-| `optionWrapFilter` | `guard` in an `Option` `do`-block instead of `some _ \|>.filter _` |
-| `redundantElsePureUnit` | dropping a redundant `else pure ()` |
-| `redundantLetWildcard` | dropping a redundant `let _ ←` |
-| `syntaxKindCheck` | antiquotation patterns instead of comparing `Syntax.getKind` |
-| `syntaxRawAccess` | a typed pattern or method instead of `.raw` on `TSyntax` |
-| `tupleMatchToSimultaneous` | simultaneous matching instead of matching on a tuple |
-| `unnecessaryIdRun` | removing an unnecessary `Id.run do` |
-| `unnecessaryMut` | removing an unnecessary `mut` |
+| `adjacentGetSetToModify` | `modify` instead of `get` directly followed by `set` |
+| `filterOnSomeToGuard` | `guard` in an `Option` `do`-block instead of `some _ \|>.filter _` |
+| `lambdaMatchToPatternMatchingLambda` | `fun \| …` pattern-matching syntax |
+| `matchOnBoolToIfThenElse` | `if … then … else …` instead of matching on `Bool` |
+| `mergeBindersWithSameType` | merging binders with the same type |
+| `mergeConsecutiveIntros` | merging consecutive `intro`s |
+| `mergeMatchArmsWithSameBody` | merging match arms with identical right-hand sides |
+| `natConstructorPatternsToLiterals` | `0` and `n + k` instead of `Nat.zero` and `Nat.succ` |
+| `negatedIfToUnless` | `unless` instead of `if not` |
+| `nestedExceptToExceptTransformer` | `ExceptT` instead of nesting `Except` in a signature |
+| `nestedExprAppToMkAppN` | `mkAppN` instead of nested `Expr.app` |
+| `nestedOptionToOptionTransformer` | `OptionT` instead of nesting `Option` in a signature |
+| `removeElsePureUnit` | dropping a redundant `else pure ()` |
+| `removeIdRunWithoutEffects` | removing an unnecessary `Id.run do` |
+| `removeLetWildcardOnUnitAction` | dropping `let _ ←` before an action returning `Unit` |
+| `removeMutWithoutReassignment` | removing an unnecessary `mut` |
+| `singleUseLambdaToCdotFunction` | `·` instead of an explicit lambda |
+| `syntaxKindComparisonToQuotationPattern` | antiquotation patterns instead of comparing `Syntax.getKind` |
+| `tsyntaxRawToTypedAccess` | a typed pattern or method instead of `.raw` on `TSyntax` |
+| `tupleMatchToSimultaneousMatch` | simultaneous matching instead of matching on a tuple |
+| `wildcardMatchToIfLet` | `if let` instead of a two-arm `match` with a wildcard |
 
 Refactors (code actions on a selection): `bindToDo` (`>>=` to do-notation), `flipIf` (swap `if`
 branches), `inline` (inline a definition or `let`), `inlineAllConst` (inline every use of a
@@ -78,6 +78,9 @@ definition).
 
 Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
 in `leanOptions`.
+
+The checks were renamed to longer, descriptive names (for example `funToCdot` is now
+`singleUseLambdaToCdotFunction`); the `linter.<rule>` options with the old names no longer exist.
 
 ## Other ways to run Heron
 

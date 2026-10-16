@@ -1,0 +1,18 @@
+module
+
+meta import Heron.Assert
+meta import Heron.Check.MergeBindersWithSameType
+
+#assertCheck mergeBindersWithSameType in
+def f (x : Nat) (y : Nat) := x + y
+becomes `(def f (x y : Nat) := x + y)
+
+-- A grouped binder (`(a b : Nat)`) followed by a single-name binder of the same
+-- type should still be merged into one group.
+#assertCheck mergeBindersWithSameType in
+def g (a b : Nat) (c : Nat) := a + b + c
+becomes `(def g (a b c : Nat) := a + b + c)
+
+#assertCheck mergeBindersWithSameType in
+def threeBinders (a : Nat) (b : Nat) (c : Nat) : Nat := a + b + c
+becomes `(command| def threeBinders (a b c : Nat) : Nat := a + b + c)
