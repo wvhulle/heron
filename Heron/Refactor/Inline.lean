@@ -17,7 +17,7 @@ meta def isRecursive (value : Expr) (name : Name) : Bool :=
 meta def expandConst? (e : Expr) : CoreM (Option Expr) :=
   matchConst e.getAppFn (fun _ => return none) fun fInfo fLvls => do
     if fInfo.hasValue (allowOpaque := true) && fInfo.levelParams.length == fLvls.length then
-      let f ← instantiateValueLevelParams fInfo fLvls
+      let f := (fInfo.value! (allowOpaque := true)).instantiateLevelParams fInfo.levelParams fLvls
       return some (f.betaRev e.getAppRevArgs (useZeta := true))
     else
       return none
