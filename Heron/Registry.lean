@@ -15,7 +15,7 @@ public import Heron.Check.WildcardMatchToIfLet
 public import Heron.Check.AdjacentGetSetToModify
 public import Heron.Check.RemoveElsePureUnit
 public import Heron.Check.NegatedIfToUnless
-public import Heron.Check.NatConstructorPatternsToLiterals
+public import Heron.Check.NatConstructorsToLiterals
 public import Heron.Check.LambdaMatchToPatternMatchingLambda
 public import Heron.Check.NestedExprAppToMkAppN
 public import Heron.Check.SingleUseLambdaToCdotFunction

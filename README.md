@@ -57,7 +57,7 @@ Checks (enabled by `linter.heron`):
 | `mergeBindersWithSameType` | merging binders with the same type |
 | `mergeConsecutiveIntros` | merging consecutive `intro`s |
 | `mergeMatchArmsWithSameBody` | merging match arms with identical right-hand sides |
-| `natConstructorPatternsToLiterals` | `0` and `n + k` instead of `Nat.zero` and `Nat.succ` |
+| `natConstructorsToLiterals` | `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ` |
 | `negatedIfToUnless` | `unless` instead of `if not` |
 | `nestedExceptToExceptTransformer` | `ExceptT` instead of nesting `Except` in a signature |
 | `nestedExprAppToMkAppN` | `mkAppN` instead of nested `Expr.app` |
