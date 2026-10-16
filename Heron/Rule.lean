@@ -203,6 +203,14 @@ meta def runMetaMForSyntax (stx : Syntax) (f : Expr → MetaM α) :
     ti.stx.getPos? true |>.any (·.byteIdx == pos.byteIdx) | return none
   some <$> runInfoMetaM ci ti.lctx (f ti.expr)
 
+meta def runMetaMForEachExactSyntax (stx : Syntax) (f : Expr → MetaM α) :
+    CommandElabM (Array α) := do
+  let some range := stx.getRange? | return #[]
+  let trees ← collectInfoTrees stx
+  let exactMatches := (trees.flatMap collectTermInfos).filter fun (_, ti) =>
+    ti.stx.getRange?.any fun r => r.start == range.start && r.stop == range.stop
+  exactMatches.mapM fun (ci, ti) => runInfoMetaM ci ti.lctx (f ti.expr)
+
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
