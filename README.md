@@ -1,53 +1,135 @@
 # Heron
 
-**Refactoring and lint framework for [Lean 4](https://github.com/leanprover/lean4).**
+**Heron finds non-idiomatic [Lean 4](https://github.com/leanprover/lean4) code and fixes it: in your editor, on `lake build`, and in CI.**
 
-Watches over _consistency and maintainability_ of large Lean projects by providing two kinds of rules:
+```lean
+example : Nat → Nat → True := by intro a; intro b; exact trivial
+--                               ^^^^^^^^^^^^^^^^ Merge intros: replace with `intro a b`
+```
 
-- **Checks** — visible diagnostics that underline problematic code and offer quick-fixes.
-- **Refactors** — code actions that appear when you open the refactor menu on a selection.
+![The `Id.run` check in the editor](./screenshots/popup.png)
 
-The `Id.run` check in action.
+## Quick start
 
-![](./screenshots/popup.png)
+1. In your project's `lakefile.lean`, pick the Heron ref that matches your `lean-toolchain` (see
+   [Supported Lean versions](#supported-lean-versions)):
 
-## Usage
+   ```lean
+   require heron from git "https://github.com/wvhulle/heron" @ "main"
 
-Add an import and enable all rules:
+   package «your_pkg» where
+     leanOptions := #[⟨`linter.heron, true⟩]
+     plugins := #[`@heron/plugin]
+     lintDriver := "heron/heron"
+   ```
+
+2. Run `lake build`. Heron's warnings appear for every module, without any `import Heron`.
+3. Run `lake lint` for a report of all fixes, or `lake lint -- --fix` to apply them.
+
+`lakefile.toml` cannot refer to a dependency's targets. Convert it with
+`lake translate-config lean`, or use the [per-file setup](#per-file-import).
+
+## What you get
+
+- **In the editor:** checks underline code and offer a quick-fix on the light bulb. Refactors
+  appear in the code-action menu when you select code.
+- **On `lake build`:** every check is reported as a warning.
+- **With `lake lint`:** a cargo/clippy-style report of all fixes. Lake's incremental build is the
+  cache, so only changed modules are re-checked.
+
+  ```sh
+  lake lint                    # report fixes across the workspace's libraries
+  lake lint -- Sparkle.Analog  # restrict to lake targets
+  lake lint -- --json | jq     # machine-readable
+  lake lint -- --fix           # rewrite files in place
+  ```
+
+## Rules
+
+Checks (enabled by `linter.heron`):
+
+| Rule | Suggests |
+| --- | --- |
+| `boolMatchToIf` | `if … then … else …` instead of matching on `Bool` |
+| `exceptToExceptT` | `ExceptT` instead of nesting `Except` |
+| `exprAppChainToMkAppN` | `mkAppN` instead of nested `Expr.app` |
+| `funMatchToMatchFun` | `fun \| …` pattern-matching syntax |
+| `funToCdot` | `·` instead of an explicit lambda |
+| `getSetToModify` | `modify` instead of `get`/`set` |
+| `ifNotToUnless` | `unless` instead of `if not` |
+| `matchToIfLet` | `if let` instead of a two-arm `match` with a wildcard |
+| `mergeBinders` | merging binders with the same type |
+| `mergeIntros` | merging consecutive `intro`s |
+| `mergeMatchArms` | merging match arms with identical right-hand sides |
+| `natLiteralPatterns` | `0` and `n + 1` instead of `Nat.zero` and `Nat.succ n` |
+| `optionToOptionT` | `OptionT` instead of nesting `Option` |
+| `optionWrapFilter` | `guard` in an `Option` `do`-block instead of `some _ \|>.filter _` |
+| `redundantElsePureUnit` | dropping a redundant `else pure ()` |
+| `redundantLetWildcard` | dropping a redundant `let _ ←` |
+| `rflToExactRfl` | `exact rfl` instead of `rfl` |
+| `syntaxKindCheck` | antiquotation patterns instead of comparing `Syntax.getKind` |
+| `syntaxRawAccess` | a typed pattern or method instead of `.raw` on `TSyntax` |
+| `tupleMatchToSimultaneous` | simultaneous matching instead of matching on a tuple |
+| `unnecessaryIdRun` | removing an unnecessary `Id.run do` |
+| `unnecessaryMut` | removing an unnecessary `mut` |
+
+Refactors (code actions on a selection): `bindToDo` (`>>=` to do-notation), `flipIf` (swap `if`
+branches), `inline` (inline a definition or `let`), `inlineAllConst` (inline every use of a
+definition).
+
+Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
+in `leanOptions`.
+
+## Other ways to run Heron
+
+### Per-file import
+
+Require Heron (also possible in `lakefile.toml`) and enable it in the files you want checked:
+
+```toml
+[[require]]
+name = "heron"
+git = "https://github.com/wvhulle/heron"
+rev = "main"
+```
 
 ```lean
 import Heron
 set_option linter.heron true
 ```
 
-See [`Heron/Check/`](./Heron/Check) for all available checks and [`Heron/Refactor/`](./Heron/Refactor) for refactors.
+### Without changing your project (Nix)
 
-### Checks
+Build your project, then run `heron-scan` from the Heron ref that matches your toolchain. It
+needs no `require`, plugin or `import`, but it re-elaborates the files itself, so it is slower
+than the plugin setup on large projects.
 
-Checks show up automatically as underlined diagnostics around anti-patterns.
-
-- Move your cursor to the underline to see a short message.
-- Enable inline diagnostics in your editor settings to see inline labels.
-- Click the light-bulb to apply the suggested fix.
-- Hover to open a popup with detailed explanation.
-- Checks for unused patterns are shown dimmed; deprecated patterns with strike-through.
-
-### Refactors
-
-Refactors are invisible until you explicitly request them via the code action menu on a selection. They are intended for offering an easy way to users to rewrite between equally acceptable styles. Use checks for showing a clear diagnostic to the user that indicates a piece of code that represents an anti-pattern.
-
-### Disabling a Rule
-
-```lean
-set_option linter.mergeIntros false
+```sh
+lake build
+nix run github:wvhulle/heron/main -- Consumer        # check a library or directory
+nix run github:wvhulle/heron/main -- --fix Foo.lean  # apply fixes
 ```
 
-## Installation
+### Executables
 
-### Pick the right version
+Any project that requires Heron can run its executables with `lake exe`:
 
-Heron hooks into the Lean compiler, so it must be built with **exactly** the Lean version your
-project uses. Use the ref that matches your `lean-toolchain`:
+| Command | What it does |
+| --- | --- |
+| `lake exe heron` | What `lake lint` runs: builds your targets with the plugin, then prints the fixes. Adds `--no-build` to read the last build's results. |
+| `lake exe heron-scan` | Elaborates the targets itself; needs no plugin. Adds `--per-file`, `--no-cache`, `--no-parallel`, and reads stdin with `-`. |
+
+Both accept `--json`, `--fix`/`--apply` and `--color`/`--no-color`.
+
+```sh
+lake exe heron-scan --fix Foo/Bar.lean
+echo 'def f := fun x => x + 1' | lake exe heron-scan -
+```
+
+## Supported Lean versions
+
+Heron runs inside the Lean compiler, so it must be built with exactly your project's Lean
+version. Use the ref that matches your `lean-toolchain`:
 
 | Your `lean-toolchain` | Heron ref |
 | --- | --- |
@@ -57,102 +139,9 @@ project uses. Use the ref that matches your `lean-toolchain`:
 | `leanprover/lean4:v4.29.1` | `lean/v4.29.1` |
 | [wvhulle/lean4](https://github.com/wvhulle/lean4) fork | `lean-fork/v4.31.0` |
 
-The `lean-fork/v4.31.0` branch adds features that need the fork: hover popups, related-information labels
-and import-analysis checks.
-
-The repository is mirrored to GitHub (`https://github.com/wvhulle/heron`), so either URL works
-below.
-
-### Whole project, no imports (recommended)
-
-Load Heron as a `lean --plugin`, so its linter runs on **every** module your package compiles and
-no source file has to `import Heron`. In the consumer's `lakefile.lean`:
-
-```lean
-require heron from git "https://github.com/wvhulle/heron" @ "main"
-
-package «your_pkg» where
-  leanOptions := #[⟨`linter.heron, true⟩]
-  plugins := #[`@heron/plugin]
-  lintDriver := "heron/heron"
-```
-
-- `plugins` makes Lake build Heron's shared library on any platform and load it for every module.
-  There is nothing to bootstrap, and updating Heron rebuilds it.
-- `leanOptions` turns all rules on. Individual rules are switched off with
-  ``⟨`linter.<rule>, false⟩`` or `set_option linter.<rule> false` in a file.
-- `lintDriver` makes `lake lint` Heron's report command (next section).
-
-A plain `lake build` then prints Heron's diagnostics for every module, and the editor shows them
-with quick-fixes.
-
-`lakefile.toml` cannot refer to a dependency's targets. For TOML projects, either convert to
-`lakefile.lean` (`lake translate-config lean`) or use the per-file setup.
-
-### Per-file (editor / LSP)
-
-Add the dependency, in `lakefile.toml`:
-
-```toml
-[[require]]
-name = "heron"
-git = "https://github.com/wvhulle/heron"
-rev = "main"
-```
-
-Then import Heron and enable its rules in the files you want linted:
-
-```lean
-import Heron
-set_option linter.heron true
-```
-
-### Without touching your project (Nix)
-
-The flake packages `heron-scan` with the toolchain from Heron's `lean-toolchain` (via
-[lean4-nix](https://github.com/lenianiva/lean4-nix)) and runs it inside your project's
-`lake env`. Build your project first, then run the Heron ref that matches your toolchain:
-
-```sh
-lake build
-nix run github:wvhulle/heron/lean/v4.31.0 -- Consumer       # lint a library / directory
-nix run github:wvhulle/heron/lean/v4.31.0 -- --fix Foo.lean  # apply fixes
-```
-
-This needs no `require`, no plugin and no `import`. It re-elaborates the files itself, though,
-so it is slower than the plugin setup on large projects. The flake follows lean4-nix, which
-lags a little behind Lean releases. A ref whose toolchain lean4-nix doesn't package yet fails to
-evaluate with `attribute '"vX.Y.Z"' missing`.
-
-## Reporting fixes from the command line (CI, scripts, batch fixing)
-
-With the plugin setup above, `lake lint` builds your libraries and prints every fix in a
-cargo/clippy-style report. Lake's incremental build is the cache, so only changed modules are
-re-elaborated. Arguments after `--` go to the reporter:
-
-```sh
-lake lint                            # report all fixes across the workspace's libraries
-lake lint -- Sparkle.Analog          # restrict to lake targets
-lake lint -- --json | jq             # machine-readable
-lake lint -- --fix                   # rewrite files in place
-```
-
-Heron also ships executables, which run in any project that requires Heron through
-`lake exe …`:
-
-| Command | What it does |
-| --- | --- |
-| `lake exe heron` | What `lake lint` runs. Builds your targets with Heron loaded as a plugin, then prints the fixes. |
-| `lake exe heron-scan` | Self-contained. Imports the dependency closure once and elaborates the targets itself (own incremental cache + parallelism). Needs no plugin wiring; also reads from stdin (`-`). |
-
-Common flags (both): `--json` (machine-readable), `--fix`/`--apply` (rewrite files in place),
-`--color`/`--no-color`. `heron` adds `--no-build` (read an existing sink); `heron-scan` adds
-`--per-file`, `--no-cache`, `--no-parallel`.
-
-```sh
-lake exe heron-scan --fix Foo/Bar.lean   # apply fixes to specific files
-echo 'def f := fun x => x + 1' | lake exe heron-scan -   # lint from stdin
-```
+The `lean-fork/v4.31.0` branch adds features that need the fork: hover popups with the full
+explanation, related-information labels, and import-analysis checks. The repository is mirrored to
+GitHub, so `https://codeberg.org/wvhulle/heron` works as well.
 
 ## Contributing
 
