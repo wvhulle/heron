@@ -28,3 +28,11 @@ def reassignedByPattern : Nat := Id.run do
   let mut b := 0
   (a, b) := (1, 2)
   return a + b
+
+#assertIgnore removeMutWithoutReassignment in
+def reassignedInLoop (xs : List Nat) : Nat := Id.run do
+  let mut total := 0
+  for x in xs do
+    if x > 0 then
+      total := total + x
+  return total
