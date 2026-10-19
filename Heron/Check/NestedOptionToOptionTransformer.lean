@@ -4,15 +4,12 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Meta Parser Heron
 
 private structure NestedOptionToOptionTransformerMatch where
-  stx : TSyntax `term
+  stx : Syntax
   /-- The outer monad applied to its leading args, e.g. `(StateT σ m)` or just `m`. -/
-  outerMonad : TSyntax `term
+  outerMonad : Term
   /-- The `Option`'s value-type args (`α α₁ … αₙ`). -/
   valueArgs : TSyntaxArray `term
   rewriteElaborates : Bool := false
@@ -20,31 +17,33 @@ private structure NestedOptionToOptionTransformerMatch where
 private meta def detectCandidate? :
     Syntax → CommandElabM (Option NestedOptionToOptionTransformerMatch)
   | stx@`($outerFn:ident $outerLeading* (Option $α $αs*)) => do
-    -- Same-constructor nesting belongs to NestedMonadJoin, not this rule.
-    if outerFn.getId == `Option then return none
-    let outerMonad ← if outerLeading.isEmpty
-      then pure (⟨outerFn⟩ : TSyntax `term)
+    let outerMonad ← if outerLeading.isEmpty then pure (outerFn : Term)
       else `(($outerFn $outerLeading*))
-    return some { stx := ⟨stx⟩, outerMonad, valueArgs := #[α] ++ αs }
+    return some { stx, outerMonad, valueArgs := #[α] ++ αs }
   | _ => return none
 
-private meta def optionTType (m : NestedOptionToOptionTransformerMatch) : CommandElabM (TSyntax `term) :=
-  `($(mkIdent `OptionT) $(#[m.outerMonad] ++ m.valueArgs)*)
+set_option hygiene false in
+private meta def optionTType (m : NestedOptionToOptionTransformerMatch) : CommandElabM Term :=
+  `(OptionT $(#[m.outerMonad] ++ m.valueArgs)*)
 
-private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
-    CommandElabM (Option NestedOptionToOptionTransformerMatch) := do
-  let some m ← detectCandidate? node | return none
-  let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
-  let probe := replaceSourceNode cmd m.stx (← optionTType m)
-  return some { m with rewriteElaborates := ← elaboratesWithoutErrorsInProbeNamespace probe }
+private meta def wrapsOptionInAnotherMonad (e : Expr) : MetaM Bool := do
+  if e.getAppFn.isConstOf ``Option then return false
+  outerHasMonadInstance e
+
+private meta def detectInSignature (node : Syntax) :
+    CommandElabM (Array NestedOptionToOptionTransformerMatch) := do
+  let some m ← detectCandidate? node | return #[]
+  let some true ← runMetaMForSyntax m.stx wrapsOptionInAnotherMonad | return #[]
+  return #[{ m with rewriteElaborates := ← rewriteElaborates m.stx (← optionTType m) }]
 
 private meta instance : Check NestedOptionToOptionTransformerMatch where
   name := `nestedOptionToOptionTransformer
   description := "Suggests `OptionT` instead of nesting `Option` inside another monad in a signature; the fix is only offered when the rewritten definition still elaborates."
-  kinds := #[``Lean.Parser.Command.declaration]
+  kinds := #[``Term.app]
+  within := #[``Command.declSig, ``Command.optDeclSig]
   severity := .information
   category := .style
-  detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
+  detect := detectInSignature
   message := fun _ => m!"Consider using `OptionT` instead of nesting `Option`"
   emphasize := fun m => m.stx
   sources := #[.functionalProgrammingInLean "Monad transformers"
