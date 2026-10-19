@@ -7,8 +7,7 @@ public import Heron.Check.RemoveMutWithoutReassignment
 public import Heron.Check.MatchOnBoolToIfThenElse
 public import Heron.Check.MergeMatchArmsWithSameBody
 public import Heron.Check.MergeBindersWithSameType
-public import Heron.Check.NestedOptionToOptionTransformer
-public import Heron.Check.NestedExceptToExceptTransformer
+public import Heron.Check.NestedMonadToTransformer
 public import Heron.Check.RemoveLetWildcardOnUnitAction
 public import Heron.Check.TupleMatchToSimultaneousMatch
 public import Heron.Check.WildcardMatchToIfLet
