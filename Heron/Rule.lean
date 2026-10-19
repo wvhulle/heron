@@ -288,12 +288,15 @@ meta def boundVariableReferences (binder scope : Syntax) : CommandElabM (Array S
 meta def elaboratesLike (original : Syntax) (candidate : Term) : CommandElabM Bool := do
   let infos := (← collectInfoTrees original).flatMap collectTermInfos
   let some (ci, ti) := infos.find? fun (_, ti) => sameRange ti.stx original | return false
-  let candidateExpr : TermElabM Expr := Term.withoutErrToSorry do
+  let candidateExpr : TermElabM Expr := withRef original <| Term.withoutErrToSorry do
     let e ← Term.elabTermEnsuringType candidate ti.expectedType?
     Term.synthesizeSyntheticMVarsNoPostponing
     instantiateMVars e
+  let fileMap ← getFileMap
+  let fileName ← getFileName
   try
     runInfoMetaM ci ti.lctx do
+      withTheReader Core.Context (fun ctx => { ctx with fileMap, fileName }) do
       Meta.withLocalInstances (ti.lctx.decls.toList.filterMap id) do
         let candidate ← candidateExpr.run'
         Meta.withReducible <| Meta.isDefEq (← instantiateMVars ti.expr) candidate
