@@ -11,8 +11,9 @@
 - [`ToolSupport/`](./ToolSupport): code the tools share, kept out of the plugin library. A file
   name that starts with a tool's root name (`LakeLint*`, `StandaloneScan*`) serves that tool;
   `FixReportRendering` and `HeronPluginLocation` are used by several.
-- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree` and `RuleShowcase.lean`, see
-  [Developer tools](#developer-tools).
+- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree`, `heron-self-lint` and
+  `RuleShowcase.lean`, see [Developer tools](#developer-tools) and
+  [What the self-lints reject](#what-the-self-lints-reject).
 - [`EndToEndTests/`](./EndToEndTests): one directory per usage scenario (`LakefileSetup`,
   `PerFileImport`, `NoProjectChanges`), each a small Lake project with the Nu scripts that test
   it. `SampleConsumerLibrary` holds the code the first and last scenarios run Heron on, and
@@ -21,18 +22,67 @@
 - [`Lean4NixManifests/`](./Lean4NixManifests): Lean toolchains that lean4-nix does not package
   yet.
 
-## Adding New Rules
+## Writing a rule
 
-Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in [`Heron/Refactor/`](./Heron/Refactor). Each rule file contains:
+Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
+[`Heron/Refactor/`](./Heron/Refactor). A rule is one file `<Rule>.lean` with a match struct, a
+one-sentence `description` (`heron-scan rules` prints it), `detect`, `message`, `replacements`
+and `sources`, plus the tests `<Rule>/Detects.lean` and `<Rule>/Ignores.lean`. The file ends
+with `register_check <Match>` or `register_refactor <Match>`. Registration refuses a rule whose
+`kinds` name no syntax node kind, that leaves `kinds` empty without `wholeCommand := true`, or
+that lacks either test file.
 
-- A match data struct describing what was detected
-- A `detect` function that scans user source code
-- A set of `replacements` to fix a single match
-- The `sources` the rule is based on, from `Heron.Source`: a book section, the Lean standard
-  library or Mathlib style guide, an hlint hint or a Clippy lint. List every source you used and
-  add the same line under the rule in [docs/Rules.md](./docs/Rules.md). Leave `sources` out
-  until you have found one.
-- Inline tests for false positives, replacements, and negatives
+Rules work the way the linters in Lean core and Mathlib do: they match the structure Lean has
+already parsed and elaborated, and never go back to the source text. Concretely:
+
+1. **Match with quotation patterns at the declared kinds.** `kinds` lists the node kinds the rule
+   fires on and the framework dispatches to `detect` there; `detect` then matches with
+   `` `(doElem| if $cond then $body) ``-style patterns whose antiquotations name every part the
+   rule needs, and stores them as `TSyntax` in the match struct. Use `dump-syntax-tree` (below)
+   to find the kind and the shape. `wholeCommand := true` with `kinds := #[]` is for rules that
+   must see a whole declaration, such as the signature-based transformer rules; it is not a way
+   to walk the tree yourself.
+2. **Take meaning from elaboration, not from spelling.** When a rule depends on a type, an
+   instance, a binder or what a name resolves to, ask the info tree: `runMetaMForSyntax`,
+   `runMetaMForEachExactSyntax`, `collectTermInfos`, `elaboratesToApplicationOf`,
+   `outerHasMonadInstance` and `elaboratesWithoutErrorsInProbeNamespace` in `Heron/Rule.lean`,
+   `Heron/Check.lean` and `Heron/Monad.lean`. `Lean.Linter.ConstructorAsVariable` and
+   `Lean.Linter.UnusedVariables` in Lean core are the models;
+   `Heron/Check/RemoveLetWildcardOnUnitAction.lean` and `NestedExprAppToMkAppN.lean` are local
+   ones. An analysis that follows a variable follows its `FVarId`, not its written name.
+3. **Build the fix with a quotation** in the replacement's `category`, reusing the matched
+   `TSyntax` pieces; delete with `Syntax.missing`; make literals with `quote`.
+   `Heron/Check/TupleMatchToSimultaneousMatch.lean` and `RemoveIdRunWithoutEffects.lean` show
+   the shape; `Lean.Elab.Tactic.Simpa` is the upstream example. A check that only flags code
+   leaves `replacements` out, and the listing then says it has no automatic fix.
+4. **Test every shape and every guard.** `Detects.lean` has one `#assertCheck … becomes` per
+   rewrite the rule performs. `Ignores.lean` has one `#assertIgnore` per `return #[]` branch in
+   `detect`, so each guard against a false positive is pinned.
+5. **Name the sources.** `sources` lists where the idea comes from, from `Heron.Source`: a book
+   section, the Lean standard library or Mathlib style guide, an hlint hint or a Clippy lint.
+   Leave `sources` out until you have found one.
+6. **Run it on real code before merging**: inside a built checkout of a sizeable project at the
+   toolchain's tag, `heron-scan --rule <name> <dir>`, and read every hit.
+
+### What the self-lints reject
+
+Seven of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.lean` in CI
+(the `rule-hygiene` check), and any finding fails the build:
+
+| Check | Rejects |
+| --- | --- |
+| `positionalSyntaxAccess` | `getArg`, `getArgs`, `getNumArgs`, `stx[i]`, `subtreeNodes`, `signatureNodes` |
+| `syntaxKindOrAtomInspection` | `getKind`, `isOfKind`, `getAtomVal`, `getHead?` |
+| `syntheticSyntaxConstruction` | `mkAtom`, `mkIdent`, `mkNode`, `mkNullNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns |
+| `sourcePositionInRule` | `getPos?`, `getTailPos?`, `getRange?`, `FileMap` lookups |
+| `sourceTextInRule` | `reprint`, `getSubstring?`, `Name.toString`, `String.splitOn`, `trimAscii*`, `startsWith`, `endsWith` |
+| `syntaxKindComparisonToQuotationPattern` | a kind comparison followed by positional access |
+| `tsyntaxRawToTypedAccess` | `.raw` followed by positional access |
+
+Run them locally with `lake build && lake exe heron-self-lint`. A rule written before these
+checks existed may carry
+`set_option linter.<check> false` at the top of its file; that list only shrinks, and a new rule
+never gets one.
 
 ## Testing
 
@@ -60,12 +110,6 @@ becomes `(example : Nat := (42))
 #assertIgnore mergeConsecutiveIntros in
 example : Nat → Nat → True := by intro a; skip; intro b; exact trivial
 ```
-
-## Things not to use in rule implementations
-
-You likely should not access the `raw` field of syntax objects. You can attach extra information to patterns inside quotations so that the extracted object has the data you need without raw access.
-
-Dont index into the fields of syntax objects with integer indices and unchecked access. Use anti-quotations instead.
 
 ## End-to-end tests
 
