@@ -25,6 +25,8 @@ steps:
     <<: *build_flake_check_named_after_step
   - name: developer-tools
     <<: *build_flake_check_named_after_step
+  - name: rule-hygiene
+    <<: *build_flake_check_named_after_step
   - name: lakefile-setup-build-and-lint
     <<: *build_flake_check_named_after_step
   - name: lakefile-setup-cold-build

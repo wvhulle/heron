@@ -95,6 +95,26 @@
         text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
       };
 
+      self-lint-build = buildLakeTargets {
+        name = "heron-self-lint-build";
+        targets = "heron-self-lint";
+        lakeArtifacts = library;
+      };
+
+      rule-hygiene = pkgs.stdenv.mkDerivation {
+        name = "heron-rule-hygiene";
+        src = ./.;
+        nativeBuildInputs = [ pkgs.lean.lean-all ];
+        buildPhase = ''
+          runHook preBuild
+          cp -R ${self-lint-build}/.lake .
+          chmod -R +w .lake
+          lake exe heron-self-lint
+          runHook postBuild
+        '';
+        installPhase = "touch $out";
+      };
+
       language-server-build = buildLakeTargets {
         name = "heron-language-server-build";
         targets = "heron-language-server";
@@ -128,7 +148,7 @@
 
       checks.${system} = {
         rules = library;
-        inherit developer-tools;
+        inherit developer-tools rule-hygiene;
       }
       // import ./EndToEndTests {
         inherit

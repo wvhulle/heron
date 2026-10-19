@@ -22,6 +22,10 @@ lean_lib Executables where globs := #[`Executables.*]
 
 lean_exe «dump-syntax-tree» where root := `DeveloperTools.DumpSyntaxTree
 
+lean_exe «heron-self-lint» where
+  root := `DeveloperTools.SelfLint
+  supportInterpreter := true
+
 lean_exe heron where
   root := `Executables.LakeLintDriver
   supportInterpreter := true

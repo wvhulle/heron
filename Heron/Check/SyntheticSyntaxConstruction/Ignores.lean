@@ -1,0 +1,15 @@
+module
+
+meta import Heron.Assert
+meta import Heron.Check.SyntheticSyntaxConstruction
+
+#assertIgnore syntheticSyntaxConstruction in
+def identity : Lean.MacroM Lean.Syntax := `(fun x => x)
+
+#assertIgnore syntheticSyntaxConstruction in
+def rebuild : Lean.Syntax → Lean.MacroM Lean.Syntax
+  | `(($a, $b)) => `(($b, $a))
+  | _ => Lean.Macro.throwUnsupported
+
+#assertIgnore syntheticSyntaxConstruction in
+def one : Lean.NumLit := Lean.quote (1 : Nat)
