@@ -25,11 +25,8 @@ private meta def singlePatternArm? :
   | _ => none
 
 private meta def detectMatchToIfLet? : Syntax → Option WildcardMatchToIfLetMatch
-  | stx@`(match%$matchKw $discr:term with $a0:matchAlt $a1:matchAlt) => do
-    let (patAlt, wildAlt) ← match wildcardArmRhs? a0, wildcardArmRhs? a1 with
-      | none, some _ => some (a0, a1)
-      | some _, none => some (a1, a0)
-      | _, _ => none
+  | stx@`(match%$matchKw $discr:term with $patAlt:matchAlt $wildAlt:matchAlt) => do
+    guard (wildcardArmRhs? patAlt).isNone
     let (pat, thenRhs) ← singlePatternArm? patAlt
     let elseRhs ← wildcardArmRhs? wildAlt
     return { matchStx := stx, matchKw, pat, discr, thenRhs, elseRhs }
