@@ -11,12 +11,6 @@ namespace Heron.Register
 
 open Lean Elab Command Term Parser
 
-meta def selfLints : Array Name := #[
-  `positionalSyntaxAccess, `syntaxKindOrAtomInspection, `syntheticSyntaxConstruction,
-  `sourcePositionInRule, `sourceTextInRule]
-
-meta initialize selfLints.forM registerLinterOption
-
 private meta unsafe def evalRuleKindsUnsafe (rule : Ident) : TermElabM (Array Name) := do
   evalTerm (Array Name) (mkApp (mkConst ``Array [Level.zero]) (mkConst ``Name))
     (← `(Heron.Rule.kinds (α := $rule)))

@@ -8,7 +8,6 @@ public meta import Lean.Server.CodeActions.Basic
 -- `withSetOptionIn` lives in `Lean.Linter.Basic`; under newer toolchains it is no
 -- longer pulled in transitively, so import it directly (see `heronMasterLinter`).
 meta import Lean.Linter.Basic
-meta import Lean.Elab.BuiltinTerm
 
 public section
 
@@ -30,48 +29,6 @@ meta instance : ToString Category where
     | .simplification => "simplification"
     | .performance => "performance"
     | .correctness => "correctness"
-
-private meta def positionalSyntaxAccessors : Array Name :=
-  #[``Lean.Syntax.getArg, ``Lean.Syntax.getArgs, ``Lean.Syntax.getNumArgs, ``Lean.Syntax.getIdAt]
-
-private meta def indexingFunctions : Array Name :=
-  #[``GetElem.getElem, ``GetElem?.getElem?, ``GetElem?.getElem!]
-
-private meta def indexesIntoSyntax (e : Expr) : Bool :=
-  indexingFunctions.any e.isAppOf && e.getAppArgs[0]?.any (·.isConstOf ``Lean.Syntax)
-
-meta def isPositionalSyntaxAccess (e : Expr) : Bool :=
-  positionalSyntaxAccessors.any e.getAppFn.isConstOf || indexesIntoSyntax e
-
-private meta def isApplicationSyntax : Syntax → Bool
-  | `($_:term $_*) => true
-  | _ => false
-
-private meta def termInfosOutsideNameLiterals (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
-  let collect : StateM (Array (ContextInfo × TermInfo)) Unit :=
-    tree.visitM' (preNode := fun ci info _ => do
-      let .ofTermInfo ti := info | return true
-      if ti.elaborator == ``Lean.Elab.Term.elabDoubleQuotedName then return false
-      modify (·.push (ci, ti))
-      return true)
-  (collect.run #[]).2
-
-private meta def originalTermInfosWithin (node : Syntax) (keep : Syntax → Bool) (isTarget : Expr → Bool) :
-    CommandElabM (Array Syntax) := do
-  let some range := node.getRange? | return #[]
-  let trees ← collectInfoTrees node
-  let hits ← (trees.flatMap termInfosOutsideNameLiterals).filterM fun (ci, ti) => do
-    let .original .. := ti.stx.getHeadInfo | return false
-    unless ti.stx.getRange?.any fun r => range.start ≤ r.start && r.stop ≤ range.stop do return false
-    unless keep ti.stx do return false
-    runInfoMetaM ci ti.lctx do return isTarget (← instantiateMVars ti.expr)
-  return (deduplicateTermInfos hits).map (·.2.stx)
-
-meta def originalCallSitesOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) :=
-  originalTermInfosWithin node (!isApplicationSyntax ·) isTarget
-
-meta def originalApplicationsOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) :=
-  originalTermInfosWithin node isApplicationSyntax isTarget
 
 class Check (α : Type) extends Rule α where
   /-- Diagnostic severity. -/

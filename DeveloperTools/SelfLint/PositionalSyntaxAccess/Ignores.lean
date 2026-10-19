@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import Heron.Check.PositionalSyntaxAccess
+meta import DeveloperTools.SelfLint.PositionalSyntaxAccess
 
 #assertIgnore positionalSyntaxAccess in
 def swapPair : Lean.Syntax → Lean.MacroM Lean.Syntax

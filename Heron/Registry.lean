@@ -24,12 +24,6 @@ public import Heron.Check.StringConcatenationToInterpolation
 public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
 public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
--- Meta-programming hygiene
-public import Heron.Check.PositionalSyntaxAccess
-public import Heron.Check.SyntaxKindOrAtomInspection
-public import Heron.Check.SyntheticSyntaxConstruction
-public import Heron.Check.SourcePositionInRule
-public import Heron.Check.SourceTextInRule
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline

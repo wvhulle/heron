@@ -1,20 +1,29 @@
 import ToolSupport.FixReportRendering
 import ToolSupport.StandaloneScanSharedEnvironment
-import Heron.Register
+import DeveloperTools.SelfLint.PositionalSyntaxAccess
+import DeveloperTools.SelfLint.SyntaxKindOrAtomInspection
+import DeveloperTools.SelfLint.SyntheticSyntaxConstruction
+import DeveloperTools.SelfLint.SourcePositionInRule
+import DeveloperTools.SelfLint.SourceTextInRule
 
 /-!
 # `heron-self-lint` — Heron's own rules, checked against their implementations
 
-Runs the self-lint checks named in `Heron.Register.selfLints` over every rule file in
-`Heron/Check` and `Heron/Refactor`, prints the findings like `heron-scan` does, and exits with
-status 1 when there are any. Requires the library to be built.
+Runs the self-lint checks named in `selfLints` over every rule file in `Heron/Check`,
+`Heron/Refactor` and `DeveloperTools/SelfLint`, prints the findings like `heron-scan` does, and
+exits with status 1 when there are any. Requires the library to be built.
 
     lake build && lake exe heron-self-lint
 -/
 
 open ToolSupport Lean
 
-def ruleDirectories : Array System.FilePath := #["Heron" / "Check", "Heron" / "Refactor"]
+def selfLints : Array Name := #[
+  `positionalSyntaxAccess, `syntaxKindOrAtomInspection, `syntheticSyntaxConstruction,
+  `sourcePositionInRule, `sourceTextInRule]
+
+def ruleDirectories : Array System.FilePath :=
+  #["Heron" / "Check", "Heron" / "Refactor", "DeveloperTools" / "SelfLint"]
 
 def ruleFiles : IO (Array String) := do
   let mut files := #[]
@@ -26,7 +35,7 @@ def ruleFiles : IO (Array String) := do
 unsafe def main (_ : List String) : IO UInt32 := do
   Lean.initSearchPath (← Lean.findSysroot)
   Lean.enableInitializersExecution
-  let checks ← match selectChecks (← Heron.heronRuleRegistry.get) Heron.Register.selfLints with
+  let checks ← match selectChecks (← Heron.heronRuleRegistry.get) selfLints with
     | .error e => do IO.eprintln s!"heron-self-lint: {e}"; return 1
     | .ok checks => pure checks
   let reports ← lintShared (all := false) (useCache := false) checks 16 (← ruleFiles)

@@ -265,7 +265,7 @@ private meta def sameRange (a b : Syntax) : Bool :=
   | some ra, some rb => ra.start == rb.start && ra.stop == rb.stop
   | _, _ => false
 
-private meta def liesWithin (scope inner : Syntax) : Bool :=
+meta def liesWithin (scope inner : Syntax) : Bool :=
   match scope.getRange?, inner.getRange? with
   | some outer, some r => outer.start ≤ r.start && r.stop ≤ outer.stop
   | _, _ => false

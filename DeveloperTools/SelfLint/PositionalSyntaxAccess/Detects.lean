@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import Heron.Check.PositionalSyntaxAccess
+meta import DeveloperTools.SelfLint.PositionalSyntaxAccess
 
 #assertCheck positionalSyntaxAccess in
 def firstArg (stx : Lean.Syntax) : Lean.Syntax := stx.getArg 0

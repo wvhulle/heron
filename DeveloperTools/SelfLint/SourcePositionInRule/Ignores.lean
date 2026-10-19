@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import Heron.Check.SourcePositionInRule
+meta import DeveloperTools.SelfLint.SourcePositionInRule
 
 #assertIgnore sourcePositionInRule in
 def firstOfPair : Lean.Syntax → Option Lean.Syntax

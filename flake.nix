@@ -85,7 +85,7 @@
 
       developer-tools = buildLakeTargets {
         name = "heron-developer-tools";
-        targets = "dump-syntax-tree DeveloperTools.RuleShowcase";
+        targets = "dump-syntax-tree DeveloperTools";
         lakeArtifacts = library;
       };
 

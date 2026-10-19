@@ -11,8 +11,8 @@
 - [`ToolSupport/`](./ToolSupport): code the tools share, kept out of the plugin library. A file
   name that starts with a tool's root name (`LakeLint*`, `StandaloneScan*`) serves that tool;
   `FixReportRendering` and `HeronPluginLocation` are used by several.
-- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree`, `heron-self-lint` and
-  `RuleShowcase.lean`, see [Developer tools](#developer-tools) and
+- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree`, `heron-self-lint` with the
+  self-lint checks in `SelfLint/`, and `RuleShowcase.lean`, see [Developer tools](#developer-tools) and
   [What the self-lints reject](#what-the-self-lints-reject).
 - [`EndToEndTests/`](./EndToEndTests): one directory per usage scenario (`LakefileSetup`,
   `PerFileImport`, `NoProjectChanges`), each a small Lake project with the Nu scripts that test
@@ -70,8 +70,9 @@ already parsed and elaborated, and never go back to the source text. Concretely:
 
 ### What the self-lints reject
 
-Five of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.lean` in CI
-(the `rule-hygiene` check), and any finding fails the build:
+Five checks in `DeveloperTools/SelfLint/` run over `Heron/Check/*.lean`, `Heron/Refactor/*.lean`
+and their own files in CI (the `rule-hygiene` check), and any finding fails the build. They live
+outside the `Heron` library, so `linter.heron` never turns them on in other projects:
 
 | Check | Rejects |
 | --- | --- |

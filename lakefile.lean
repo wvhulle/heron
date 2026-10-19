@@ -14,7 +14,7 @@ package heron where
   globs := #[`Heron.*]
   defaultFacets := #[`lean_lib.shared]
 
-lean_lib DeveloperTools where globs := #[`DeveloperTools.*]
+@[default_target] lean_lib DeveloperTools where globs := #[`DeveloperTools.+]
 
 lean_lib ToolSupport where globs := #[`ToolSupport.*]
 
