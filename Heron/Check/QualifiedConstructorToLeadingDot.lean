@@ -59,9 +59,8 @@ private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   detect := detectQualifiedConstructors
   message := fun m => m!"Use `.{m.constructorField}` instead of the fully qualified constructor"
   emphasize := fun m => m.ident
-  reference := some
-    { topic := "Leading dot notation"
-      url := "https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#leading-dot-notation" }
+  sources := #[.functionalProgrammingInLean "Leading dot notation"
+    "Monads/Additional-Conveniences/#leading-dot-notation"]
   explanation := fun _ =>
     m!"When the expected type is known, Lean resolves `.c` in that type's namespace, so the \
        constructor can be written without repeating the type name. This makes pattern matches and \

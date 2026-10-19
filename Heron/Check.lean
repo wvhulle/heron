@@ -72,13 +72,6 @@ meta def elaboratesMentioningProjection (stx : Syntax) (structName constName : N
   enclosingAtSameStart.anyM fun (ci, ti) => runInfoMetaM ci ti.lctx do
     return mentionsProjectionOf structName constName (← instantiateMVars ti.expr)
 
-/-- A reference to external documentation that justifies a check rule. -/
-structure Reference where
-  /-- Short topic description shown in parentheses, e.g. `` `rfl` tactic ``. -/
-  topic : String
-  /-- URL to the external documentation. -/
-  url : String
-
 class Check (α : Type) extends Rule α where
   /-- Diagnostic severity. -/
   severity : MessageSeverity
@@ -90,8 +83,6 @@ class Check (α : Type) extends Rule α where
   tags : Array Lsp.DiagnosticTag := #[]
   /-- Detailed explanation shown in hover popup. -/
   explanation : α → MessageData := fun _ => m!""
-  /-- Optional reference rendered as a markdown link in the hover popup. -/
-  reference : Option Reference := none
 
 /-- Wrap `MessageData` with the upstream tag names that
 `Lean.Widget.InteractiveDiagnostic` recognises and translates into LSP
@@ -107,7 +98,7 @@ meta def applyDiagnosticTags (tags : Array Lsp.DiagnosticTag) (msg : MessageData
     | .deprecated  => MessageData.tagged `Lean.Linter.deprecatedAttr acc
 
 /-- Emit a check diagnostic. The published `Diagnostic.message` carries only the
-short headline. The explanation / reference / disable hint are packed into
+short headline. The explanation / sources / disable hint are packed into
 `Diagnostic.data?` as `DiagnosticHoverData`, which Lean's hover handler renders
 into the hover popup at request time.
 
@@ -116,21 +107,21 @@ at LSP request time. Per-replacement labels and any extra labels flow into
 `Diagnostic.relatedInformation` via the patched `BaseMessage.relatedInformation?`. -/
 meta def emitCheck (node : Syntax) (severity : MessageSeverity) (tags : Array Lsp.DiagnosticTag)
     (ruleName : Name) (optName : Name) (message explanation : MessageData)
-    (reference : Option Reference := none) : CommandElabM Unit := do
+    (sources : Array Source := #[]) : CommandElabM Unit := do
   let taggedMsg := applyDiagnosticTags tags message
   let ref := replaceRef node (← MonadLog.getRef)
   let pos := ref.getPos?.getD 0
   let endPos := ref.getTailPos?.getD pos
   let fileMap ← getFileMap
-  let referenceMd : MessageData := match reference with
-    | some ref => m!"**Reference ({ref.topic}):** {ref.url}\n\n"
-    | none => m!""
+  let sourcesMd : MessageData := sources.foldl (init := m!"") fun acc source =>
+    let link := source.toLink
+    acc ++ m!"**Source ({link.title}):** {link.url}\n\n"
   let disableMd : MessageData := m!"_Disable with `set_option {optName} false`._"
   -- Stock Lean has no `Message.diagnosticData?` channel for a separate hover
-  -- popup (a fork-only extension), so fold the explanation / reference / disable
+  -- popup (a fork-only extension), so fold the explanation / sources / disable
   -- hint directly into the published diagnostic message instead.
   let body : MessageData :=
-    taggedMsg ++ m!"\n\n" ++ explanation ++ m!"\n\n" ++ referenceMd ++ disableMd
+    taggedMsg ++ m!"\n\n" ++ explanation ++ m!"\n\n" ++ sourcesMd ++ disableMd
   let msgData ← addMessageContext (body.tagWithErrorName (lspName ruleName))
   let severity := if warningAsError.get (← getOptions) && severity == .warning then .error else severity
   let msg : Message :=
@@ -194,8 +185,7 @@ structure RuleEntry where
   build quick-fix code actions and by `collectFixRecords` to carry the hover-popup
   explanation into the CLI's `FixRecord`. -/
   findActions : Syntax → CommandElabM (Array (MessageData × MessageData × Array Replacement))
-  /-- The rule's external-documentation reference, if any (rule-level constant). -/
-  reference? : Option Reference
+  sources : Array Source
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 
@@ -235,7 +225,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
             (message := Rule.message m) (explanation := Check.explanation m)
-            (reference := Check.reference (α := α))
+            (sources := Rule.sources (α := α))
         let primaryRange? := (Check.emphasize m).getRange?
         let replacementRanges := repls.filterMap (·.oldSyntax.getRange?)
         let extraLabels ← Rule.labels (α := α) m
@@ -275,14 +265,13 @@ meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array Fix
   let mut out : Array FixRecord := #[]
   for entry in entries do
     if entry.isEnabled opts then
-      let refTopic := (entry.reference?.map (·.topic)).getD ""
-      let refUrl := (entry.reference?.map (·.url)).getD ""
+      let links := entry.sources.map (·.toLink)
       for (msg, expl, repls) in (← entry.findActions stx) do
         let title := (← msg.toString).trimAscii.toString
         let explStr := (← expl.toString).trimAscii.toString
         for repl in repls do
           if let some edit ← liftCoreM (repl.toTextEdit fileMap) then
-            out := out.push { rule := entry.name.toString, message := title, edit, explanation := explStr, referenceTopic := refTopic, referenceUrl := refUrl }
+            out := out.push { rule := entry.name.toString, message := title, edit, explanation := explStr, sources := links }
   if all then
     let runners ← testRunnerRegistry.get
     for (name, runner) in runners.toList do
@@ -359,7 +348,7 @@ meta def Check.register [Check α] : IO Unit := do
         isEnabled := Rule.isEnabled (α := α)
         setup := Check.makeHandler (α := α)
         findActions := Check.findActions (α := α)
-        reference? := Check.reference (α := α) }
+        sources := Rule.sources (α := α) }
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in

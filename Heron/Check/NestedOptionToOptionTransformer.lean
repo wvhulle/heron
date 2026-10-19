@@ -42,9 +42,8 @@ private meta instance : Check NestedOptionToOptionTransformerMatch where
   detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
   message := fun _ => m!"Consider using `OptionT` instead of nesting `Option`"
   emphasize := fun m => m.stx
-  reference := some
-    { topic := "Monad transformers"
-      url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#OptionT" }
+  sources := #[.functionalProgrammingInLean "Monad transformers"
+    "Monad-Transformers/A-Monad-Construction-Kit/#OptionT"]
   explanation := fun m =>
     m!"`OptionT m α` is defined as `m (Option α)`, so this signature already is the transformer \
        type. Writing it as `OptionT` lets `do`-notation handle the failure case: `failure` \

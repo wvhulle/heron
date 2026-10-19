@@ -73,9 +73,7 @@ private meta instance : Check SingleUseBindToNestedActionMatch where
   detect := fun stx => pure (detectSingleUseBinds stx)
   message := fun _ => m!"Use a nested action `(← …)` instead of binding a name that is used once"
   emphasize := fun m => m.bindStx
-  reference := some
-    { topic := "Nested actions"
-      url := "https://lean-lang.org/functional_programming_in_lean/Monads/do--Notation-for-Monads/" }
+  sources := #[.functionalProgrammingInLean "Nested actions" "Monads/do--Notation-for-Monads/"]
   explanation := fun _ =>
     m!"Inside a `do` block, `(← act)` runs `act` just before the statement it appears in and \
        stands for its result, so a name bound with `let x ← act` and used once in the next \

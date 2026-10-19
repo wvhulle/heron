@@ -66,9 +66,8 @@ private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch 
   detect := fun cmd => pure (detectMatchOnParameters cmd).toArray
   message := fun _ => m!"Match on the parameters directly with `def f : A → B | pattern => …`"
   emphasize := fun m => m.matchKw
-  reference := some
-    { topic := "Pattern-matching definitions"
-      url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions" }
+  sources := #[.functionalProgrammingInLean "Pattern-matching definitions"
+    "Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions"]
   explanation := fun _ =>
     m!"When a parameter is named only to be matched on immediately, the cases can be written \
        directly after the signature: move the parameter's type to the right of the colon, so the \

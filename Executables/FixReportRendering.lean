@@ -115,18 +115,15 @@ private def sourceLine (g : Gutter) (sp ep : Position) (lineText : String) (ln :
   else [src]
 
 /-- The hover-popup detail, preceded by a blank line: the explanation `note` (or the rule
-id when absent), an optional reference, and the disable hint. -/
+id when absent), the rule's sources, and the disable hint. -/
 private def notesLines (g : Gutter) (fix : FixRecord) : List String :=
   let note :=
     if fix.explanation.isEmpty then g.eq ++ g.pal.bold "note: " ++ g.pal.dim s!"heron::{fix.rule}"
     else g.eq ++ g.pal.bold "note: " ++ g.pal.dim fix.explanation
-  let refs : List String :=
-    if fix.referenceUrl.isEmpty then []
-    else
-      let topic := if fix.referenceTopic.isEmpty then "" else g.pal.dim s!" ({fix.referenceTopic})"
-      [g.eq ++ g.pal.bold "reference: " ++ osc8 g.pal.on fix.referenceUrl (g.pal.url fix.referenceUrl) ++ topic]
+  let sourceLines := fix.sources.toList.map fun link =>
+    g.eq ++ g.pal.bold "source: " ++ osc8 g.pal.on link.url (g.pal.url link.url) ++ g.pal.dim s!" ({link.title})"
   let help := g.eq ++ g.pal.bold "help: " ++ g.pal.dim s!"disable with `set_option linter.{fix.rule} false`"
-  ("" :: note :: refs) ++ [help]
+  ("" :: note :: sourceLines) ++ [help]
 
 /-- One `cargo clippy`-style diagnostic block for a fix. -/
 def renderFix (pal : Palette) (file fileUri : String) (fm : FileMap)

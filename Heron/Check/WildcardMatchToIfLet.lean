@@ -51,7 +51,7 @@ private meta instance : Check WildcardMatchToIfLetMatch where
     return #[m]
   message := fun _ => m!"Use `if let` instead of two-arm `match` with wildcard"
   emphasize := fun m => m.matchStx
-  reference := some { topic := "if let", url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#if-let" }
+  sources := #[.functionalProgrammingInLean "if let" "Getting-to-Know-Lean/Additional-Conveniences/#if-let"]
   explanation := fun _ =>
     m!"When only one constructor of a sum type is of interest, `if let pat := e then … else …` \
        states that directly, and in some contexts reads better than a two-arm `match` with a \

@@ -47,9 +47,8 @@ private meta instance : Check StringConcatenationToInterpolationMatch where
   detect := detectStringConcatenation
   message := fun _ => m!"Use string interpolation `s!\"…\"` instead of concatenating with `++`"
   emphasize := fun m => m.concatenation
-  reference := some
-    { topic := "String interpolation"
-      url := "https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#string-interpolation" }
+  sources := #[.functionalProgrammingInLean "String interpolation"
+    "Getting-to-Know-Lean/Additional-Conveniences/#string-interpolation"]
   explanation := fun _ =>
     m!"Prefixing a string with `s!` replaces each `\{e}` with `toString e`, like f-strings in \
        Python or `$\"…\"` strings in C#. For example, `\"Hello, \" ++ name ++ \"!\"` can be \

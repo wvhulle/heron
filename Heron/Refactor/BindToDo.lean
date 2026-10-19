@@ -32,6 +32,7 @@ private meta partial def collectBindChain (fullStx : Syntax) (stx : TSyntax `ter
 private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
   kinds := #[`«term_>>=_»]
+  sources := #[.functionalProgrammingInLean "do-notation for monads" "Monads/do--Notation-for-Monads/"]
   detect := fun stx => pure <|
     let m := collectBindChain stx ⟨stx⟩
     if m.bindings.isEmpty then #[] else #[m]

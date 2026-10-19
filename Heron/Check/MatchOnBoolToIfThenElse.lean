@@ -43,7 +43,7 @@ private meta instance : Check MatchOnBoolToIfThenElseMatch where
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
-  reference := none
+  sources := #[.hlint "case a of {True -> t; False -> f} ==> if a then t else f"]
   explanation := fun _ =>
     m!"Pattern matching on `true`/`false` can be written as `if ... then ... else ...`, which is \
        more concise. The rewrite is only offered where it type-checks: when the result type \

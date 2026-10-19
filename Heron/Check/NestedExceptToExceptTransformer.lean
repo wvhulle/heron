@@ -44,9 +44,8 @@ private meta instance : Check NestedExceptToExceptTransformerMatch where
   detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
   message := fun _ => m!"Consider using `ExceptT` instead of nesting `Except`"
   emphasize := fun m => m.stx
-  reference := some
-    { topic := "Monad transformers"
-      url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#exceptions" }
+  sources := #[.functionalProgrammingInLean "Monad transformers"
+    "Monad-Transformers/A-Monad-Construction-Kit/#exceptions"]
   explanation := fun m =>
     m!"`ExceptT ε m α` is defined as `m (Except ε α)`, so this signature already is the \
        transformer type. Writing it as `ExceptT` lets `do`-notation handle the error case: \

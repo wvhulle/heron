@@ -4,6 +4,7 @@ public import Lean.Data.Lsp.Basic
 public import Lean.Data.Lsp.Utf16
 public import Lean.Data.Json
 public import Lean.Data.Position
+public import Heron.Source
 
 public section
 
@@ -32,10 +33,7 @@ structure FixRecord where
   edit : Lsp.TextEdit
   /-- Detailed explanation (hover popup body). Empty ⇒ none. -/
   explanation : String := ""
-  /-- Reference topic shown in parentheses. Empty ⇒ no reference. -/
-  referenceTopic : String := ""
-  /-- Reference URL. Empty ⇒ no reference. -/
-  referenceUrl : String := ""
+  sources : Array SourceLink := #[]
   deriving ToJson, FromJson
 
 /-- Apply non-overlapping LSP `TextEdit`s to a source string. Edits are sorted by range start

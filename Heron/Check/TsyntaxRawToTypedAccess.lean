@@ -33,9 +33,7 @@ private meta instance : Check TsyntaxRawToTypedAccessMatch where
   detect := detectRawEscapesBeforePositionalAccess
   message := fun _ => m!"Avoid `.raw` on `TSyntax` followed by positional child access — use a typed pattern instead"
   emphasize := fun m => m.fullStx
-  reference := some
-    { topic := "Typed syntax"
-      url := "https://leanprover-community.github.io/lean4-metaprogramming-book/main/05_syntax.html#typed-syntax" }
+  sources := #[.metaprogrammingInLean "Typed syntax" "05_syntax.html#typed-syntax"]
   explanation := fun _ =>
     m!"Reaching for `.raw` discards the syntax category bound by `TSyntax`, and this declaration \
        then indexes the underlying `Syntax` by position (`getArg`, `getArgs`, `stx[i]`), which \

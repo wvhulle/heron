@@ -5,6 +5,7 @@ public meta import Lean.Elab.BuiltinCommand
 public meta import Lean.Server.InfoUtils
 public meta import Lean.PrettyPrinter
 public meta import Heron.Profiling
+public meta import Heron.Source
 
 public section
 
@@ -72,6 +73,7 @@ class Rule (α : Type) where
   level of a nested chain and want only the outermost match (e.g. `Expr.app`
   chains, `>>=` chains). -/
   consumesSubtree : Bool := false
+  sources : Array Source := #[]
 
 /-- Master option that enables all Heron linter rules at once. -/
 private meta def Heron.allRulesLinterOption : Lean.Option Bool :=

@@ -39,7 +39,6 @@ private meta instance : Check RemoveLetWildcardOnUnitActionMatch where
   message := fun _ => m!"Redundant `let _ ←`"
   emphasize := fun m => m.doLetStx
   tags := #[.unnecessary]
-  reference := none
   explanation := fun _ => m!"`action` already returns `Unit`, so `let _ ← action` can be simplified to just `action` in a do-block."
   replacements := fun m => return #[{
     emphasizedSyntax := m.doLetStx

@@ -30,7 +30,9 @@ private meta instance : Check NegatedIfToUnlessMatch where
     | _ => #[]
   message := fun _ => m!"Use `unless` instead of `if not`"
   emphasize := fun m => m.ifStx
-  reference := some { topic := "unless", url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#single-branched-if" }
+  sources := #[
+    .functionalProgrammingInLean "unless" "Monad-Transformers/More-do-Features/#single-branched-if",
+    .hlint "when (not x) ==> unless x"]
   explanation := fun _ => m!"In a do-block, `if not cond then body` can be simplified to `unless cond do body`."
   replacements := fun m => do
     let cond : TSyntax `term := ⟨m.innerCond⟩

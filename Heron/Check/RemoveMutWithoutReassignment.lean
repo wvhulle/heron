@@ -50,7 +50,7 @@ private meta instance : Check RemoveMutWithoutReassignmentMatch where
   detect := fun stx => pure (detectUnnecessaryMuts stx)
   message := fun _ => m!"Remove unnecessary `mut`"
   emphasize := fun m => m.doLetStx
-  reference := some { topic := "`let mut`", url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#let-mut" }
+  sources := #[.functionalProgrammingInLean "`let mut`" "Monad-Transformers/More-do-Features/#let-mut"]
   tags := #[.unnecessary]
   explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
   replacements := fun m => do

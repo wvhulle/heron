@@ -66,10 +66,7 @@ private meta instance : Check NestedExprAppToMkAppNMatch
   consumesSubtree := true
   message := fun _ => m!"Use `mkAppN` instead of nested `Expr.app`"
   emphasize := fun m => m.fullStx
-  reference :=
-    some
-      { topic := "Expressions",
-        url := "https://leanprover-community.github.io/lean4-metaprogramming-book/main/03_expressions.html" }
+  sources := #[.metaprogrammingInLean "Expressions" "03_expressions.html"]
   explanation := fun _ =>
     m!"Chains of `Expr.app (Expr.app f a) b` can be simplified to `mkAppN f #[a, b]`. When `f` is \
        a constant, `Lean.Meta.mkAppM` is usually better still: it fills in implicit arguments and \

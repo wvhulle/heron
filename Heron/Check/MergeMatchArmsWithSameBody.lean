@@ -40,7 +40,7 @@ private meta instance : Check MergeMatchArmsWithSameBodyMatch where
   message := fun _ => m!"Merge match arms with identical right-hand sides"
   emphasize := fun m => m.fullRange
   tags := #[.unnecessary]
-  reference := some { topic := "Or-patterns", url := "https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#or-patterns" }
+  sources := #[.functionalProgrammingInLean "Or-patterns" "Monads/Additional-Conveniences/#or-patterns"]
   explanation := fun _ => m!"Consecutive match arms with the same body can be merged using `|` patterns."
   replacements := fun m => do
     let some (firstArm : TSyntax ``Term.matchAlt) := m.run[0]? | return #[]

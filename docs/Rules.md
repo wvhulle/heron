@@ -12,6 +12,8 @@ Every example below is taken from the rule's own tests in `Heron/Check/<Rule>/De
 `Heron/Refactor/<Rule>/Detects.lean`, which check on every build that the rule turns the first
 snippet into the second.
 
+Rules based on a book, style guide or another linter name it as their source.
+
 ## Turning rules off
 
 Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
@@ -25,6 +27,8 @@ The checks were renamed to longer, descriptive names (for example `funToCdot` is
 ### `adjacentGetSetToModify`
 
 Suggests `modify` instead of `get` directly followed by `set`.
+
+Source: [Functional Programming in Lean: State](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#state-monad)
 
 ```lean
 def inc : StateM MyState Unit := do
@@ -43,6 +47,8 @@ def inc : StateM MyState Unit := do
 
 Suggests `fun | …` pattern-matching syntax instead of a lambda whose body only matches on its
 argument.
+
+Source: [Functional Programming in Lean: Anonymous functions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions)
 
 ```lean
 def f := fun x =>
@@ -63,6 +69,11 @@ def f := fun
 
 Suggests `fun` instead of `λ`.
 
+Sources: [Functional Programming in Lean: Anonymous functions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions),
+[Lean standard library style guide: Notation and Unicode](https://github.com/leanprover/lean4/blob/master/doc/std/style.md#notation-and-unicode),
+[Mathlib style guide: Anonymous functions](https://leanprover-community.github.io/contribute/style.html#anonymous-functions).
+Mathlib's `linter.style.lambdaSyntax` flags the same code without a fix.
+
 ```lean
 def increment : Nat → Nat := λ x => x + 1
 ```
@@ -76,6 +87,8 @@ def increment : Nat → Nat := fun x => x + 1
 ### `matchOnBoolToIfThenElse`
 
 Suggests `if … then … else …` instead of matching on a `Bool`.
+
+Source: [hlint: case a of {True -> t; False -> f} ==> if a then t else f](https://github.com/ndmitchell/hlint/blob/master/data/hlint.yaml)
 
 ```lean
 def f (b : Bool) : Nat :=
@@ -95,6 +108,8 @@ def f (b : Bool) : Nat :=
 
 Suggests a pattern-matching definition instead of naming parameters only to `match` on them.
 
+Source: [Functional Programming in Lean: Pattern-matching definitions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions)
+
 ```lean
 def Weekday.isWeekend (day : Weekday) : Bool :=
   match day with
@@ -113,6 +128,8 @@ def Weekday.isWeekend : Weekday → Bool
 ### `mergeBindersWithSameType`
 
 Suggests merging adjacent binders that have the same type.
+
+Source: [Functional Programming in Lean: Shared binders](https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#shared-argument-types)
 
 ```lean
 def f (x : Nat) (y : Nat) := x + y
@@ -142,6 +159,8 @@ example : Nat → Nat → True := by intro a b; exact trivial
 
 Suggests merging match arms whose right-hand sides are identical.
 
+Source: [Functional Programming in Lean: Or-patterns](https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#or-patterns)
+
 ```lean
 def f (x : Bool) : Nat :=
   match x with
@@ -161,6 +180,8 @@ def f (x : Bool) : Nat :=
 
 Suggests `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ`.
 
+Source: [Functional Programming in Lean: Natural number patterns](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#natural-number-patterns)
+
 ```lean
 def f (n : Nat) : Nat := match n with
   | Nat.zero => 0
@@ -178,6 +199,9 @@ def f (n : Nat) : Nat := match n with
 ### `negatedIfToUnless`
 
 Suggests `unless` instead of `if not` without an `else` branch.
+
+Sources: [Functional Programming in Lean: unless](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#single-branched-if),
+[hlint: when (not x) ==> unless x](https://github.com/ndmitchell/hlint/blob/master/data/hlint.yaml)
 
 ```lean
 example : IO Unit := do
@@ -198,6 +222,8 @@ example : IO Unit := do
 Suggests `ExceptT` instead of nesting `Except` inside another monad in a signature. The quick fix
 is only offered when the rewritten definition still elaborates.
 
+Source: [Functional Programming in Lean: Monad transformers](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#exceptions)
+
 ```lean
 def parseConfig (path : String) (strict : Bool) : IO (Except (List String) Nat) := sorry
 ```
@@ -211,6 +237,8 @@ def parseConfig (path : String) (strict : Bool) : ExceptT (List String) IO Nat :
 ### `nestedExprAppToMkAppN`
 
 Suggests `mkAppN` instead of nested `Expr.app`.
+
+Source: [Metaprogramming in Lean 4: Expressions](https://leanprover-community.github.io/lean4-metaprogramming-book/main/03_expressions.html)
 
 ```lean
 def f (a b : Lean.Expr) :=
@@ -229,6 +257,8 @@ def f (a b : Lean.Expr) :=
 Suggests `OptionT` instead of nesting `Option` inside another monad in a signature. The quick fix
 is only offered when the rewritten definition still elaborates.
 
+Source: [Functional Programming in Lean: Monad transformers](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#OptionT)
+
 ```lean
 def tryLookup {α : Type} (table : List (String × α)) (key : String) : IO (Option α) := sorry
 ```
@@ -242,6 +272,8 @@ def tryLookup {α : Type} (table : List (String × α)) (key : String) : OptionT
 ### `qualifiedConstructorToLeadingDot`
 
 Suggests `.leaf` instead of `BinTree.leaf` where the expected type is known.
+
+Source: [Functional Programming in Lean: Leading dot notation](https://lean-lang.org/functional_programming_in_lean/Monads/Additional-Conveniences/#leading-dot-notation)
 
 ```lean
 def BinTree.mirror : BinTree α → BinTree α
@@ -260,6 +292,8 @@ def BinTree.mirror : BinTree α → BinTree α
 ### `removeElsePureUnit`
 
 Suggests dropping a redundant `else pure ()`.
+
+Source: [Functional Programming in Lean: Single-branched if](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#single-branched-if)
 
 ```lean
 example : IO Unit := do
@@ -280,6 +314,8 @@ example : IO Unit := do
 ### `removeIdRunWithoutEffects`
 
 Suggests removing an `Id.run do` block that uses no effects.
+
+Source: [Functional Programming in Lean: `Id.run`](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#let-mut)
 
 ```lean
 example : Nat := Id.run do return 42
@@ -313,6 +349,8 @@ example : IO Unit := do
 
 Suggests removing `mut` from a variable that is never reassigned.
 
+Source: [Functional Programming in Lean: `let mut`](https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/More-do-Features/#let-mut)
+
 ```lean
 example : Nat := Id.run do
   let mut x := 5
@@ -331,6 +369,8 @@ example : Nat := Id.run do
 
 Suggests a nested action `(← act)` instead of `let x ← act` when `x` is used once, in the next
 statement.
+
+Source: [Functional Programming in Lean: Nested actions](https://lean-lang.org/functional_programming_in_lean/Monads/do--Notation-for-Monads/)
 
 ```lean
 def mapM' [Monad m] (f : α → m β) : List α → m (List β)
@@ -355,6 +395,9 @@ def mapM' [Monad m] (f : α → m β) : List α → m (List β)
 
 Suggests `·` instead of an explicit lambda whose parameter is used once.
 
+Sources: [Functional Programming in Lean: Centered dot](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions),
+[Mathlib style guide: Anonymous functions](https://leanprover-community.github.io/contribute/style.html#anonymous-functions)
+
 ```lean
 def f :=
   List.map (fun x => x + 1) [1, 2, 3]
@@ -372,6 +415,8 @@ def f :=
 Flags `"…" ++ toString x ++ "…"` and suggests an interpolated `s!"…{x}…"` string instead. It
 offers no automatic fix.
 
+Source: [Functional Programming in Lean: String interpolation](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#string-interpolation)
+
 ```lean
 def describe (n : Nat) : String := "three fives is " ++ toString (n * 3)
 ```
@@ -380,6 +425,8 @@ def describe (n : Nat) : String := "three fives is " ++ toString (n * 3)
 
 Flags a `Syntax.getKind` comparison followed by positional child access such as `getArg`, and
 suggests matching with an antiquotation pattern instead. It offers no automatic fix.
+
+Source: [Metaprogramming in Lean 4: Syntax pattern matching](https://leanprover-community.github.io/lean4-metaprogramming-book/main/05_syntax.html#matching-on-syntax)
 
 ```lean
 def firstArg (stx : Lean.Syntax) : Lean.Syntax :=
@@ -391,6 +438,8 @@ def firstArg (stx : Lean.Syntax) : Lean.Syntax :=
 Flags `.raw` on a `TSyntax` followed by positional child access, and suggests a typed pattern
 instead. It offers no automatic fix.
 
+Source: [Metaprogramming in Lean 4: Typed syntax](https://leanprover-community.github.io/lean4-metaprogramming-book/main/05_syntax.html#typed-syntax)
+
 ```lean
 def firstRawArg (x : Lean.TSyntax `term) : Lean.Syntax := x.raw.getArg 0
 ```
@@ -398,6 +447,8 @@ def firstRawArg (x : Lean.TSyntax `term) : Lean.Syntax := x.raw.getArg 0
 ### `tupleMatchToSimultaneousMatch`
 
 Suggests matching on several values at once instead of matching on a tuple.
+
+Source: [Functional Programming in Lean: Simultaneous matching](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#simultaneous-matching)
 
 ```lean
 def f (x y : Nat) : Nat :=
@@ -417,6 +468,8 @@ def f (x y : Nat) : Nat :=
 
 Suggests `if let` instead of a two-arm `match` whose second arm is a wildcard.
 
+Source: [Functional Programming in Lean: if let](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#if-let)
+
 ```lean
 def f (x : Option Nat) : Nat := match x with | some v => v | _ => 0
 ```
@@ -432,6 +485,8 @@ def f (x : Option Nat) : Nat := if let some v := x then v else 0
 ### `bindToDo`
 
 Rewrites `>>=` into do-notation.
+
+Source: [Functional Programming in Lean: do-notation for monads](https://lean-lang.org/functional_programming_in_lean/Monads/do--Notation-for-Monads/)
 
 ```lean
 def f := IO.getLine >>= fun s => IO.println s

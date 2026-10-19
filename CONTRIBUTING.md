@@ -27,6 +27,10 @@ Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in [`Heron/R
 - A match data struct describing what was detected
 - A `detect` function that scans user source code
 - A set of `replacements` to fix a single match
+- The `sources` the rule is based on, from `Heron.Source`: a book section, the Lean standard
+  library or Mathlib style guide, an hlint hint or a Clippy lint. List every source you used and
+  add the same line under the rule in [docs/Rules.md](./docs/Rules.md). Leave `sources` out
+  until you have found one.
 - Inline tests for false positives, replacements, and negatives
 
 ## Testing

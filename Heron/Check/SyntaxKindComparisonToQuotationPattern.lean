@@ -49,9 +49,7 @@ private meta instance : Check SyntaxKindComparisonToQuotationPatternMatch where
   detect := detectKindChecksBeforePositionalAccess
   message := fun _ => m!"Use an antiquotation pattern instead of a `Syntax.getKind` check followed by positional child access"
   emphasize := fun m => m.fullStx
-  reference := some
-    { topic := "Syntax pattern matching"
-      url := "https://leanprover-community.github.io/lean4-metaprogramming-book/main/05_syntax.html#matching-on-syntax" }
+  sources := #[.metaprogrammingInLean "Syntax pattern matching" "05_syntax.html#matching-on-syntax"]
   explanation := fun _ =>
     m!"Comparing a node's kind by name (e.g. `stx.getKind == ``Term.doLet`) only tells you which \
        parser produced the node; it binds none of its children. This declaration then reads \

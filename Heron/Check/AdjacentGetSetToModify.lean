@@ -74,7 +74,7 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
   detect := fun stx => pure (detectGetSetToModify stx)
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
   emphasize := fun m => m.fullRange
-  reference := some { topic := "State", url := "https://lean-lang.org/functional_programming_in_lean/Monad-Transformers/A-Monad-Construction-Kit/#state-monad" }
+  sources := #[.functionalProgrammingInLean "State" "Monad-Transformers/A-Monad-Construction-Kit/#state-monad"]
   explanation := fun _ =>
     m!"`let s ← get; set \{s with ...}` can be written `modify fun s => \{s with ...}`. Besides being \
        shorter, `modify` rules out writing back a stale copy of the state (`set s` where `set s'` \
