@@ -13,8 +13,7 @@ open Lean Elab Command Term Parser
 
 meta def selfLints : Array Name := #[
   `positionalSyntaxAccess, `syntaxKindOrAtomInspection, `syntheticSyntaxConstruction,
-  `sourcePositionInRule, `sourceTextInRule, `syntaxKindComparisonToQuotationPattern,
-  `tsyntaxRawToTypedAccess]
+  `sourcePositionInRule, `sourceTextInRule]
 
 meta initialize selfLints.forM registerLinterOption
 

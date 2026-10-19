@@ -25,8 +25,6 @@ public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
 public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
 -- Meta-programming hygiene
-public import Heron.Check.TsyntaxRawToTypedAccess
-public import Heron.Check.SyntaxKindComparisonToQuotationPattern
 public import Heron.Check.PositionalSyntaxAccess
 public import Heron.Check.SyntaxKindOrAtomInspection
 public import Heron.Check.SyntheticSyntaxConstruction

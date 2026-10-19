@@ -70,7 +70,7 @@ already parsed and elaborated, and never go back to the source text. Concretely:
 
 ### What the self-lints reject
 
-Seven of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.lean` in CI
+Five of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.lean` in CI
 (the `rule-hygiene` check), and any finding fails the build:
 
 | Check | Rejects |
@@ -80,8 +80,6 @@ Seven of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.
 | `syntheticSyntaxConstruction` | `mkAtom`, `mkIdent`, `mkNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns |
 | `sourcePositionInRule` | `getPos?`, `getTailPos?`, `getRange?`, `FileMap` lookups |
 | `sourceTextInRule` | `reprint`, `getSubstring?`, `Name.toString`, `String.splitOn`, `trimAscii*`, `startsWith`, `endsWith` |
-| `syntaxKindComparisonToQuotationPattern` | a kind comparison followed by positional access |
-| `tsyntaxRawToTypedAccess` | `.raw` followed by positional access |
 
 Run them locally with `lake build && lake exe heron-self-lint`. A rule written before these
 checks existed may carry `set_option linter.<check> false` at the top of its file; that list

@@ -6,7 +6,6 @@ public meta import Heron.Monad
 
 set_option linter.positionalSyntaxAccess false
 set_option linter.sourcePositionInRule false
-set_option linter.syntaxKindComparisonToQuotationPattern false
 set_option linter.syntaxKindOrAtomInspection false
 set_option linter.syntheticSyntaxConstruction false
 
