@@ -39,7 +39,7 @@ private meta instance : Check RemoveMutWithoutReassignmentMatch where
       emphasizedSyntax := m.doLetStx
       oldSyntax := m.doLetStx
       newSyntax := repl
-      category := `doElem
+      prettyPrint := PrettyPrinter.ppCategory `doElem
       inlineViolationLabel := m!"unused mut"
     }]
 

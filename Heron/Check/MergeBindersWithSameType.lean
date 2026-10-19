@@ -61,7 +61,7 @@ private meta instance : Check MergeBindersWithSameTypeMatch where
       oldSyntax := m.fullRange
       newSyntax := repl
       inlineViolationLabel := m!"shared type"
-      category := `bracketedBinder
+      prettyPrint := PrettyPrinter.format Term.bracketedBinder.formatter
     }]
 
 register_check MergeBindersWithSameTypeMatch

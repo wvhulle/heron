@@ -40,6 +40,7 @@ private meta instance : Check LambdaSymbolToFunMatch where
     emphasizedSyntax := m.lambdaKeyword
     oldSyntax := m.lambdaKeyword
     newSyntax := m.funKeyword
+    prettyPrint := printKeyword
     inlineViolationLabel := m!"λ → fun"
   }]
 

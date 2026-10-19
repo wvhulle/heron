@@ -77,12 +77,11 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
       { emphasizedSyntax := m.getStx
         oldSyntax := m.getStx
         newSyntax := repl
-        category := `doElem
+        prettyPrint := PrettyPrinter.ppCategory `doElem
         inlineViolationLabel := m!"get/set → modify" },
       { emphasizedSyntax := m.setStx
         oldSyntax := m.setStx
         newSyntax := Syntax.missing
-        category := `doElem
         inlineViolationLabel := m!"remove set" }
     ]
   labels := fun m => return #[

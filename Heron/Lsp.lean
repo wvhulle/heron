@@ -27,19 +27,13 @@ invoke rules directly without going through the linter/diagnostic path. -/
 meta initialize testRunnerRegistry : IO.Ref (Std.HashMap Name TestRunner) ←
   IO.mkRef { }
 
-/-- Convert a single replacement to an LSP `TextEdit`, using Lean's pretty printer
-to format the replacement text. Falls back to `reprint` if formatting fails. -/
 meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (Option Lsp.TextEdit) := do
   let some range := r.oldSyntax.getRange? | return none
   let lspRange := fileMap.utf8RangeToLspRange range
   if r.newSyntax.isMissing then
     return some { range := lspRange, newText := "" }
-  let newText ← try
-    let column := (fileMap.toPosition range.start).column
-    pure ((← PrettyPrinter.ppCategory r.category r.newSyntax).pretty (indent := column) (column := column))
-  catch _ =>
-    let some text := r.newSyntax.reprint | return none
-    pure text.trimAscii.toString
+  let column := (fileMap.toPosition range.start).column
+  let newText := (← r.prettyPrint r.newSyntax).pretty (indent := column) (column := column)
   return some { range := lspRange, newText }
 
 /-- Build a type-erased test runner for a `Rule` instance. -/

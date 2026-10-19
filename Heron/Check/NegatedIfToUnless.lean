@@ -44,7 +44,7 @@ private meta instance : Check NegatedIfToUnlessMatch where
       emphasizedSyntax := m.ifStx
       oldSyntax := m.ifStx
       newSyntax := repl
-      category := `doElem
+      prettyPrint := PrettyPrinter.ppCategory `doElem
       inlineViolationLabel := m!"if not → unless"
     }]
 

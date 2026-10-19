@@ -56,7 +56,7 @@ private meta instance : Check MergeMatchArmsWithSameBodyMatch where
       oldSyntax := m.fullRange
       newSyntax := repl
       inlineViolationLabel := m!"duplicate arm"
-      category := `matchAlt
+      prettyPrint := PrettyPrinter.format (Term.matchAlt.formatter (PrettyPrinter.Formatter.categoryParser.formatter `term))
     }]
 
 register_check MergeMatchArmsWithSameBodyMatch

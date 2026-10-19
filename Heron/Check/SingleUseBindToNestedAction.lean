@@ -63,7 +63,7 @@ private meta instance : Check SingleUseBindToNestedActionMatch where
     emphasizedSyntax := m.bindStx
     oldSyntax := m.replacedRun
     newSyntax := m.rewrittenNext
-    category := `doElem
+    prettyPrint := PrettyPrinter.ppCategory `doElem
     inlineViolationLabel := m!"bound once" }]
 
 register_check SingleUseBindToNestedActionMatch

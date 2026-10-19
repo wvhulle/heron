@@ -37,8 +37,9 @@ structure Replacement where
   newSyntax : Syntax
   /-- Label surfaced via LSP `relatedInformation`, anchored at `emphasizedSyntax`. -/
   inlineViolationLabel : MessageData
-  /-- Syntax category for pretty-printing (e.g. `term`, `tactic`, `doElem`). -/
-  category : Name := `term
+  prettyPrint : Syntax → CoreM Format := PrettyPrinter.ppCategory `term
+
+meta def printKeyword (keyword : Syntax) : CoreM Format := pure keyword.getAtomVal
 
 /-- Promote a replacement's label metadata to a standalone `Label` for
 relatedInformation emission. -/

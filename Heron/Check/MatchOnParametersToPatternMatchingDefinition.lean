@@ -79,7 +79,7 @@ private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch 
       emphasizedSyntax := m.matchKw
       oldSyntax := m.declaration
       newSyntax := ← patternMatchingDefinition m
-      category := `command
+      prettyPrint := PrettyPrinter.ppCategory `command
       inlineViolationLabel := m!"match on parameters"
     }]
 

@@ -62,7 +62,7 @@ private meta instance : Check MergeConsecutiveIntrosMatch where
           emphasizedSyntax := m.secondIntro
           oldSyntax := m.fullRange
           newSyntax := repl
-          category := `tactic
+          prettyPrint := PrettyPrinter.ppCategory `tactic
           inlineViolationLabel := m!"sequential intro" }]
 
 register_check MergeConsecutiveIntrosMatch

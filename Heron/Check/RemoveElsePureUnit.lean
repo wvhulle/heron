@@ -41,7 +41,7 @@ private meta instance : Check RemoveElsePureUnitMatch where
       emphasizedSyntax := m.ifStx
       oldSyntax := m.ifStx
       newSyntax := repl
-      category := `doElem
+      prettyPrint := PrettyPrinter.ppCategory `doElem
       inlineViolationLabel := m!"else pure ()"
     }]
 
