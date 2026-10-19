@@ -265,6 +265,10 @@ private meta def liesWithin (scope inner : Syntax) : Bool :=
   | some outer, some r => outer.start ≤ r.start && r.stop ≤ outer.stop
   | _, _ => false
 
+meta def bindsVariables (scope : Syntax) : CommandElabM Bool := do
+  let infos := (← collectInfoTrees scope).flatMap collectTermInfos
+  return infos.any fun (_, ti) => ti.isBinder && liesWithin scope ti.stx
+
 meta def boundVariableReferences (binder scope : Syntax) : CommandElabM (Array Syntax) := do
   let infos := (← collectInfoTrees scope).flatMap collectTermInfos
   let some (_, binderInfo) := infos.find? fun (_, ti) => ti.isBinder && sameRange ti.stx binder

@@ -3,8 +3,6 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
-set_option linter.sourcePositionInRule false
-
 open Lean Elab Command Parser Heron
 
 private structure WildcardMatchToIfLetMatch where
@@ -37,12 +35,6 @@ private meta def detectMatchToIfLet? : Syntax → Option WildcardMatchToIfLetMat
     return { matchStx := stx, matchKw, pat, discr, thenRhs, elseRhs }
   | _ => none
 
-private meta def patternBindsVariable (pat : Syntax) : CommandElabM Bool := do
-  let some range := pat.getRange? | return false
-  let trees ← collectInfoTrees pat
-  return (trees.flatMap collectTermInfos).any fun (_, ti) =>
-    ti.isBinder && ti.stx.getRange?.any fun r => range.start ≤ r.start && r.stop ≤ range.stop
-
 private meta instance : Check WildcardMatchToIfLetMatch where
   name := `wildcardMatchToIfLet
   description := "Suggests `if let` instead of a two-arm `match` whose second arm is a wildcard."
@@ -51,7 +43,7 @@ private meta instance : Check WildcardMatchToIfLetMatch where
   category := .style
   detect := fun stx => do
     let some m := detectMatchToIfLet? stx | return #[]
-    unless ← patternBindsVariable m.pat do return #[]
+    unless ← bindsVariables m.pat do return #[]
     return #[m]
   message := fun _ => m!"Use `if let` instead of two-arm `match` with wildcard"
   emphasize := fun m => m.matchStx
