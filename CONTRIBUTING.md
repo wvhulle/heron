@@ -4,12 +4,13 @@
 
 - [`Heron/`](./Heron): the rules, built as the `@heron/plugin` shared library. Checks live in
   [`Heron/Check/`](./Heron/Check), refactors in [`Heron/Refactor/`](./Heron/Refactor).
-- [`Executables/`](./Executables): the three user tools and their helpers. Each file name starts
-  with the tool it serves:
-  - `LakeLintDriver*`: `heron`, the driver behind `lake lint`.
-  - `StandaloneScan*`: `heron-scan`.
+- [`Executables/`](./Executables): only the roots of the three user tools:
+  - `LakeLintDriver`: `heron`, the driver behind `lake lint`.
+  - `StandaloneScan`: `heron-scan`.
   - `SecondLanguageServer`: `heron-language-server`.
-  - `FixReportRendering` and `HeronPluginLocation` are shared by several tools.
+- [`ToolSupport/`](./ToolSupport): code the tools share, kept out of the plugin library. A file
+  name that starts with a tool's root name (`LakeLint*`, `StandaloneScan*`) serves that tool;
+  `FixReportRendering` and `HeronPluginLocation` are used by several.
 - [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree` and `RuleShowcase.lean`, see
   [Developer tools](#developer-tools).
 - [`EndToEndTests/`](./EndToEndTests): one directory per usage scenario (`LakefileSetup`,

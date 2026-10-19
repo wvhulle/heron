@@ -1,7 +1,7 @@
 import Lean
 import Heron
-import Executables.FixReportRendering
-import Executables.StandaloneScanElaboration
+import ToolSupport.FixReportRendering
+import ToolSupport.StandaloneScanElaboration
 
 /-! **Per-file engine.** Import each file's own full environment (`processHeader`) and detect.
 Simplest and most faithful per file (and backs stdin), but re-imports the whole environment
@@ -9,7 +9,7 @@ Simplest and most faithful per file (and backs stdin), but re-imports the whole 
 
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 
-namespace Executables
+namespace ToolSupport
 
 /-- Lint one source (labelled `label`, written back to `path` if given) with `checks`. Seeds
 `linter.heron := true`; in-file `set_option`s still apply. Throws if imports fail. -/
@@ -33,4 +33,4 @@ def lintPerFile (all : Bool) (checks : Array Heron.RuleEntry) (file : String) : 
 def lintStdin (all : Bool) (checks : Array Heron.RuleEntry) (source : String) : IO Report :=
   lintSourceCore all checks none "<stdin>" source
 
-end Executables
+end ToolSupport

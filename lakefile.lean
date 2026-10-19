@@ -16,6 +16,8 @@ package heron where
 
 lean_lib DeveloperTools where globs := #[`DeveloperTools.*]
 
+lean_lib ToolSupport where globs := #[`ToolSupport.*]
+
 lean_lib Executables where globs := #[`Executables.*]
 
 lean_exe «dump-syntax-tree» where root := `DeveloperTools.DumpSyntaxTree

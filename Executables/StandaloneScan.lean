@@ -1,6 +1,6 @@
-import Executables.FixReportRendering
-import Executables.StandaloneScanSharedEnvironment
-import Executables.StandaloneScanPerFile
+import ToolSupport.FixReportRendering
+import ToolSupport.StandaloneScanSharedEnvironment
+import ToolSupport.StandaloneScanPerFile
 
 /-!
 # `heron-scan` — self-contained Heron fix reporter
@@ -17,7 +17,7 @@ simpler per-file engine (and `-` reads stdin). Requires the scope to be built (o
     lake exe heron-scan --fix Sparkle/Analog     # rewrite in place
 -/
 
-open Executables
+open ToolSupport
 
 structure Cli where
   fix : Bool := false

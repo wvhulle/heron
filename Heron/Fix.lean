@@ -17,7 +17,7 @@ needed to render it, in a form that round-trips through JSON. Produced by
 `Heron.collectFixRecords` — written to the build sink during a `lake build` (when
 `HERON_FIX_DIR` is set) by the always-on linter, and read back by the reporter binaries.
 
-This lives in the core plugin library (not in `Executables/`) only because its *producer*
+This lives in the core plugin library (not in `ToolSupport/`) only because its *producer*
 runs inside the build-time linter, which is part of the plugin `.so`. The LSP path does
 not use it: code actions go `Replacement → Lsp.TextEdit` directly, in-process.
 
