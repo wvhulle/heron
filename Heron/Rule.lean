@@ -290,7 +290,9 @@ meta def elaboratesLike (original : Syntax) (candidate : Term) : CommandElabM Bo
     instantiateMVars e
   try
     runInfoMetaM ci ti.lctx do
-      Meta.isDefEq (← instantiateMVars ti.expr) (← candidateExpr.run')
+      Meta.withLocalInstances (ti.lctx.decls.toList.filterMap id) do
+        let candidate ← candidateExpr.run'
+        Meta.withReducible <| Meta.isDefEq (← instantiateMVars ti.expr) candidate
   catch _ => return false
 
 /-- Find the `declId` node in a command syntax tree. -/

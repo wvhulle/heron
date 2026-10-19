@@ -27,6 +27,11 @@ meta def getDoElems (doSeq : Syntax) : Array (TSyntax `doElem) :=
     | _ => #[]
   items.filterMap doSeqItemElem?
 
+meta def doBlockOf [Monad m] [MonadQuotation m] (elems : Array (TSyntax `doElem)) : m Term := do
+  let items ← elems.mapM fun elem => `(Parser.Term.doSeqItem| $elem:doElem)
+  let seq : TSyntax ``Parser.Term.doSeq := ⟨← `(Parser.Term.doSeqIndent| $items:doSeqItem*)⟩
+  `(do $seq)
+
 meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
   #[stx] ++ stx.getArgs.flatMap subtreeNodes
 
