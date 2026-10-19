@@ -20,3 +20,14 @@ becomes `(command|
 example : IO Unit := do
   unless true do
     IO.println "hello")
+
+#assertCheck negatedIfToUnless in
+example (line : String) : IO Unit := do
+  if !(line.length >= 2) then
+    -- keep this comment
+    IO.println  "short"
+becomes `(command|
+example (line : String) : IO Unit := do
+  unless (line.length >= 2) do
+    -- keep this comment
+    IO.println  "short")
