@@ -4,17 +4,14 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Meta Parser Heron
 
 private structure NestedExceptToExceptTransformerMatch where
-  stx : TSyntax `term
+  stx : Syntax
   /-- The outer monad applied to its leading args, e.g. `(StateT σ m)` or just `m`. -/
-  outerMonad : TSyntax `term
+  outerMonad : Term
   /-- The error type `ε` from `Except ε α …`. -/
-  errorType : TSyntax `term
+  errorType : Term
   /-- The `Except`'s value-type args (`α α₁ … αₙ`). -/
   valueArgs : TSyntaxArray `term
   rewriteElaborates : Bool := false
@@ -22,31 +19,33 @@ private structure NestedExceptToExceptTransformerMatch where
 private meta def detectCandidate? :
     Syntax → CommandElabM (Option NestedExceptToExceptTransformerMatch)
   | stx@`($outerFn:ident $outerLeading* (Except $ε $α $αs*)) => do
-    -- Same-constructor nesting belongs to NestedMonadJoin, not this rule.
-    if outerFn.getId == `Except then return none
-    let outerMonad ← if outerLeading.isEmpty
-      then pure (⟨outerFn⟩ : TSyntax `term)
+    let outerMonad ← if outerLeading.isEmpty then pure (outerFn : Term)
       else `(($outerFn $outerLeading*))
-    return some { stx := ⟨stx⟩, outerMonad, errorType := ε, valueArgs := #[α] ++ αs }
+    return some { stx, outerMonad, errorType := ε, valueArgs := #[α] ++ αs }
   | _ => return none
 
-private meta def exceptTType (m : NestedExceptToExceptTransformerMatch) : CommandElabM (TSyntax `term) :=
-  `($(mkIdent `ExceptT) $(#[m.errorType, m.outerMonad] ++ m.valueArgs)*)
+set_option hygiene false in
+private meta def exceptTType (m : NestedExceptToExceptTransformerMatch) : CommandElabM Term :=
+  `(ExceptT $(#[m.errorType, m.outerMonad] ++ m.valueArgs)*)
 
-private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
-    CommandElabM (Option NestedExceptToExceptTransformerMatch) := do
-  let some m ← detectCandidate? node | return none
-  let some true ← runMetaMForSyntax m.stx outerHasMonadInstance | return none
-  let probe := replaceSourceNode cmd m.stx (← exceptTType m)
-  return some { m with rewriteElaborates := ← elaboratesWithoutErrorsInProbeNamespace probe }
+private meta def wrapsExceptInAnotherMonad (e : Expr) : MetaM Bool := do
+  if e.getAppFn.isConstOf ``Except then return false
+  outerHasMonadInstance e
+
+private meta def detectInSignature (node : Syntax) :
+    CommandElabM (Array NestedExceptToExceptTransformerMatch) := do
+  let some m ← detectCandidate? node | return #[]
+  let some true ← runMetaMForSyntax m.stx wrapsExceptInAnotherMonad | return #[]
+  return #[{ m with rewriteElaborates := ← rewriteElaborates m.stx (← exceptTType m) }]
 
 private meta instance : Check NestedExceptToExceptTransformerMatch where
   name := `nestedExceptToExceptTransformer
   description := "Suggests `ExceptT` instead of nesting `Except` inside another monad in a signature; the fix is only offered when the rewritten definition still elaborates."
-  kinds := #[``Lean.Parser.Command.declaration]
+  kinds := #[``Term.app]
+  within := #[``Command.declSig, ``Command.optDeclSig]
   severity := .information
   category := .style
-  detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
+  detect := detectInSignature
   message := fun _ => m!"Consider using `ExceptT` instead of nesting `Except`"
   emphasize := fun m => m.stx
   sources := #[.functionalProgrammingInLean "Monad transformers"
