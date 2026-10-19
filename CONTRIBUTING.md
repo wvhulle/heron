@@ -77,7 +77,7 @@ Five of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.l
 | --- | --- |
 | `positionalSyntaxAccess` | `getArg`, `getArgs`, `getNumArgs`, `stx[i]`, `subtreeNodes`, `signatureNodes` |
 | `syntaxKindOrAtomInspection` | `getKind`, `isOfKind`, `getAtomVal`, `getHead?` |
-| `syntheticSyntaxConstruction` | `mkAtom`, `mkIdent`, `mkNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns |
+| `syntheticSyntaxConstruction` | `mkAtom`, `mkNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns, and `mkIdent` of a literal name (write it in a quotation under `set_option hygiene false in`) |
 | `sourcePositionInRule` | `getPos?`, `getTailPos?`, `getRange?`, `FileMap` lookups |
 | `sourceTextInRule` | `reprint`, `getSubstring?`, `Name.toString`, `String.splitOn`, `trimAscii*`, `startsWith`, `endsWith` |
 

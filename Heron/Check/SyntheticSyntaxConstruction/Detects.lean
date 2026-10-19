@@ -10,6 +10,9 @@ def funKeyword : Lean.Syntax := Lean.mkAtom "fun"
 def transformerName : Lean.Ident := Lean.mkIdent `OptionT
 
 #assertCheck syntheticSyntaxConstruction in
+def qualifiedTransformerName : Lean.Ident := Lean.mkIdent ``Lean.Syntax
+
+#assertCheck syntheticSyntaxConstruction in
 def one : Lean.NumLit := Lean.Syntax.mkNumLit (toString 1)
 
 #assertCheck syntheticSyntaxConstruction in

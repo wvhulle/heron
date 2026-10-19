@@ -56,15 +56,22 @@ private meta def termInfosOutsideNameLiterals (tree : InfoTree) : Array (Context
       return true)
   (collect.run #[]).2
 
-meta def originalCallSitesOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) := do
+private meta def originalTermInfosWithin (node : Syntax) (keep : Syntax → Bool) (isTarget : Expr → Bool) :
+    CommandElabM (Array Syntax) := do
   let some range := node.getRange? | return #[]
   let trees ← collectInfoTrees node
   let hits ← (trees.flatMap termInfosOutsideNameLiterals).filterM fun (ci, ti) => do
     let .original .. := ti.stx.getHeadInfo | return false
     unless ti.stx.getRange?.any fun r => range.start ≤ r.start && r.stop ≤ range.stop do return false
-    if isApplicationSyntax ti.stx then return false
+    unless keep ti.stx do return false
     runInfoMetaM ci ti.lctx do return isTarget (← instantiateMVars ti.expr)
   return (deduplicateTermInfos hits).map (·.2.stx)
+
+meta def originalCallSitesOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) :=
+  originalTermInfosWithin node (!isApplicationSyntax ·) isTarget
+
+meta def originalApplicationsOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) :=
+  originalTermInfosWithin node isApplicationSyntax isTarget
 
 class Check (α : Type) extends Rule α where
   /-- Diagnostic severity. -/

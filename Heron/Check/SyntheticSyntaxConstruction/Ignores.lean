@@ -19,3 +19,6 @@ def spanOf (first last : Lean.Syntax) : Lean.Syntax := Lean.mkNullNode #[first, 
 
 #assertIgnore syntheticSyntaxConstruction in
 def constructorsByName : Array Lean.Name := #[``Lean.mkAtom, ``Lean.Syntax.node]
+
+#assertIgnore syntheticSyntaxConstruction in
+def identifierOfResolvedName (resolved : Lean.Name) : Lean.Ident := Lean.mkIdent resolved
