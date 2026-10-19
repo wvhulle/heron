@@ -3,18 +3,22 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
-set_option linter.syntaxKindOrAtomInspection false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Parser Heron
 
 private structure LambdaSymbolToFunMatch where
   lambdaKeyword : Syntax
+  funKeyword : Syntax
 
-private meta def lambdaKeyword? (stx : Syntax) : Option Syntax := do
-  let keyword ← stx.getHead?
-  guard (keyword.getAtomVal == "λ")
-  return keyword
+private meta def keywordOf : Syntax → Option Syntax
+  | `(fun%$keyword $_* => $_) => some keyword
+  | `(fun%$keyword $_:matchAlt*) => some keyword
+  | _ => none
+
+private meta def detectLambdaKeyword (stx : Syntax) : CommandElabM (Array LambdaSymbolToFunMatch) := do
+  let some keyword := keywordOf stx | return #[]
+  let some funKeyword := keywordOf (← `(fun x => x)) | return #[]
+  if keyword.structEq funKeyword then return #[]
+  return #[{ lambdaKeyword := keyword, funKeyword }]
 
 private meta instance : Check LambdaSymbolToFunMatch where
   name := `lambdaSymbolToFun
@@ -22,7 +26,7 @@ private meta instance : Check LambdaSymbolToFunMatch where
   kinds := #[``Term.fun]
   severity := .information
   category := .style
-  detect := fun stx => pure <| (lambdaKeyword? stx).toArray.map ({ lambdaKeyword := · })
+  detect := detectLambdaKeyword
   message := fun _ => m!"Write `fun` instead of `λ`"
   emphasize := fun m => m.lambdaKeyword
   sources := #[
@@ -35,7 +39,7 @@ private meta instance : Check LambdaSymbolToFunMatch where
   replacements := some fun m => return #[{
     emphasizedSyntax := m.lambdaKeyword
     oldSyntax := m.lambdaKeyword
-    newSyntax := mkAtom "fun"
+    newSyntax := m.funKeyword
     inlineViolationLabel := m!"λ → fun"
   }]
 
