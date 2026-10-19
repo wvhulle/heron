@@ -36,6 +36,7 @@ private meta instance : Check WildcardMatchToIfLetMatch where
   name := `wildcardMatchToIfLet
   description := "Suggests `if let` instead of a two-arm `match` whose second arm is a wildcard."
   kinds := #[``Term.match]
+  consumesSubtree := true
   severity := .information
   category := .style
   detect := fun stx => do
