@@ -14,8 +14,17 @@ private structure SingleUseLambdaToCdotFunctionMatch where
   replaceStx : Syntax
   cdotFunction : Term
 
-private meta def cdotFunction (body : Term) (occurrence : Syntax) : CommandElabM Term := do
-  `(($(body.replacingSourceNode occurrence (← `(·)))))
+private meta def cdotFunction (body : Term) (occurrence : Syntax) (cdotReference : Term) : CommandElabM Term :=
+  `(($(body.replacingSourceNode occurrence cdotReference)))
+
+private meta def cdotProjections (x reference : Ident) : CommandElabM Term := do
+  (reference.getId.components.drop x.getId.getNumParts).foldlM (init := ← `(·))
+    fun head field => `($head.$(mkIdent field):ident)
+
+private meta def sourceIdentContaining (body : Term) (occurrence : Syntax) : Option Syntax :=
+  body.raw.find? fun
+    | stx@`($_:ident) => liesWithin stx occurrence
+    | _ => false
 
 private meta def isBlockBody : Term → Bool
   | `(do $_) | `(let $_:letDecl; $_) | `($_:structInst) => true
@@ -26,17 +35,19 @@ private meta def passesOccurrenceLast (body : Term) (occurrence : Syntax) : Bool
   | `($_ $args*) => args.back?.any (·.raw == occurrence)
   | _ => false
 
-/-- Match `fun x => body` where `x` is referenced exactly once, as a plain identifier, and
-`(body)` with that reference replaced by `·` elaborates to the same function. -/
+/-- Match `fun x => body` where `x` is referenced exactly once, as a plain identifier or as the
+head of a projection `x.f`, and `(body)` with that reference replaced by `·` or `·.f` elaborates
+to the same function. -/
 private meta def eligibleCdotFunction? (funStx : Syntax) : CommandElabM (Option Term) := do
   let `(fun $x:ident => $body) := funStx | return none
-  if let `($_:ident) := body then return none
   if isBlockBody body then return none
   let #[occurrence] ← boundVariableReferences x body | return none
-  let `($reference:ident) := occurrence | return none
-  unless reference.getId == x.getId do return none
-  if passesOccurrenceLast body occurrence then return none
-  let candidate ← cdotFunction body occurrence
+  let some sourceIdent := sourceIdentContaining body occurrence | return none
+  let `($reference:ident) := sourceIdent | return none
+  unless x.getId.isPrefixOf reference.getId do return none
+  if reference.getId == x.getId && (body.raw == reference || passesOccurrenceLast body reference) then
+    return none
+  let candidate ← cdotFunction body reference (← cdotProjections x reference)
   unless ← elaboratesLike funStx candidate do return none
   return some candidate
 

@@ -26,3 +26,11 @@ meta import Heron.Check.SingleUseLambdaToCdotFunction
     List.map (fun x => x + (fun x => x) 1) [1, 2] becomes
   `(def innerLambdaReusesTheName :=
     List.map (· + (fun x => x) 1) [1, 2])
+
+#assertCheck singleUseLambdaToCdotFunction in
+def longWords (words : List String) := words.filter fun w => w.length > 4
+becomes `(command| def longWords (words : List String) := words.filter (·.length > 4))
+
+#assertCheck singleUseLambdaToCdotFunction in
+def prefixes (words : List String) := words.map fun w => w.take 2
+becomes `(command| def prefixes (words : List String) := words.map (·.take 2))
