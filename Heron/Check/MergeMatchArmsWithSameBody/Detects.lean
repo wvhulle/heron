@@ -9,8 +9,8 @@ meta import Heron.Check.MergeMatchArmsWithSameBody
     | true => 1
     | false => 1 becomes
   `(def f (x : Bool) : Nat :=
-      match x with
-      | true | false => 1)
+    match x with
+    | true | false => 1)
 
 -- First two of three arms share an rhs.
 #assertCheck mergeMatchArmsWithSameBody in
@@ -20,9 +20,9 @@ meta import Heron.Check.MergeMatchArmsWithSameBody
     | 1 => 1
     | _ => 0 becomes
   `(def f2 (n : Nat) : Nat :=
-      match n with
-      | 0 | 1 => 1
-      | _ => 0)
+    match n with
+    | 0 | 1 => 1
+    | _ => 0)
 
 -- Last two of three arms share an rhs.
 #assertCheck mergeMatchArmsWithSameBody in
@@ -32,9 +32,9 @@ meta import Heron.Check.MergeMatchArmsWithSameBody
     | 1 => 0
     | 2 => 0 becomes
   `(def f3 (n : Nat) : Nat :=
-      match n with
-      | 0 => 1
-      | 1 | 2 => 0)
+    match n with
+    | 0 => 1
+    | 1 | 2 => 0)
 
 -- Constructor patterns from an ADT.
 #assertCheck mergeMatchArmsWithSameBody in
@@ -44,9 +44,9 @@ meta import Heron.Check.MergeMatchArmsWithSameBody
     | some 0 => 0
     | some _ => 1 becomes
   `(def f4 (x : Option Nat) : Nat :=
-      match x with
-      | none | some 0 => 0
-      | some _ => 1)
+    match x with
+    | none | some 0 => 0
+    | some _ => 1)
 
 #assertCheck mergeMatchArmsWithSameBody in
 def threeArms (n : Nat) : Nat := match n with

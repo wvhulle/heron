@@ -9,5 +9,5 @@ meta import Heron.Check.LambdaMatchToPatternMatchingLambda
     | 0 => "zero"
     | _ => "other" becomes
   `(def f := fun
-      | 0 => "zero"
-      | _ => "other")
+             | 0 => "zero"
+             | _ => "other")

@@ -8,17 +8,17 @@ meta import Heron.Check.NestedExprAppToMkAppN
   def f (a b : Expr) :=
     Expr.app (Expr.app a a) b becomes
   `(open Lean in
-    def f (a b : Expr) :=
-      mkAppN a #[a, b])
+  def f (a b : Expr) :=
+    mkAppN a #[a, b])
 
 #assertCheck nestedExprAppToMkAppN in
   def g (a b : Lean.Expr) : Lean.Expr :=
     .app (.app a a) b becomes
   `(def g (a b : Lean.Expr) : Lean.Expr :=
-      mkAppN a #[a, b])
+    mkAppN a #[a, b])
 
 #assertCheck nestedExprAppToMkAppN in
   def h (a b c : Lean.Expr) :=
     Lean.Expr.app (Lean.Expr.app (Lean.Expr.app a a) b) c becomes
   `(def h (a b c : Lean.Expr) :=
-      mkAppN a #[a, b, c])
+    mkAppN a #[a, b, c])

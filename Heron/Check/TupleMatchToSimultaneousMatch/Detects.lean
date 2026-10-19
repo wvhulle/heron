@@ -8,5 +8,5 @@ meta import Heron.Check.TupleMatchToSimultaneousMatch
     match (x, y) with
     | (a, b) => a + b becomes
   `(def f (x y : Nat) : Nat :=
-      match x, y with
-      | a, b => a + b)
+    match x, y with
+    | a, b => a + b)

@@ -7,13 +7,13 @@ meta import Heron.Check.SingleUseLambdaToCdotFunction
   def f :=
     List.map (fun x => x + 1) [1, 2, 3] becomes
   `(def f :=
-      List.map (· + 1) [1, 2, 3])
+    List.map (· + 1) [1, 2, 3])
 
 #assertCheck singleUseLambdaToCdotFunction in
   def g :=
     List.filter (fun x => x > 0) [1, 2, 3] becomes
   `(def g :=
-      List.filter (· > 0) [1, 2, 3])
+    List.filter (· > 0) [1, 2, 3])
 
 -- Unparenthesised lambda site: the fix must add its own parens, else the bare
 -- `· + 1` mis-parses / rescopes `·`.
@@ -25,4 +25,4 @@ meta import Heron.Check.SingleUseLambdaToCdotFunction
   def innerLambdaReusesTheName :=
     List.map (fun x => x + (fun x => x) 1) [1, 2] becomes
   `(def innerLambdaReusesTheName :=
-      List.map (· + (fun x => x) 1) [1, 2])
+    List.map (· + (fun x => x) 1) [1, 2])

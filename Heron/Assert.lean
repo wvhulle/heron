@@ -70,29 +70,16 @@ private meta def elabAssertResult (linterName : Ident) (cmd : Syntax)
   let some cmdRange := cmd.getRange? | do
     logWarningAt stx m!"command has no source range"
     return
-  let original := String.Pos.Raw.extract text.source cmdRange.start cmdRange.stop
+  let some expectedRange := expectedQuot.getQuotContent.getRange? | do
+    logWarningAt stx m!"expected quotation has no source range"
+    return
+  let expected := String.Pos.Raw.extract text.source expectedRange.start expectedRange.stop
   let modified := applyEdits text edits
   let delta : Int := modified.rawEndPos.byteIdx - text.source.rawEndPos.byteIdx
   let newStop : Nat := (cmdRange.stop.byteIdx : Int) + delta |>.toNat
   let actual := String.Pos.Raw.extract modified cmdRange.start ⟨newStop⟩
-  -- Normalize both expected and actual through Lean's pretty printer
-  let expectedNorm ← try
-    let fmt ← liftCoreM <| PrettyPrinter.ppCategory `command expectedQuot.getQuotContent
-    pure fmt.pretty
-  catch _ =>
-    let some text := expectedQuot.getQuotContent.reprint
-      | do logWarningAt stx m!"could not reprint expected quotation"; return
-    pure text.trimAscii.toString
-  let actualNorm ← try
-    match Parser.runParserCategory (← getEnv) `command actual with
-    | .ok stx' =>
-      let fmt ← liftCoreM <| PrettyPrinter.ppCategory `command stx'
-      pure fmt.pretty
-    | .error _ => pure actual.trimAscii.toString
-  catch _ => pure actual.trimAscii.toString
-  unless actualNorm == expectedNorm do
-    logErrorAt stx
-      m!"\n\n{linterName} failed to rewrite:\n\noriginal:\n{original.trimAscii}\n\nexpected:\n{expectedNorm}\n\nactual:\n{actualNorm}\n"
+  unless actual == expected do
+    logErrorAt stx m!"\n\n{linterName} failed to rewrite:\n\nexpected:\n{expected}\n\nactual:\n{actual}\n"
 
 syntax (name := assertCheckCmd)
   "#assertCheck " ident " in " command (" becomes " term)? : command

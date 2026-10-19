@@ -9,7 +9,7 @@ meta import Heron.Check.MatchOnBoolToIfThenElse
     | true => 1
     | false => 0 becomes
   `(def f (b : Bool) : Nat :=
-      if b then 1 else 0)
+    if b then 1 else 0)
 
 #assertCheck matchOnBoolToIfThenElse in
   def g (b : Bool) : Nat :=
@@ -17,4 +17,4 @@ meta import Heron.Check.MatchOnBoolToIfThenElse
     | false => 0
     | true => 1 becomes
   `(def g (b : Bool) : Nat :=
-      if b then 1 else 0)
+    if b then 1 else 0)
