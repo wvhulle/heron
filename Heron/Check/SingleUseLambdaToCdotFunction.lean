@@ -3,8 +3,6 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Parser Heron
 
 private structure SingleUseLambdaToCdotFunctionMatch where
@@ -14,45 +12,30 @@ private structure SingleUseLambdaToCdotFunctionMatch where
   parenthesised, otherwise `funStx` itself. Replacing the enclosing paren (rather than
   just the `fun`) keeps the output at a single set of parens — `(· + 1)`, not `((· + 1))`. -/
   replaceStx : Syntax
-  body : Syntax
-  paramName : Name
+  cdotFunction : Term
 
-private meta def bindsCdot (kind : SyntaxNodeKind) : Bool :=
-  kind == ``Term.paren || kind == ``Term.tuple || kind == ``Term.typeAscription
+private meta def cdotFunction (body : Term) (occurrence : Syntax) : CommandElabM Term := do
+  `(($(body.replacingSourceNode occurrence (← `(·)))))
 
-/-- Count how many times `name` appears as a replaceable bare identifier in `stx`.
-Returns `none` (ineligible) when `·` could not faithfully stand in for the parameter:
-- an occurrence nested inside a parenthesis, tuple or type ascription (which would change `·` scoping), or
-- a projection/dotted use like `s.field` (`replaceM` only rewrites the bare `s`, so
-  rewriting would leave `s.field` referencing the now-removed binder). -/
-private meta partial def cdotEligibleCount (name : Name) (stx : Syntax) (insideParens := false) : Option Nat :=
-  if stx.isIdent then
-    if stx.getId == name then (if insideParens then none else some 1)
-    else if stx.getId.getRoot == name then none  -- `s.field` etc. — not replaceable
-    else some 0
-  else
-    match stx with
-    | .node _ kind args =>
-      args.foldl
-        (init :=
-        some 0)
-        fun acc child =>
-        do
-        let n ← acc
-        let m ← cdotEligibleCount name child (insideParens || bindsCdot kind)
-        return n + m
-    | _ => some 0
+/-- Match `fun x => body` where `x` is referenced exactly once, as a plain identifier, and
+`(body)` with that reference replaced by `·` elaborates to the same function. -/
+private meta def eligibleCdotFunction? (funStx : Syntax) : CommandElabM (Option Term) := do
+  let `(fun $x:ident => $body) := funStx | return none
+  if let `($_:ident) := body then return none
+  let #[occurrence] ← boundVariableReferences x body | return none
+  let `($reference:ident) := occurrence | return none
+  unless reference.getId == x.getId do return none
+  let candidate ← cdotFunction body occurrence
+  unless ← elaboratesLike funStx candidate do return none
+  return some candidate
 
-/-- Match `fun x => body` where `x` occurs exactly once and not inside parens
-(so `·` keeps its scope). Returns the body and parameter name. -/
-private meta def matchEligibleFun? (stx : Syntax) : Option (Syntax × Name) :=
-  match stx with
-  | `(fun $x:ident => $body) => match body with
-    | `($_:ident) => none
-    | _ => match cdotEligibleCount x.getId body with
-      | some 1 => some (body, x.getId)
-      | _ => none
-  | _ => none
+private meta def detectSingleUseLambda (stx : Syntax) :
+    CommandElabM (Array SingleUseLambdaToCdotFunctionMatch) := do
+  let (funStx, replaceStx) : Syntax × Syntax := match stx with
+    | `(($inner)) => (inner, stx)
+    | _ => (stx, stx)
+  let some cdotFunction ← eligibleCdotFunction? funStx | return #[]
+  return #[{ funStx, replaceStx, cdotFunction }]
 
 private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
   name := `singleUseLambdaToCdotFunction
@@ -63,16 +46,7 @@ private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
   consumesSubtree := true
   severity := .information
   category := .simplification
-  detect := fun stx => pure <|
-    match stx with
-    -- Lambda already wrapped in parentheses: replace the whole `(fun x => …)`.
-    | `(($inner)) => match matchEligibleFun? inner with
-      | some (body, p) => #[{ funStx := inner, replaceStx := stx, body, paramName := p }]
-      | none => #[]
-    -- Bare lambda (e.g. `def f := fun x => …`, trailing-lambda arg): wrap it.
-    | _ => match matchEligibleFun? stx with
-      | some (body, p) => #[{ funStx := stx, replaceStx := stx, body, paramName := p }]
-      | none => #[]
+  detect := detectSingleUseLambda
   message := fun _ => m!"Use `·` function shorthand instead of explicit lambda"
   emphasize := fun m => m.funStx
   sources := #[
@@ -80,18 +54,10 @@ private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
     .mathlibStyleGuide "Anonymous functions" "anonymous-functions"]
   explanation := fun _ =>
     m!"Simple lambdas like `fun x => x + 1` can be written as `(· + 1)` using Lean's `·` function shorthand, which abstracts over the nearest enclosing parentheses."
-  replacements := some fun m => do
-    let name := m.paramName
-    let newBody ← m.body.replaceM fun stx => pure (if stx.isIdent && stx.getId == name then some (mkAtom "·") else none)
-    -- Wrap the `·` body in parentheses so the replacement is self-delimiting (`(· + 1)`).
-    -- Without the parens, an unparenthesized lambda site (`def f := fun x => x + 1`,
-    -- `xs.map fun x => x + 1`) would yield a bare `· + 1` that mis-parses / rescopes `·`.
-    let body : Term := ⟨newBody⟩
-    let parenthesized ← `(($body))
-    return #[{
-          emphasizedSyntax := m.funStx
-          oldSyntax := m.replaceStx
-          newSyntax := parenthesized
-          inlineViolationLabel := m!"fun → ·" }]
+  replacements := some fun m => return #[{
+    emphasizedSyntax := m.funStx
+    oldSyntax := m.replaceStx
+    newSyntax := m.cdotFunction
+    inlineViolationLabel := m!"fun → ·" }]
 
 register_check SingleUseLambdaToCdotFunctionMatch

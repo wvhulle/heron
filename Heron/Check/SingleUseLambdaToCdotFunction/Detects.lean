@@ -20,3 +20,9 @@ meta import Heron.Check.SingleUseLambdaToCdotFunction
 #assertCheck singleUseLambdaToCdotFunction in
   def h := fun x => x + 1 becomes
   `(def h := (· + 1))
+
+#assertCheck singleUseLambdaToCdotFunction in
+  def innerLambdaReusesTheName :=
+    List.map (fun x => x + (fun x => x) 1) [1, 2] becomes
+  `(def innerLambdaReusesTheName :=
+      List.map (· + (fun x => x) 1) [1, 2])

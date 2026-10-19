@@ -45,6 +45,10 @@ meta def replaceSourceNode (cmd target replacement : Syntax) : Syntax :=
   Id.run <| cmd.replaceM fun node =>
     pure (if isSameSourceNode node target then some replacement else none)
 
+meta def _root_.Lean.TSyntax.replacingSourceNode (stx : TSyntax k) (target replacement : Syntax) :
+    TSyntax k :=
+  ⟨replaceSourceNode stx target replacement⟩
+
 private meta def spans (outer inner : Syntax.Range) : Bool :=
   outer.start ≤ inner.start && inner.stop ≤ outer.stop
 

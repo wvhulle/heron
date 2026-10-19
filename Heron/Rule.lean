@@ -255,6 +255,37 @@ meta def elaboratesToApplicationOf (stx : Syntax) (constName : Name) : CommandEl
     return (← instantiateMVars e).getAppFn.isConstOf constName
   return applications.any id
 
+private meta def sameRange (a b : Syntax) : Bool :=
+  match a.getRange?, b.getRange? with
+  | some ra, some rb => ra.start == rb.start && ra.stop == rb.stop
+  | _, _ => false
+
+private meta def liesWithin (scope inner : Syntax) : Bool :=
+  match scope.getRange?, inner.getRange? with
+  | some outer, some r => outer.start ≤ r.start && r.stop ≤ outer.stop
+  | _, _ => false
+
+meta def boundVariableReferences (binder scope : Syntax) : CommandElabM (Array Syntax) := do
+  let infos := (← collectInfoTrees scope).flatMap collectTermInfos
+  let some (_, binderInfo) := infos.find? fun (_, ti) => ti.isBinder && sameRange ti.stx binder
+    | return #[]
+  let .fvar fvarId := binderInfo.expr | return #[]
+  let references := infos.filter fun (_, ti) =>
+    !ti.isBinder && ti.expr == .fvar fvarId && liesWithin scope ti.stx
+  return (deduplicateTermInfos references).map (·.2.stx)
+
+meta def elaboratesLike (original : Syntax) (candidate : Term) : CommandElabM Bool := do
+  let infos := (← collectInfoTrees original).flatMap collectTermInfos
+  let some (ci, ti) := infos.find? fun (_, ti) => sameRange ti.stx original | return false
+  let candidateExpr : TermElabM Expr := Term.withoutErrToSorry do
+    let e ← Term.elabTermEnsuringType candidate ti.expectedType?
+    Term.synthesizeSyntheticMVarsNoPostponing
+    instantiateMVars e
+  try
+    runInfoMetaM ci ti.lctx do
+      Meta.isDefEq (← instantiateMVars ti.expr) (← candidateExpr.run')
+  catch _ => return false
+
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
   | stx@(.node _ kind args) => if kind == ``Lean.Parser.Command.declId then some stx else args.findSome? findDeclId?
