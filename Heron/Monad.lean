@@ -2,6 +2,7 @@ module
 
 public meta import Lean.Elab.Command
 public meta import Lean.Meta.SynthInstance
+public meta import Heron.Rule
 
 public section
 
@@ -43,6 +44,25 @@ private meta def isSameSourceNode (candidate target : Syntax) : Bool :=
 meta def replaceSourceNode (cmd target replacement : Syntax) : Syntax :=
   Id.run <| cmd.replaceM fun node =>
     pure (if isSameSourceNode node target then some replacement else none)
+
+private meta def spans (outer inner : Syntax.Range) : Bool :=
+  outer.start ≤ inner.start && inner.stop ≤ outer.stop
+
+meta def enclosingCommand? (node : Syntax) : CommandElabM (Option Syntax) := do
+  let some range := node.getRange? | return none
+  let commands := (← getInfoState).trees.toArray.flatMap fun tree =>
+    tree.foldInfo (init := #[]) fun _ info acc =>
+      match info with
+      | .ofCommandInfo ci => if ci.stx.getRange?.any (spans · range) then acc.push ci.stx else acc
+      | _ => acc
+  return commands.foldl (init := none) fun outermost? candidate =>
+    match outermost?.bind (·.getRange?), candidate.getRange? with
+    | some current, some next => if spans next current then some candidate else outermost?
+    | _, _ => some candidate
+
+meta def rewriteElaborates (target replacement : Syntax) : CommandElabM Bool := do
+  let some cmd ← enclosingCommand? target | return false
+  elaboratesWithoutErrorsInProbeNamespace (replaceSourceNode cmd target replacement)
 
 /-- Check if the outer part of a fully-applied expression — everything except
 the last argument — has a `Monad` instance. Used by transformer-detection rules

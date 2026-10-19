@@ -4,8 +4,6 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-
 open Lean Elab Command Parser Heron
 
 private structure MatchOnBoolToIfThenElseMatch where
@@ -29,22 +27,19 @@ private meta def boolMatch? : Syntax → Option MatchOnBoolToIfThenElseMatch
 private meta def ifThenElse (m : MatchOnBoolToIfThenElseMatch) : CommandElabM (TSyntax `term) :=
   `(if $m.discr then $m.trueRhs else $m.falseRhs)
 
-private meta def detectBoolMatchesWhoseIfRewriteElaborates (cmd : Syntax) :
-    CommandElabM (Array MatchOnBoolToIfThenElseMatch) :=
-  (subtreeNodes cmd).filterMapM fun node => do
-    let some m := boolMatch? node | return none
-    let probe := replaceSourceNode cmd m.matchStx (← ifThenElse m)
-    unless ← elaboratesWithoutErrorsInProbeNamespace probe do return none
-    return some m
+private meta def detectBoolMatchWhoseIfRewriteElaborates (node : Syntax) :
+    CommandElabM (Array MatchOnBoolToIfThenElseMatch) := do
+  let some m := boolMatch? node | return #[]
+  unless ← rewriteElaborates m.matchStx (← ifThenElse m) do return #[]
+  return #[m]
 
 private meta instance : Check MatchOnBoolToIfThenElseMatch where
   name := `matchOnBoolToIfThenElse
   description := "Suggests `if … then … else …` instead of matching on a `Bool`."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Term.match]
   severity := .information
   category := .simplification
-  detect := detectBoolMatchesWhoseIfRewriteElaborates
+  detect := detectBoolMatchWhoseIfRewriteElaborates
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
