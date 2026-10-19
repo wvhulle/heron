@@ -62,8 +62,7 @@ private meta def patternMatchingDefinition (m : MatchOnParametersToPatternMatchi
 private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch where
   name := `matchOnParametersToPatternMatchingDefinition
   description := "Suggests a pattern-matching definition instead of naming parameters only to `match` on them."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := fun cmd => pure (detectMatchOnParameters cmd).toArray

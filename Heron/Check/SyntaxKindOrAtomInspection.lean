@@ -14,8 +14,7 @@ private meta def kindAndAtomInspectors : Array Name :=
 private meta instance : Check SyntaxKindOrAtomInspectionMatch where
   name := `syntaxKindOrAtomInspection
   description := "Flags `getKind`, `isOfKind` and `getAtomVal` where a quotation pattern would match the node."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .warning
   category := .style
   detect := fun cmd => do

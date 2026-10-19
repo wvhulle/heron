@@ -14,8 +14,7 @@ private meta def walksSyntaxByHand (e : Expr) : Bool :=
 private meta instance : Check PositionalSyntaxAccessMatch where
   name := `positionalSyntaxAccess
   description := "Flags syntax children read by position (`getArg`, `stx[i]`) or hand-written walks in a rule."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .warning
   category := .style
   detect := fun cmd => do

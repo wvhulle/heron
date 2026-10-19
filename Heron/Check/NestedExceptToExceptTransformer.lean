@@ -43,8 +43,7 @@ private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
 private meta instance : Check NestedExceptToExceptTransformerMatch where
   name := `nestedExceptToExceptTransformer
   description := "Suggests `ExceptT` instead of nesting `Except` inside another monad in a signature; the fix is only offered when the rewritten definition still elaborates."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)

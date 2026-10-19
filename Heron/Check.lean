@@ -70,10 +70,12 @@ private meta def termInfosOutsideNameLiterals (tree : InfoTree) : Array (Context
       return true)
   (collect.run #[]).2
 
-meta def originalCallSitesOf (cmd : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) := do
-  let trees ← collectInfoTrees cmd
+meta def originalCallSitesOf (node : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) := do
+  let some range := node.getRange? | return #[]
+  let trees ← collectInfoTrees node
   let hits ← (trees.flatMap termInfosOutsideNameLiterals).filterM fun (ci, ti) => do
     let .original .. := ti.stx.getHeadInfo | return false
+    unless ti.stx.getRange?.any fun r => range.start ≤ r.start && r.stop ≤ range.stop do return false
     if isApplicationSyntax ti.stx then return false
     runInfoMetaM ci ti.lctx do return isTarget (← instantiateMVars ti.expr)
   return (deduplicateTermInfos hits).map (·.2.stx)
@@ -191,6 +193,7 @@ kind matches the rule, then calls `emit` once at the end. -/
 structure RuleHandler where
   /-- Syntax kinds at which `visit` should be invoked. -/
   kinds : Array SyntaxNodeKind
+  within : Array SyntaxNodeKind
   /-- Called once per matching node during the master walk; accumulates matches
   in handler-private state. -/
   visit : Syntax → CommandElabM Unit
@@ -235,6 +238,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
   let walkStart ← IO.monoNanosNow
   return {
     kinds := Rule.kinds (α := α)
+    within := Rule.within (α := α)
     visit := fun node => do
       if consumes then
         if let some r := node.getRange? then
@@ -269,18 +273,20 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
 /-- Walk `stx` once, dispatching each node to every handler that registered for
 its kind. -/
 private meta partial def walkDispatch
-    (table : Std.HashMap SyntaxNodeKind (Array (Syntax → CommandElabM Unit))) (stx : Syntax) :
-    CommandElabM Unit := do
+    (table : Std.HashMap SyntaxNodeKind (Array RuleHandler)) (enclosingKinds : Array SyntaxNodeKind)
+    (stx : Syntax) : CommandElabM Unit := do
+  let enclosingKinds := enclosingKinds.push stx.getKind
   if let some hs := table[stx.getKind]? then
-    for h in hs do h stx
-  for c in stx.getArgs do walkDispatch table c
+    for h in hs do
+      if h.within.isEmpty || enclosingKinds.any h.within.contains then h.visit stx
+  for c in stx.getArgs do walkDispatch table enclosingKinds c
 
 /-- Build the kind→handlers dispatch table from a list of live handlers. -/
 private meta def buildDispatchTable (handlers : Array RuleHandler) :
-    Std.HashMap SyntaxNodeKind (Array (Syntax → CommandElabM Unit)) :=
+    Std.HashMap SyntaxNodeKind (Array RuleHandler) :=
   handlers.foldl (init := {}) fun tbl h =>
     h.kinds.foldl (init := tbl) fun tbl k =>
-      tbl.insert k ((tbl[k]?.getD #[]).push h.visit)
+      tbl.insert k ((tbl[k]?.getD #[]).push h)
 
 /-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
 the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. Each check
@@ -343,9 +349,8 @@ private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
 
 /-- The single linter Heron registers with Lean. It activates every enabled
 rule, builds one handler per rule, walks the command syntax once via kind-keyed
-dispatch, then runs each handler's emit phase. Handlers with empty `kinds`
-fire once at the command root (file-level analyses like import checks). Finally,
-`writeFixSink` records the fixes when `HERON_FIX_DIR` is set. -/
+dispatch, then runs each handler's emit phase. Finally, `writeFixSink` records
+the fixes when `HERON_FIX_DIR` is set. -/
 private meta def heronMasterLinter : Linter where
   name := `heron
   run := withSetOptionIn fun stx => do
@@ -355,9 +360,7 @@ private meta def heronMasterLinter : Linter where
     let active := entries.filter (·.isEnabled opts)
     if active.isEmpty then return
     let handlers ← active.mapM (·.setup)
-    for h in handlers do
-      if h.kinds.isEmpty then h.visit stx
-    walkDispatch (buildDispatchTable handlers) stx
+    walkDispatch (buildDispatchTable handlers) #[] stx
     for h in handlers do h.emit
     writeFixSink stx
 

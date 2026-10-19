@@ -16,8 +16,7 @@ private meta def syntaxConstructors : Array Name :=
 private meta instance : Check SyntheticSyntaxConstructionMatch where
   name := `syntheticSyntaxConstruction
   description := "Flags syntax assembled from atoms, identifiers or raw nodes instead of a quotation; `mkNullNode` over source nodes, used as a span, is allowed."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .warning
   category := .style
   detect := fun cmd => do

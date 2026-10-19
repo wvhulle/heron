@@ -75,8 +75,7 @@ private meta def isOffsetSum (base : Syntax) : Bool :=
 private meta instance : Check NatConstructorsToLiteralsMatch where
   name := `natConstructorsToLiterals
   description := "Suggests `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ`."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := fun cmd => pure <|

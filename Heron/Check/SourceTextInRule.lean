@@ -16,8 +16,7 @@ private meta def textReaders : Array Name :=
 private meta instance : Check SourceTextInRuleMatch where
   name := `sourceTextInRule
   description := "Flags syntax or names turned back into text (`reprint`, `Name.toString`, string splitting) inside a rule."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .warning
   category := .style
   detect := fun cmd => do

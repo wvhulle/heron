@@ -47,8 +47,7 @@ private meta def detectKindChecksBeforePositionalAccess (cmd : Syntax) :
 private meta instance : Check SyntaxKindComparisonToQuotationPatternMatch where
   name := `syntaxKindComparisonToQuotationPattern
   description := "Flags a `Syntax.getKind` comparison followed by positional child access and suggests matching with an antiquotation pattern instead."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := detectKindChecksBeforePositionalAccess

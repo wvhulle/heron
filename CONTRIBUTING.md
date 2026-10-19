@@ -29,7 +29,7 @@ Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
 one-sentence `description` (`heron-scan rules` prints it), `detect`, `message`, `replacements`
 and `sources`, plus the tests `<Rule>/Detects.lean` and `<Rule>/Ignores.lean`. The file ends
 with `register_check <Match>` or `register_refactor <Match>`. Registration refuses a rule whose
-`kinds` name no syntax node kind, that leaves `kinds` empty without `wholeCommand := true`, or
+`kinds` is empty, whose `kinds` or `within` name something that is not a syntax node kind, or
 that lacks either test file.
 
 Rules work the way the linters in Lean core and Mathlib do: they match the structure Lean has
@@ -39,9 +39,11 @@ already parsed and elaborated, and never go back to the source text. Concretely:
    fires on and the framework dispatches to `detect` there; `detect` then matches with
    `` `(doElem| if $cond then $body) ``-style patterns whose antiquotations name every part the
    rule needs, and stores them as `TSyntax` in the match struct. Use `dump-syntax-tree` (below)
-   to find the kind and the shape. `wholeCommand := true` with `kinds := #[]` is for rules that
-   must see a whole declaration, such as the signature-based transformer rules; it is not a way
-   to walk the tree yourself.
+   to find the kind and the shape. `within` restricts the rule to nodes below one of the listed
+   kinds, e.g. `` kinds := #[``Term.app], within := #[``Command.declSig] `` for types written in
+   a signature, the way Lean core's `UnusedVariables` matches on the syntax stack. A rule that
+   analyses a whole declaration fires at `` ``Command.declaration ``. The framework does the
+   walking; a rule never walks the tree itself.
 2. **Take meaning from elaboration, not from spelling.** When a rule depends on a type, an
    instance, a binder or what a name resolves to, ask the info tree: `runMetaMForSyntax`,
    `runMetaMForEachExactSyntax`, `collectTermInfos`, `elaboratesToApplicationOf`,

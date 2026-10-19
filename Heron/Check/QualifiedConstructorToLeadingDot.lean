@@ -61,8 +61,7 @@ private meta def detectQualifiedConstructors (cmd : Syntax) :
 private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   name := `qualifiedConstructorToLeadingDot
   description := "Suggests `.leaf` instead of `BinTree.leaf` where the expected type is known."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := detectQualifiedConstructors

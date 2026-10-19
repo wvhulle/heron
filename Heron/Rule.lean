@@ -53,9 +53,7 @@ class Rule (α : Type) where
   name : Name
   description : String
   /-- Syntax kinds at which this rule fires. The harness only invokes `detect`
-  on nodes whose `getKind` is in this array. An empty array is a special case:
-  the rule fires once at the root of each command (no descent), useful for
-  rules that analyse the file holistically (e.g. import-usage checks). -/
+  on nodes whose `getKind` is in this array. -/
   kinds : Array SyntaxNodeKind
   /-- Per-node detector. Receives a node whose kind is one of `kinds`; returns
   matches that originate at this node. -/
@@ -74,7 +72,7 @@ class Rule (α : Type) where
   level of a nested chain and want only the outermost match (e.g. `Expr.app`
   chains, `>>=` chains). -/
   consumesSubtree : Bool := false
-  wholeCommand : Bool := false
+  within : Array SyntaxNodeKind := #[]
   sources : Array Source := #[]
 
 inductive RuleKind where
@@ -147,21 +145,22 @@ in `kinds`. When `consumesSubtree` is `true` and `detect` returns a non-empty
 array at a node, descendants of that node are not visited. Used by
 `Rule.detectAll`; the master linter implements the same shape against the
 shared dispatch walk via per-rule consumed-range tracking. -/
-private meta partial def walkKinds (kinds : Array SyntaxNodeKind) (consumesSubtree : Bool)
-    (detect : Syntax → CommandElabM (Array α)) (stx : Syntax) : CommandElabM (Array α) := do
-  let here ← if kinds.contains stx.getKind then detect stx else pure #[]
+private meta partial def walkKinds (kinds within : Array SyntaxNodeKind) (consumesSubtree : Bool)
+    (detect : Syntax → CommandElabM (Array α)) (insideScope : Bool) (stx : Syntax) :
+    CommandElabM (Array α) := do
+  let insideScope := insideScope || within.contains stx.getKind
+  let here ← if insideScope && kinds.contains stx.getKind then detect stx else pure #[]
   if consumesSubtree && !here.isEmpty then return here
   stx.getArgs.foldlM (init := here) fun acc child => do
-    return acc ++ (← walkKinds kinds consumesSubtree detect child)
+    return acc ++ (← walkKinds kinds within consumesSubtree detect insideScope child)
 
 /-- Run a rule across a whole command's syntax. Used by the test runner and
 code-action provider; the master linter inlines the same shape so it can share
-the walk across all rules. Empty `kinds` means "fire once at the command
-root", so the walk is skipped entirely. -/
+the walk across all rules. -/
 meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) :=
-  let kinds := Rule.kinds (α := α)
-  if kinds.isEmpty then Rule.detect (α := α) stx
-  else walkKinds kinds (Rule.consumesSubtree (α := α)) (Rule.detect (α := α)) stx
+  let within := Rule.within (α := α)
+  walkKinds (Rule.kinds (α := α)) within (Rule.consumesSubtree (α := α)) (Rule.detect (α := α))
+    within.isEmpty stx
 
 /-- Re-elaborate a command collecting info trees.
 

@@ -31,8 +31,7 @@ private meta def detectRawEscapesBeforePositionalAccess (cmd : Syntax) :
 private meta instance : Check TsyntaxRawToTypedAccessMatch where
   name := `tsyntaxRawToTypedAccess
   description := "Flags `.raw` on a `TSyntax` followed by positional child access and suggests a typed pattern instead."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .information
   category := .style
   detect := detectRawEscapesBeforePositionalAccess

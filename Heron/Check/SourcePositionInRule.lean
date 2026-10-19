@@ -15,8 +15,7 @@ private meta def positionReaders : Array Name :=
 private meta instance : Check SourcePositionInRuleMatch where
   name := `sourcePositionInRule
   description := "Flags source positions (`getPos?`, `getRange?`) read inside a rule."
-  kinds := #[]
-  wholeCommand := true
+  kinds := #[``Lean.Parser.Command.declaration]
   severity := .warning
   category := .style
   detect := fun cmd => do
