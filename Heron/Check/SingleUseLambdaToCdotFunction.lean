@@ -1,6 +1,9 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -53,6 +56,7 @@ private meta def matchEligibleFun? (stx : Syntax) : Option (Syntax × Name) :=
 
 private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
   name := `singleUseLambdaToCdotFunction
+  description := "Suggests `·` instead of an explicit lambda whose parameter is used once."
   -- Also match `Term.paren` so a `(fun x => …)` is replaced as a unit (one set of parens).
   -- `consumesSubtree` then stops the inner `Term.fun` from re-matching and double-firing.
   kinds := #[``Term.paren, ``Term.fun]
@@ -76,7 +80,7 @@ private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
     .mathlibStyleGuide "Anonymous functions" "anonymous-functions"]
   explanation := fun _ =>
     m!"Simple lambdas like `fun x => x + 1` can be written as `(· + 1)` using Lean's `·` function shorthand, which abstracts over the nearest enclosing parentheses."
-  replacements := fun m => do
+  replacements := some fun m => do
     let name := m.paramName
     let newBody ← m.body.replaceM fun stx => pure (if stx.isIdent && stx.getId == name then some (mkAtom "·") else none)
     -- Wrap the `·` body in parentheses so the replacement is self-delimiting (`(· + 1)`).
@@ -90,4 +94,4 @@ private meta instance : Check SingleUseLambdaToCdotFunctionMatch where
           newSyntax := parenthesized
           inlineViolationLabel := m!"fun → ·" }]
 
-meta initialize Check.register (α := SingleUseLambdaToCdotFunctionMatch)
+register_check SingleUseLambdaToCdotFunctionMatch

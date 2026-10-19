@@ -1,7 +1,13 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.sourcePositionInRule false
+set_option linter.syntaxKindComparisonToQuotationPattern false
+set_option linter.syntaxKindOrAtomInspection false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Meta Parser Heron
 
@@ -53,7 +59,9 @@ private meta def detectQualifiedConstructors (cmd : Syntax) :
 
 private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   name := `qualifiedConstructorToLeadingDot
+  description := "Suggests `.leaf` instead of `BinTree.leaf` where the expected type is known."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := detectQualifiedConstructors
@@ -67,7 +75,7 @@ private meta instance : Check QualifiedConstructorToLeadingDotMatch where
        constructor applications shorter, at the cost of being less explicit when the code is read \
        outside an editor. The hint only appears where the declaration still elaborates with the \
        leading dot."
-  replacements := fun m => do
+  replacements := some fun m => do
     return #[{
       emphasizedSyntax := m.ident
       oldSyntax := m.ident
@@ -75,4 +83,4 @@ private meta instance : Check QualifiedConstructorToLeadingDotMatch where
       inlineViolationLabel := m!"leading dot"
     }]
 
-meta initialize Check.register (α := QualifiedConstructorToLeadingDotMatch)
+register_check QualifiedConstructorToLeadingDotMatch

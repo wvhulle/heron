@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Refactor
+meta import Heron.Register
 
 open Lean Elab Command Heron
 
@@ -12,6 +13,7 @@ private structure FlipIfMatch where
 
 private meta instance : Refactor FlipIfMatch where
   name := `flipIf
+  description := "Swaps the branches of an `if` and negates its condition."
   kinds := #[``termIfThenElse]
   detect := fun stx => pure <|
     match stx with
@@ -22,7 +24,7 @@ private meta instance : Refactor FlipIfMatch where
       | _ => #[]
     | _ => #[]
   message := fun _ => m!"Flip `if` branches"
-  replacements := fun m => return #[
+  replacements := some fun m => return #[
     { emphasizedSyntax := m.negCondStx
       oldSyntax := m.negCondStx
       newSyntax := m.innerCond
@@ -38,4 +40,4 @@ private meta instance : Refactor FlipIfMatch where
   ]
   codeActionKind := "refactor.rewrite"
 
-meta initialize Refactor.register (α := FlipIfMatch)
+register_refactor FlipIfMatch

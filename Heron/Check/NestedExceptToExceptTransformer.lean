@@ -1,7 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
 
 open Lean Elab Command Meta Parser Heron
 
@@ -38,7 +41,9 @@ private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
 
 private meta instance : Check NestedExceptToExceptTransformerMatch where
   name := `nestedExceptToExceptTransformer
+  description := "Suggests `ExceptT` instead of nesting `Except` inside another monad in a signature; the fix is only offered when the rewritten definition still elaborates."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
@@ -54,11 +59,11 @@ private meta instance : Check NestedExceptToExceptTransformerMatch where
        not elaborate unchanged with the transformer type (it builds `Except` values by hand), so \
        no automatic fix is offered."} Callers in other declarations may need `.run` to get the \
        nested type back."
-  replacements := fun m => do
+  replacements := some fun m => do
     unless m.rewriteElaborates do return #[]
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
                newSyntax := ← exceptTType m
                inlineViolationLabel := m!"Except → ExceptT" }]
 
-meta initialize Check.register (α := NestedExceptToExceptTransformerMatch)
+register_check NestedExceptToExceptTransformerMatch

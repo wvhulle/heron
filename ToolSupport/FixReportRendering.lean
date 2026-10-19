@@ -128,33 +128,34 @@ private def notesLines (g : Gutter) (fix : FixRecord) : List String :=
 /-- One `cargo clippy`-style diagnostic block for a fix. -/
 def renderFix (pal : Palette) (file fileUri : String) (fm : FileMap)
     (srcLines : Array String) (fix : FixRecord) : String :=
-  let sp := fm.toPosition (fm.lspPosToUtf8Pos fix.edit.range.start)
-  let ep := fm.toPosition (fm.lspPosToUtf8Pos fix.edit.range.end)
+  let sp := fm.toPosition (fm.lspPosToUtf8Pos fix.span.start)
+  let ep := fm.toPosition (fm.lspPosToUtf8Pos fix.span.end)
   -- Show two lines of source on each side of the span for orientation.
   let ctx := 2
   let firstLn := max 1 (sp.line - ctx)
   let lastLn := min srcLines.size (ep.line + ctx)
   let g : Gutter := { pal, width := (toString lastLn).length }
-  let sugg := Suggestion.of fix.edit.newText
-  let inlineHelp := sugg.inlineHelp pal
+  let sugg := fix.edit.map (Suggestion.of ·.newText)
+  let inlineHelp := (sugg.map (·.inlineHelp pal)).getD ""
   let source := (List.range' firstLn (lastLn + 1 - firstLn)).flatMap fun ln =>
     sourceLine g sp ep (srcLines.getD (ln - 1) "") ln inlineHelp
+  let suggestionBlock := (sugg.map (·.block g)).getD []
   String.intercalate "\n"
-    (headerLines g file fileUri fix sp ++ source ++ sugg.block g ++ notesLines g fix ++ [""])
+    (headerLines g file fileUri fix sp ++ source ++ suggestionBlock ++ notesLines g fix ++ [""])
 
 def fixToJson (file : String) (fm : FileMap) (fix : FixRecord) : Json :=
-  let s := fm.lspPosToUtf8Pos fix.edit.range.start
-  let e := fm.lspPosToUtf8Pos fix.edit.range.end
+  let s := fm.lspPosToUtf8Pos fix.span.start
+  let e := fm.lspPosToUtf8Pos fix.span.end
   let pos := fm.toPosition s
   let before := String.Pos.Raw.extract fm.source s e
-  Json.mkObj
-    [ ("rule", fix.rule)
-    , ("message", fix.message)
-    , ("file", file)
-    , ("line", (pos.line : Nat))
-    , ("col", (pos.column + 1 : Nat))
-    , ("before", before)
-    , ("after", fix.edit.newText) ]
+  let after : List (String × Json) := (fix.edit.map fun edit => [("after", toJson edit.newText)]).getD []
+  Json.mkObj <|
+    [ ("rule", toJson fix.rule)
+    , ("message", toJson fix.message)
+    , ("file", toJson file)
+    , ("line", toJson pos.line)
+    , ("col", toJson (pos.column + 1))
+    , ("before", toJson before) ] ++ after
 
 /-! ## Colour decision + uniform output (shared by both binaries) -/
 
@@ -179,12 +180,13 @@ actually changed. -/
 private def applyReports (reports : Array Report) : IO (Array Nat) :=
   reports.filterMapM fun r => do
     let some path := r.path | return none
-    if r.fixes.isEmpty then return none
-    let patched := Heron.applyEdits r.fileMap (r.fixes.map (·.edit))
+    let edits := r.fixes.filterMap (·.edit)
+    if edits.isEmpty then return none
+    let patched := Heron.applyEdits r.fileMap edits
     if patched == r.fileMap.source then return none
     IO.FS.writeFile path patched
-    IO.eprintln s!"fixed {r.fixes.size} in {path}"
-    return some r.fixes.size
+    IO.eprintln s!"fixed {edits.size} in {path}"
+    return some edits.size
 
 /-- Render `reports` per the chosen mode (`json`/`apply`/`fix`/default human). Returns the exit code. -/
 def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO UInt32 := do
@@ -193,7 +195,7 @@ def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO U
     unless reports.size == 1 do
       IO.eprintln "heron: --apply needs exactly one matching file; narrow the input or use --fix"
       return 1
-    IO.print (Heron.applyEdits r.fileMap (r.fixes.map (·.edit)))
+    IO.print (Heron.applyEdits r.fileMap (r.fixes.filterMap (·.edit)))
     return 0
   if fix then
     let applied ← applyReports reports
@@ -206,7 +208,7 @@ def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO U
     let srcLines := r.fileMap.source.splitOn "\n" |>.toArray
     let fileUri ← absFileUri r.path
     r.fixes.forM fun f => IO.println (renderFix pal r.label fileUri r.fileMap srcLines f)
-  IO.eprintln (pal.warn s!"heron: {(reports.map (·.fixes.size)).sum} fix(es) across {reports.size} file(s)")
+  IO.eprintln (pal.warn s!"heron: {(reports.map (·.fixes.size)).sum} finding(s) across {reports.size} file(s)")
   return 0
 
 end ToolSupport

@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -60,7 +61,9 @@ private meta def patternMatchingDefinition (m : MatchOnParametersToPatternMatchi
 
 private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch where
   name := `matchOnParametersToPatternMatchingDefinition
+  description := "Suggests a pattern-matching definition instead of naming parameters only to `match` on them."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := fun cmd => pure (detectMatchOnParameters cmd).toArray
@@ -72,7 +75,7 @@ private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch 
     m!"When a parameter is named only to be matched on immediately, the cases can be written \
        directly after the signature: move the parameter's type to the right of the colon, so the \
        declared type becomes a function type, and replace `:= match … with` by the alternatives."
-  replacements := fun m => do
+  replacements := some fun m => do
     return #[{
       emphasizedSyntax := m.matchKw
       oldSyntax := m.declaration
@@ -81,4 +84,4 @@ private meta instance : Check MatchOnParametersToPatternMatchingDefinitionMatch 
       inlineViolationLabel := m!"match on parameters"
     }]
 
-meta initialize Check.register (α := MatchOnParametersToPatternMatchingDefinitionMatch)
+register_check MatchOnParametersToPatternMatchingDefinitionMatch

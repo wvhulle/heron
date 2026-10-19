@@ -34,5 +34,13 @@
     "line": 3,
     "message": "Use `if let` instead of two-arm `match` with wildcard",
     "rule": "wildcardMatchToIfLet"
+  },
+  {
+    "before": "s.toUpper ++ \"!\"",
+    "col": 36,
+    "file": "Consumer/Strings.lean",
+    "line": 1,
+    "message": "Use string interpolation `s!\"…\"` instead of concatenating with `++`",
+    "rule": "stringConcatenationToInterpolation"
   }
 ]

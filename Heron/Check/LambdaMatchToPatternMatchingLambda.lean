@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -13,6 +14,7 @@ private meta def mentionsName (name : Name) (stx : Syntax) : Bool :=
 
 private meta instance : Check LambdaMatchToPatternMatchingLambdaMatch where
   name := `lambdaMatchToPatternMatchingLambda
+  description := "Suggests `fun | …` instead of a lambda whose body only matches on its argument."
   kinds := #[``Term.fun]
   severity := .information
   category := .simplification
@@ -28,7 +30,7 @@ private meta instance : Check LambdaMatchToPatternMatchingLambdaMatch where
     "Getting-to-Know-Lean/Additional-Conveniences/#anonymous-functions"]
   explanation := fun _ =>
     m!"`fun x => match x with | ...` can be simplified to `fun | ...` using Lean's pattern-matching lambda syntax, because no match arm refers to `x` itself."
-  replacements := fun m => do
+  replacements := some fun m => do
     let alts : TSyntax ``Term.matchAlts := ⟨m.matchAlts⟩
     let repl ← `(fun$alts:matchAlts)
     return #[{
@@ -37,4 +39,4 @@ private meta instance : Check LambdaMatchToPatternMatchingLambdaMatch where
           newSyntax := repl
           inlineViolationLabel := m!"fun match → fun |" }]
 
-meta initialize Check.register (α := LambdaMatchToPatternMatchingLambdaMatch)
+register_check LambdaMatchToPatternMatchingLambdaMatch

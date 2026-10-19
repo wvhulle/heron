@@ -79,4 +79,6 @@ echo 'def f := fun x => x + 1' | lake exe heron-scan -
 
 It accepts `--json`, `--fix`, `--apply`, `--color` and `--no-color`, plus `--per-file`,
 `--no-cache` and `--no-parallel`, and reads stdin with `-`. `--rule <name>`, which can be repeated,
-runs only the named checks.
+runs only the named checks. `heron-scan rules` lists every check and refactor with its description
+and sources; with `--json` it prints them as a JSON array. A check that flags code without a fix
+is reported like any other finding; in `--json` output such a finding has no `after` field.

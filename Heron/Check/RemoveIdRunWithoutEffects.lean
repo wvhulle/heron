@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
@@ -50,6 +51,7 @@ private meta def matchUnnecessaryIdRun? (stx : Syntax) : Option RemoveIdRunWitho
 
 private meta instance : Check RemoveIdRunWithoutEffectsMatch where
   name := `removeIdRunWithoutEffects
+  description := "Suggests removing an `Id.run do` block that uses no effects."
   kinds := #[``Term.app]
   severity := .warning
   category := .simplification
@@ -62,7 +64,7 @@ private meta instance : Check RemoveIdRunWithoutEffectsMatch where
   sources := #[.functionalProgrammingInLean "`Id.run`" "Monad-Transformers/More-do-Features/#let-mut"]
   tags := #[.unnecessary]
   explanation := fun _ => m!"This `Id.run do` block contains no imperative constructs (mutation, loops, early returns). The `do` notation is unnecessary and the expression can be written directly."
-  replacements := fun m => do
+  replacements := some fun m => do
     let newSyntax ← m.lets.foldrM (init := m.finalExpr) fun b acc =>
       `(let $b.ident := $b.val; $acc)
     return #[{
@@ -72,4 +74,4 @@ private meta instance : Check RemoveIdRunWithoutEffectsMatch where
       inlineViolationLabel := m!"unnecessary Id.run do"
     }]
 
-meta initialize Check.register (α := RemoveIdRunWithoutEffectsMatch)
+register_check RemoveIdRunWithoutEffectsMatch

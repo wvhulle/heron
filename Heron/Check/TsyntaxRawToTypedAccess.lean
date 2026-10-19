@@ -1,7 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
 
 open Lean Elab Command Parser Heron
 
@@ -27,7 +30,9 @@ private meta def detectRawEscapesBeforePositionalAccess (cmd : Syntax) :
 
 private meta instance : Check TsyntaxRawToTypedAccessMatch where
   name := `tsyntaxRawToTypedAccess
+  description := "Flags `.raw` on a `TSyntax` followed by positional child access and suggests a typed pattern instead."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := detectRawEscapesBeforePositionalAccess
@@ -41,6 +46,5 @@ private meta instance : Check TsyntaxRawToTypedAccessMatch where
        antiquotation in a `` `(...) `` pattern binds the same children by name and is checked at \
        compile time. `.raw` itself is fine for `Coe` instances between categories, for \
        `getKind` dispatch, or to call APIs that only accept `Syntax`."
-  replacements := fun _ => return #[]
 
-meta initialize Check.register (α := TsyntaxRawToTypedAccessMatch)
+register_check TsyntaxRawToTypedAccessMatch

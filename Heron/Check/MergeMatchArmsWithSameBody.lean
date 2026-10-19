@@ -1,6 +1,9 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -28,6 +31,7 @@ private meta def runWithSharedRhs? (run : List (TSyntax ``Term.matchAlt)) :
 
 private meta instance : Check MergeMatchArmsWithSameBodyMatch where
   name := `mergeMatchArmsWithSameBody
+  description := "Suggests merging match arms whose right-hand sides are identical."
   kinds := #[``Term.match]
   severity := .information
   category := .simplification
@@ -42,7 +46,7 @@ private meta instance : Check MergeMatchArmsWithSameBodyMatch where
   tags := #[.unnecessary]
   sources := #[.functionalProgrammingInLean "Or-patterns" "Monads/Additional-Conveniences/#or-patterns"]
   explanation := fun _ => m!"Consecutive match arms with the same body can be merged using `|` patterns."
-  replacements := fun m => do
+  replacements := some fun m => do
     let some (firstArm : TSyntax ``Term.matchAlt) := m.run[0]? | return #[]
     let `(Term.matchAltExpr| | $_ => $rhs) := firstArm | return #[]
     let alternatives := m.run.flatMap fun
@@ -57,4 +61,4 @@ private meta instance : Check MergeMatchArmsWithSameBodyMatch where
       category := `matchAlt
     }]
 
-meta initialize Check.register (α := MergeMatchArmsWithSameBodyMatch)
+register_check MergeMatchArmsWithSameBodyMatch

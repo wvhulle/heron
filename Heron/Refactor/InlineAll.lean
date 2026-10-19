@@ -1,10 +1,13 @@
 module
 
 public meta import Heron.Refactor
+meta import Heron.Register
 public meta import Heron.Refactor.Inline
 public meta import Lean.Meta.Tactic.Delta
 public meta import Lean.PrettyPrinter
 public meta import Lean.Server.FileWorker.Utils
+
+set_option linter.sourcePositionInRule false
 
 public section
 
@@ -77,10 +80,11 @@ private meta def detectInlineAllConst (stx : Syntax) : CommandElabM (Array Inlin
 
 private meta instance : Refactor InlineAllConstMatch where
   name := `inlineAllConst
+  description := "Inlines every use of a private definition and removes the definition; offered on the definition's name."
   kinds := #[``Lean.Parser.Command.declaration]
   detect := detectInlineAllConst
   message := fun m => m! "Inline all {m.usageReplacements.size } usages of '{m.constName}'"
-  replacements := fun m =>
+  replacements := some fun m =>
     return m.usageReplacements.map fun (oldStx, newStx) =>
         { emphasizedSyntax := oldStx
           oldSyntax := oldStx
@@ -88,7 +92,7 @@ private meta instance : Refactor InlineAllConstMatch where
           inlineViolationLabel := m! "Inline all usages of '{m.constName}'" }
   codeActionKind := "refactor.inline"
 
-meta initialize Refactor.register (α := InlineAllConstMatch)
+register_refactor InlineAllConstMatch
 
 private meta def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
   let declIdStx ← findDeclId? stx

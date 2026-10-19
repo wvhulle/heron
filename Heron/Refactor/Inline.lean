@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Refactor
+meta import Heron.Register
 public meta import Lean.Meta.Tactic.Delta
 public meta import Lean.Meta.RecExt
 public meta import Lean.PrettyPrinter
@@ -74,10 +75,11 @@ private meta def inlineLabel : InlineKind → MessageData
 
 private meta instance : Refactor InlineMatch where
   name := `inline
+  description := "Inlines one use of a definition or `let` binding."
   kinds := #[``Lean.Parser.Command.declaration]
   detect := detectInlineOpportunities
   message := fun m => inlineLabel m.kind
-  replacements := fun m => return #[{
+  replacements := some fun m => return #[{
     emphasizedSyntax := m.stx
     oldSyntax := m.stx
     newSyntax := m.newSyntax
@@ -85,4 +87,4 @@ private meta instance : Refactor InlineMatch where
   }]
   codeActionKind := "refactor.inline"
 
-meta initialize Refactor.register (α := InlineMatch)
+register_refactor InlineMatch

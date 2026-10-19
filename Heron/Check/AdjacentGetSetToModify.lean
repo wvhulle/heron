@@ -1,7 +1,11 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.sourcePositionInRule false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -68,6 +72,7 @@ private meta def detectGetSetToModify (doSeq : Syntax) : Array AdjacentGetSetToM
 
 private meta instance : Check AdjacentGetSetToModifyMatch where
   name := `adjacentGetSetToModify
+  description := "Suggests `modify` instead of `get` directly followed by `set`."
   kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .warning
   category := .simplification
@@ -80,7 +85,7 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
        shorter, `modify` rules out writing back a stale copy of the state (`set s` where `set s'` \
        was meant), and it keeps a single reference to the state, which the compiler needs to \
        update it in place instead of copying it."
-  replacements := fun m => do
+  replacements := some fun m => do
     let varId : TSyntax `ident := ⟨m.varName⟩
     let structInst : TSyntax `term := ⟨m.structInst⟩
     let modifyId := mkIdent `modify
@@ -104,4 +109,4 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
       text := m!"structure update reused as the body of `modify`" }
   ]
 
-meta initialize Check.register (α := AdjacentGetSetToModifyMatch)
+register_check AdjacentGetSetToModifyMatch

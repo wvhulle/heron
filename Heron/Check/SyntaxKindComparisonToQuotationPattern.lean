@@ -1,7 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
 
 open Lean Elab Command Parser Heron
 
@@ -43,7 +46,9 @@ private meta def detectKindChecksBeforePositionalAccess (cmd : Syntax) :
 
 private meta instance : Check SyntaxKindComparisonToQuotationPatternMatch where
   name := `syntaxKindComparisonToQuotationPattern
+  description := "Flags a `Syntax.getKind` comparison followed by positional child access and suggests matching with an antiquotation pattern instead."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := detectKindChecksBeforePositionalAccess
@@ -56,6 +61,5 @@ private meta instance : Check SyntaxKindComparisonToQuotationPatternMatch where
        children by position (`getArg`, `getArgs`, `stx[i]`), which silently breaks when upstream \
        Lean changes the parser's layout. A `` `(...) `` antiquotation pattern checks the kind and \
        binds the children by name in one step, and is checked at compile time."
-  replacements := fun _ => return #[]
 
-meta initialize Check.register (α := SyntaxKindComparisonToQuotationPatternMatch)
+register_check SyntaxKindComparisonToQuotationPatternMatch

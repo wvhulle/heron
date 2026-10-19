@@ -1,6 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.syntaxKindOrAtomInspection false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -14,6 +18,7 @@ private meta def lambdaKeyword? (stx : Syntax) : Option Syntax := do
 
 private meta instance : Check LambdaSymbolToFunMatch where
   name := `lambdaSymbolToFun
+  description := "Suggests `fun` instead of `λ`."
   kinds := #[``Term.fun]
   severity := .information
   category := .style
@@ -27,11 +32,11 @@ private meta instance : Check LambdaSymbolToFunMatch where
   explanation := fun _ =>
     m!"Lean accepts `λ` as a synonym for `fun`, but `fun` is what most Lean code and the official \
        books use, and it is easier to type."
-  replacements := fun m => return #[{
+  replacements := some fun m => return #[{
     emphasizedSyntax := m.lambdaKeyword
     oldSyntax := m.lambdaKeyword
     newSyntax := mkAtom "fun"
     inlineViolationLabel := m!"λ → fun"
   }]
 
-meta initialize Check.register (α := LambdaSymbolToFunMatch)
+register_check LambdaSymbolToFunMatch

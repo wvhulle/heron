@@ -1,6 +1,9 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.sourcePositionInRule false
 
 open Lean Elab Command Parser Heron
 
@@ -42,6 +45,7 @@ private meta def patternBindsVariable (pat : Syntax) : CommandElabM Bool := do
 
 private meta instance : Check WildcardMatchToIfLetMatch where
   name := `wildcardMatchToIfLet
+  description := "Suggests `if let` instead of a two-arm `match` whose second arm is a wildcard."
   kinds := #[``Term.match]
   severity := .information
   category := .style
@@ -56,7 +60,7 @@ private meta instance : Check WildcardMatchToIfLetMatch where
     m!"When only one constructor of a sum type is of interest, `if let pat := e then … else …` \
        states that directly, and in some contexts reads better than a two-arm `match` with a \
        wildcard."
-  replacements := fun m => do
+  replacements := some fun m => do
     let repl ← `(if let $m.pat := $m.discr then $m.thenRhs else $m.elseRhs)
     return #[{
       emphasizedSyntax := m.matchStx
@@ -65,4 +69,4 @@ private meta instance : Check WildcardMatchToIfLetMatch where
       inlineViolationLabel := m!"match to if let"
     }]
 
-meta initialize Check.register (α := WildcardMatchToIfLetMatch)
+register_check WildcardMatchToIfLetMatch

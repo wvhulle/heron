@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
@@ -44,6 +45,7 @@ private meta def detectUnnecessaryMuts (doSeq : Syntax) : Array RemoveMutWithout
 
 private meta instance : Check RemoveMutWithoutReassignmentMatch where
   name := `removeMutWithoutReassignment
+  description := "Suggests removing `mut` from a variable that is never reassigned."
   kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .warning
   category := .simplification
@@ -53,7 +55,7 @@ private meta instance : Check RemoveMutWithoutReassignmentMatch where
   sources := #[.functionalProgrammingInLean "`let mut`" "Monad-Transformers/More-do-Features/#let-mut"]
   tags := #[.unnecessary]
   explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
-  replacements := fun m => do
+  replacements := some fun m => do
     let repl ← `(doElem| let $m.ident := $m.valStx)
     return #[{
       emphasizedSyntax := m.doLetStx
@@ -63,4 +65,4 @@ private meta instance : Check RemoveMutWithoutReassignmentMatch where
       inlineViolationLabel := m!"unused mut"
     }]
 
-meta initialize Check.register (α := RemoveMutWithoutReassignmentMatch)
+register_check RemoveMutWithoutReassignmentMatch

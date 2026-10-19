@@ -1,6 +1,9 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Heron
 
@@ -44,6 +47,7 @@ private meta def detectIntrosAt (stx : Syntax) : Array MergeConsecutiveIntrosMat
 
 private meta instance : Check MergeConsecutiveIntrosMatch where
   name := `mergeConsecutiveIntros
+  description := "Suggests merging consecutive `intro` tactics."
   kinds := #[``Lean.Parser.Tactic.tacticSeq1Indented, ``Lean.Parser.Tactic.tacticSeqBracketed]
   severity := .information
   category := .simplification
@@ -53,7 +57,7 @@ private meta instance : Check MergeConsecutiveIntrosMatch where
   tags := #[.unnecessary]
   explanation := fun _ =>
     m!"Sequential `intro` tactics that each name one or more hypotheses can be merged into a single `intro`. This reduces tactic noise and is idiomatic Lean style."
-  replacements := fun m => do
+  replacements := some fun m => do
     let names := m.allIntros.flatMap fun t => (plainIntroNames? t).getD #[]
     let repl ← `(tactic| intro $names*)
     return #[{
@@ -63,4 +67,4 @@ private meta instance : Check MergeConsecutiveIntrosMatch where
           category := `tactic
           inlineViolationLabel := m!"sequential intro" }]
 
-meta initialize Check.register (α := MergeConsecutiveIntrosMatch)
+register_check MergeConsecutiveIntrosMatch

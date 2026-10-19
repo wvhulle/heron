@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -18,6 +19,7 @@ private meta def isNegation? : Syntax → Option Syntax
 
 private meta instance : Check NegatedIfToUnlessMatch where
   name := `negatedIfToUnless
+  description := "Suggests `unless` instead of `if not` without an `else` branch."
   kinds := #[``Term.doIf]
   severity := .information
   category := .simplification
@@ -34,7 +36,7 @@ private meta instance : Check NegatedIfToUnlessMatch where
     .functionalProgrammingInLean "unless" "Monad-Transformers/More-do-Features/#single-branched-if",
     .hlint "when (not x) ==> unless x"]
   explanation := fun _ => m!"In a do-block, `if not cond then body` can be simplified to `unless cond do body`."
-  replacements := fun m => do
+  replacements := some fun m => do
     let cond : TSyntax `term := ⟨m.innerCond⟩
     let thenBody : TSyntax ``Term.doSeq := ⟨m.thenBody⟩
     let repl ← `(doElem| unless $cond do $thenBody)
@@ -46,4 +48,4 @@ private meta instance : Check NegatedIfToUnlessMatch where
       inlineViolationLabel := m!"if not → unless"
     }]
 
-meta initialize Check.register (α := NegatedIfToUnlessMatch)
+register_check NegatedIfToUnlessMatch

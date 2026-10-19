@@ -1,7 +1,12 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
+set_option linter.syntaxKindOrAtomInspection false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -69,7 +74,9 @@ private meta def isOffsetSum (base : Syntax) : Bool :=
 
 private meta instance : Check NatConstructorsToLiteralsMatch where
   name := `natConstructorsToLiterals
+  description := "Suggests `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ`."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := fun cmd => pure <|
@@ -90,7 +97,7 @@ private meta instance : Check NatConstructorsToLiteralsMatch where
                      In a pattern, Lean turns `n + k` back into `Nat.succ` applications, so both forms \
                      match the same values."
     | .unappliedSucc .. => m!"`Nat.succ` used as a function is the same as `(· + 1)`."
-  replacements := fun
+  replacements := some fun
     | .zero s => do
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := ← `(0), inlineViolationLabel := m!"Nat.zero → 0" }
       return #[r]
@@ -103,4 +110,4 @@ private meta instance : Check NatConstructorsToLiteralsMatch where
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := ← `((· + 1)), inlineViolationLabel := m!"Nat.succ → (· + 1)" }
       return #[r]
 
-meta initialize Check.register (α := NatConstructorsToLiteralsMatch)
+register_check NatConstructorsToLiteralsMatch

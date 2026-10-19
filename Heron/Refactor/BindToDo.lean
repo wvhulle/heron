@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Refactor
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -31,6 +32,7 @@ private meta partial def collectBindChain (fullStx : Syntax) (stx : TSyntax `ter
 
 private meta instance : Refactor BindToDoMatch where
   name := `bindToDo
+  description := "Rewrites `>>=` into do-notation."
   kinds := #[`«term_>>=_»]
   sources := #[.functionalProgrammingInLean "do-notation for monads" "Monads/do--Notation-for-Monads/"]
   detect := fun stx => pure <|
@@ -38,7 +40,7 @@ private meta instance : Refactor BindToDoMatch where
     if m.bindings.isEmpty then #[] else #[m]
   consumesSubtree := true
   message := fun _ => m!"Convert `>>=` to do-notation"
-  replacements := fun m => do
+  replacements := some fun m => do
     let lets ← m.bindings.mapM fun b =>
       `(Parser.Term.doSeqItem| let $b.ident ← $b.lhs:term)
     let body ← `(Parser.Term.doSeqItem| $m.finalBody:term)
@@ -52,4 +54,4 @@ private meta instance : Refactor BindToDoMatch where
     }]
   codeActionKind := "refactor.rewrite"
 
-meta initialize Refactor.register (α := BindToDoMatch)
+register_refactor BindToDoMatch

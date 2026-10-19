@@ -53,6 +53,18 @@ private meta def termInfosWithin (stx : Syntax) (isInside : Syntax.Range → Syn
   return (trees.flatMap collectTermInfos).filter fun (_, ti) =>
     ti.stx.getRange?.any (isInside range)
 
+meta def isPositionalSyntaxAccess (e : Expr) : Bool :=
+  positionalSyntaxAccessors.any e.getAppFn.isConstOf || indexesIntoSyntax e
+
+meta def originalCallSitesOf (cmd : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) := do
+  let trees ← collectInfoTrees cmd
+  let hits ← (trees.flatMap collectTermInfos).filterM fun (ci, ti) => do
+    let .original .. := ti.stx.getHeadInfo | return false
+    runInfoMetaM ci ti.lctx do
+      let e ← instantiateMVars ti.expr
+      return e.isApp && isTarget e
+  return (deduplicateTermInfos hits).map (·.2.stx)
+
 meta def usesPositionalSyntaxAccess (cmd : Syntax) : CommandElabM Bool := do
   let infos ← termInfosWithin cmd fun outer inner => outer.start ≤ inner.start && inner.stop ≤ outer.stop
   infos.anyM fun (ci, ti) => runInfoMetaM ci ti.lctx do
@@ -176,15 +188,20 @@ structure RuleHandler where
 fresh `RuleHandler` for each command (each handler owns its own match-collection
 state via `IO.Ref`), plus a `findActions` thunk used by the code-action provider
 to re-detect matches at request time. -/
+structure Finding where
+  message : MessageData
+  explanation : MessageData
+  emphasized : Syntax
+  replacements : Array Replacement
+
 structure RuleEntry where
   name : Name
   isEnabled : Options → Bool
   setup : CommandElabM RuleHandler
-  /-- Re-run detection over the given command syntax and return one
-  `(title, explanation, replacements)` per match. Used by `heronCheckFixProvider` to
-  build quick-fix code actions and by `collectFixRecords` to carry the hover-popup
-  explanation into the CLI's `FixRecord`. -/
-  findActions : Syntax → CommandElabM (Array (MessageData × MessageData × Array Replacement))
+  /-- Re-run detection over the given command syntax and return one `Finding` per match.
+  Used by `heronCheckFixProvider` to build quick-fix code actions and by
+  `collectFixRecords` to carry the hover-popup explanation into the CLI's `FixRecord`. -/
+  findActions : Syntax → CommandElabM (Array Finding)
   sources : Array Source
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
@@ -220,7 +237,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
       let collected ← matchesRef.get
       let detectEnd ← IO.monoNanosNow
       for m in collected do
-        let repls ← Rule.replacements (α := α) m
+        let repls ← Rule.replacementsFor m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
             (ruleName := name) (optName := (Rule.linterOption (α := α)).name)
@@ -266,18 +283,23 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
   for entry in checks do
     if entry.isEnabled opts then
       let links := entry.sources.map (·.toLink)
-      for (msg, expl, repls) in (← entry.findActions stx) do
-        let title := (← msg.toString).trimAscii.toString
-        let explStr := (← expl.toString).trimAscii.toString
-        for repl in repls do
-          if let some edit ← liftCoreM (repl.toTextEdit fileMap) then
-            out := out.push { rule := entry.name.toString, message := title, edit, explanation := explStr, sources := links }
+      for finding in (← entry.findActions stx) do
+        let title := (← finding.message.toString).trimAscii.toString
+        let explStr := (← finding.explanation.toString).trimAscii.toString
+        let edits ← finding.replacements.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        if edits.isEmpty then
+          let some range := finding.emphasized.getRange? | continue
+          out := out.push { rule := entry.name.toString, message := title,
+                            span := fileMap.utf8RangeToLspRange range, explanation := explStr, sources := links }
+        for edit in edits do
+          out := out.push { rule := entry.name.toString, message := title, span := edit.range,
+                            edit := some edit, explanation := explStr, sources := links }
   if all then
     let runners ← testRunnerRegistry.get
     for (name, runner) in runners.toList do
       unless checkNames.contains name do
         for edit in (← runner stx).edits do
-          out := out.push { rule := name.toString, message := "", edit }
+          out := out.push { rule := name.toString, message := "", span := edit.range, edit := some edit }
   return out
 
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
@@ -331,24 +353,32 @@ meta initialize lintersRef.modify (·.push heronMasterLinter)
 /-- Re-run a `Check` rule's detection over `stx` and pair every match with its
 displayable title and computed replacements. This is the read-only twin of
 `Check.makeHandler`'s emit phase, used by the code-action provider. -/
-private meta def Check.findActions [Check α] (stx : Syntax) :
-    CommandElabM (Array (MessageData × MessageData × Array Replacement)) := do
+private meta def Check.findActions [Check α] (stx : Syntax) : CommandElabM (Array Finding) := do
   let detected ← Rule.detectAll (α := α) stx
   detected.mapM fun m => do
-    let repls ← Rule.replacements (α := α) m
-    return (Rule.message (α := α) m, Check.explanation (α := α) m, repls)
+    return { message := Rule.message (α := α) m, explanation := Check.explanation (α := α) m,
+             emphasized := Check.emphasize (α := α) m, replacements := ← Rule.replacementsFor m }
 
 /-- Register a `Check` instance: linter option, registry entry, and test runner. -/
 meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
+  if (← heronRuleRegistry.get).any (·.name == name) then
+    throw <| IO.userError s!"Heron: two checks are registered under the name `{name}`"
   registerLinterOption name
   heronRuleRegistry.modify fun reg =>
-    (reg.filter (·.name != name)).push
+    reg.push
       { name
         isEnabled := Rule.isEnabled (α := α)
         setup := Check.makeHandler (α := α)
         findActions := Check.findActions (α := α)
         sources := Rule.sources (α := α) }
+  ruleCatalog.modify fun catalog =>
+    catalog.push
+      { name
+        kind := .check
+        description := Rule.description (α := α)
+        sources := Rule.sources (α := α)
+        offersFix := Rule.offersFix (α := α) }
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
 
 open Server RequestM Lsp in
@@ -364,9 +394,9 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
     let entries := allEntries.filter (·.isEnabled opts)
     entries.flatMapM fun entry => do
       let detected ← entry.findActions snap.stx
-      detected.mapM fun (msg, _expl, repls) => do
-        let edits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
-        return (msg, repls, edits)
+      detected.mapM fun finding => do
+        let edits ← finding.replacements.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        return (finding.message, finding.replacements, edits)
   let results ← runCommandElabM snap collect
   let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with
     | some range => range.start ≤ endPos && startPos ≤ range.stop

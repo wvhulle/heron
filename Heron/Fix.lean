@@ -28,9 +28,10 @@ structure FixRecord where
   rule : String
   /-- The rule's headline message. -/
   message : String
+  span : Lsp.Range
   /-- The replacement to apply: range to replace + new text, in LSP coordinates
-  (empty `newText` ⇒ deletion). -/
-  edit : Lsp.TextEdit
+  (empty `newText` ⇒ deletion). Absent for findings the rule cannot fix automatically. -/
+  edit : Option Lsp.TextEdit := none
   /-- Detailed explanation (hover popup body). Empty ⇒ none. -/
   explanation : String := ""
   sources : Array SourceLink := #[]

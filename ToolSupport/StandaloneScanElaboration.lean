@@ -12,6 +12,14 @@ namespace ToolSupport
 
 def scanOptions : Options := (Elab.async.set ({} : Options) false).setBool `linter.heron true
 
+def selectChecks (registry : Array RuleEntry) (requested : Array Name) :
+    Except String (Array RuleEntry) :=
+  if requested.isEmpty then .ok registry
+  else requested.mapM fun name =>
+    match registry.find? (·.name == name) with
+    | some entry => .ok entry
+    | none => .error s!"unknown check `{name}`; known checks: {(registry.map (·.name)).toList}"
+
 /-- Walk a module's commands, gathering a `FixRecord` per suggested edit.
 
 Each command is elaborated **once** (`elabCommandAtFrontend`) — that advances env/scope for later

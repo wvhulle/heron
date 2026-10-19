@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -47,6 +48,7 @@ private meta def classifyAlt? (arity : Nat) :
 
 private meta instance : Check TupleMatchToSimultaneousMatchMatch where
   name := `tupleMatchToSimultaneousMatch
+  description := "Suggests matching on several values at once instead of matching on a tuple."
   kinds := #[``Term.match]
   severity := .warning
   category := .simplification
@@ -63,7 +65,7 @@ private meta instance : Check TupleMatchToSimultaneousMatchMatch where
   emphasize := fun m => m.matchStx
   sources := #[.functionalProgrammingInLean "Simultaneous matching" "Getting-to-Know-Lean/Additional-Conveniences/#simultaneous-matching"]
   explanation := fun _ => m!"Matching on `(x, y)` hides the connection between discriminant and pattern from the termination checker. Use `match x, y with` instead."
-  replacements := fun m => do
+  replacements := some fun m => do
     let discrs : TSyntaxArray `term := m.discrElems
     let arity := m.discrElems.size
     let newAlts ← m.alts.mapM fun a => do
@@ -79,4 +81,4 @@ private meta instance : Check TupleMatchToSimultaneousMatchMatch where
       inlineViolationLabel := m!"tuple match"
     }]
 
-meta initialize Check.register (α := TupleMatchToSimultaneousMatchMatch)
+register_check TupleMatchToSimultaneousMatchMatch

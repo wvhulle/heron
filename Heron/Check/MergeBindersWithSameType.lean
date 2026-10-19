@@ -1,6 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.positionalSyntaxAccess false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -35,6 +39,7 @@ private meta def runWithSharedType? (run : List Syntax) : Option MergeBindersWit
 
 private meta instance : Check MergeBindersWithSameTypeMatch where
   name := `mergeBindersWithSameType
+  description := "Suggests merging adjacent binders that have the same type."
   kinds := #[``Command.optDeclSig, ``Command.declSig]
   severity := .information
   category := .style
@@ -45,7 +50,7 @@ private meta instance : Check MergeBindersWithSameTypeMatch where
   emphasize := fun m => m.secondBinder
   sources := #[.functionalProgrammingInLean "Shared binders" "Monads/Additional-Conveniences/#shared-argument-types"]
   explanation := fun _ => m!"Consecutive explicit binders with the same type can be merged into a single binder group."
-  replacements := fun m => do
+  replacements := some fun m => do
     let allNames := m.run.flatMap (·.names)
     let some first := m.run[0]? | return #[]
     let ty := first.ty
@@ -58,4 +63,4 @@ private meta instance : Check MergeBindersWithSameTypeMatch where
       category := `bracketedBinder
     }]
 
-meta initialize Check.register (α := MergeBindersWithSameTypeMatch)
+register_check MergeBindersWithSameTypeMatch

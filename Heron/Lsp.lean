@@ -47,7 +47,7 @@ meta def buildTestRunner [Rule α] : TestRunner := fun stx => do
   let fileMap ← getFileMap
   let results ← Rule.detectAll (α := α) stx
   let edits ← results.flatMapM fun m => do
-    let repls ← Rule.replacements (α := α) m
+    let repls ← Rule.replacementsFor m
     repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
   return { matchCount := results.size, edits }
 

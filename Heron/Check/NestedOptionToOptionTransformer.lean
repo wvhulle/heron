@@ -1,7 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
 
 open Lean Elab Command Meta Parser Heron
 
@@ -36,7 +39,9 @@ private meta def detectInSignature (cmd : Syntax) (node : Syntax) :
 
 private meta instance : Check NestedOptionToOptionTransformerMatch where
   name := `nestedOptionToOptionTransformer
+  description := "Suggests `OptionT` instead of nesting `Option` inside another monad in a signature; the fix is only offered when the rewritten definition still elaborates."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .style
   detect := fun cmd => (signatureNodes cmd).filterMapM (detectInSignature cmd)
@@ -51,11 +56,11 @@ private meta instance : Check NestedOptionToOptionTransformerMatch where
        after every action.{if m.rewriteElaborates then "" else " The body does not elaborate \
        unchanged with the transformer type (it builds `Option` values by hand), so no automatic \
        fix is offered."} Callers in other declarations may need `.run` to get the nested type back."
-  replacements := fun m => do
+  replacements := some fun m => do
     unless m.rewriteElaborates do return #[]
     return #[{ emphasizedSyntax := m.stx
                oldSyntax := m.stx
                newSyntax := ← optionTType m
                inlineViolationLabel := m!"Option → OptionT" }]
 
-meta initialize Check.register (α := NestedOptionToOptionTransformerMatch)
+register_check NestedOptionToOptionTransformerMatch

@@ -35,7 +35,7 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             (tag := s!"{name}.detect") do
           let detected ← Rule.detectAll (α := α) snap.stx
           detected.mapM fun m => do
-            let repls ← Rule.replacements (α := α) m
+            let repls ← Rule.replacementsFor m
             let fileMap ← getFileMap
             let textEdits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
             return (Rule.message (α := α) m, repls, textEdits)
@@ -61,6 +61,13 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
 meta def Refactor.register [Refactor α] : IO Unit := do
   let name := Rule.name (α := α)
   registerLinterOption name
+  ruleCatalog.modify fun catalog =>
+    catalog.push
+      { name
+        kind := .refactor
+        description := Rule.description (α := α)
+        sources := Rule.sources (α := α)
+        offersFix := Rule.offersFix (α := α) }
   testRunnerRegistry.modify (·.insert name (buildTestRunner (α := α)))
   Server.addBuiltinCodeActionProvider (lspName (`refactor ++ name))
     (Refactor.toCodeActionProvider (α := α))

@@ -51,6 +51,7 @@ are required: missing either is a compile-time error, ruling out silent no-ops. 
 class Rule (α : Type) where
   /-- Rule name, used to derive the linter option `linter.<name>`. -/
   name : Name
+  description : String
   /-- Syntax kinds at which this rule fires. The harness only invokes `detect`
   on nodes whose `getKind` is in this array. An empty array is a special case:
   the rule fires once at the root of each command (no descent), useful for
@@ -61,9 +62,9 @@ class Rule (α : Type) where
   detect : Syntax → CommandElabM (Array α)
   /-- Message shown as the diagnostic message and suggestion widget hint. -/
   message : α → MessageData
-  /-- Per-edit replacement data. Each replacement also produces a
-  `relatedInformation` entry via `Replacement.toLabel`. -/
-  replacements : α → CommandElabM (Array Replacement)
+  /-- Per-edit replacement data, or `none` for a rule that only flags code. Each replacement
+  also produces a `relatedInformation` entry via `Replacement.toLabel`. -/
+  replacements : Option (α → CommandElabM (Array Replacement)) := none
   /-- Extra `relatedInformation` labels not tied to any replacement. Use this
   for label-only annotations — e.g. pointing at a related declaration that
   caused the diagnostic but is not itself being edited. Defaults to empty. -/
@@ -73,7 +74,29 @@ class Rule (α : Type) where
   level of a nested chain and want only the outermost match (e.g. `Expr.app`
   chains, `>>=` chains). -/
   consumesSubtree : Bool := false
+  wholeCommand : Bool := false
   sources : Array Source := #[]
+
+inductive RuleKind where
+  | check
+  | refactor
+  deriving Inhabited, BEq
+
+structure RuleSummary where
+  name : Name
+  kind : RuleKind
+  description : String
+  sources : Array Source
+  offersFix : Bool
+
+meta initialize ruleCatalog : IO.Ref (Array RuleSummary) ← IO.mkRef #[]
+
+meta def Rule.replacementsFor [Rule α] (m : α) : CommandElabM (Array Replacement) :=
+  match Rule.replacements (α := α) with
+  | some replacements => replacements m
+  | none => pure #[]
+
+meta def Rule.offersFix [Rule α] : Bool := (Rule.replacements (α := α)).isSome
 
 /-- Master option that enables all Heron linter rules at once. -/
 private meta def Heron.allRulesLinterOption : Lean.Option Bool :=
@@ -94,11 +117,13 @@ meta def Rule.isEnabled [Rule α] (opts : Options) : Bool :=
   let ruleOpt := `linter ++ Rule.name (α := α)
   if opts.contains ruleOpt then (Rule.linterOption (α := α)).get opts else Heron.allRulesLinterOption.get opts
 
-meta def registerLinterOption (ruleName : Name) : IO Unit :=
-  Lean.registerOption (`linter ++ ruleName)
-    { defValue := .ofBool false
-      descr := s!"Enable the {ruleName} linter rule."
-      name := `linter }
+meta def registerLinterOption (ruleName : Name) : IO Unit := do
+  let optionName := `linter ++ ruleName
+  unless (← getOptionDecls).contains optionName do
+    Lean.registerOption optionName
+      { defValue := .ofBool false
+        descr := s!"Enable the {ruleName} linter rule."
+        name := `linter }
 
 /-- Internal option to prevent recursive linter invocation during re-elaboration. -/
 private meta def Heron.reelaboratingGuardOption : Lean.Option Bool :=

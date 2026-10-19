@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Meta Parser Heron
 
@@ -40,6 +41,7 @@ private meta def detectStringConcatenation (stx : Syntax) :
 
 private meta instance : Check StringConcatenationToInterpolationMatch where
   name := `stringConcatenationToInterpolation
+  description := "Flags `\"…\" ++ toString x ++ \"…\"` and suggests an interpolated `s!\"…{x}…\"` string instead."
   kinds := #[``«term_++_»]
   consumesSubtree := true
   severity := .information
@@ -54,6 +56,5 @@ private meta instance : Check StringConcatenationToInterpolationMatch where
        Python or `$\"…\"` strings in C#. For example, `\"Hello, \" ++ name ++ \"!\"` can be \
        written `s!\"Hello, \{name}!\"`, and `\"n = \" ++ toString n` as `s!\"n = \{n}\"`. It \
        avoids the explicit `toString` calls and keeps the text readable in one piece."
-  replacements := fun _ => return #[]
 
-meta initialize Check.register (α := StringConcatenationToInterpolationMatch)
+register_check StringConcatenationToInterpolationMatch

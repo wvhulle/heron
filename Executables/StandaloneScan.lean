@@ -1,6 +1,7 @@
 import ToolSupport.FixReportRendering
 import ToolSupport.StandaloneScanSharedEnvironment
 import ToolSupport.StandaloneScanPerFile
+import ToolSupport.StandaloneScanRuleListing
 
 /-!
 # `heron-scan` — self-contained Heron fix reporter
@@ -15,6 +16,7 @@ simpler per-file engine (and `-` reads stdin). Requires the scope to be built (o
     cat snippet.lean | lake exe heron-scan -     # stdin
     lake exe heron-scan --json | jq              # machine-readable
     lake exe heron-scan --fix Sparkle/Analog     # rewrite in place
+    lake exe heron-scan rules                    # list every check and refactor
 -/
 
 open ToolSupport
@@ -29,6 +31,7 @@ structure Cli where
   noParallel : Bool := false
   color : Option Bool := none
   stdin : Bool := false
+  listRules : Bool := false
   requestedChecks : Array Lean.Name := #[]
   paths : List String := []
 
@@ -52,28 +55,34 @@ def parseArgs : List String → Except String Cli
     if arg.startsWith "-" then .error s!"unknown flag: {arg}"
     else do let c ← parseArgs r; pure { c with paths := arg :: c.paths }
 
+def parseCommandLine : List String → Except String Cli
+  | "rules" :: rest => do
+    let cli ← parseArgs rest
+    unless cli.paths.isEmpty && !cli.stdin && cli.requestedChecks.isEmpty do
+      throw "`rules` lists every rule and takes no paths or --rule"
+    pure { cli with listRules := true }
+  | args => parseArgs args
+
 def usage : String :=
-  "usage: heron-scan [--fix|--apply|--json] [--all] [--per-file] [--no-cache] [--no-parallel] \
-   [--color|--no-color] [--rule <name>]... <path|-> ...\n\
-   (default: import deps once + detect; --per-file: import each file's own env; -: stdin;\n\
-   --rule: run only the named checks, bypassing the cache)"
+  String.intercalate "\n" [
+    "usage: heron-scan [--fix|--apply|--json] [--all] [--per-file] [--no-cache] [--no-parallel] \
+     [--color|--no-color] [--rule <name>]... <path|-> ...",
+    "       heron-scan rules [--json] [--color|--no-color]",
+    "(default: import deps once + detect; --per-file: import each file's own env; -: stdin;",
+    "--rule: run only the named checks, bypassing the cache; rules: list every check and refactor)"]
 
 private def readStdin : IO String := do (← IO.getStdin).readToEnd
-
-private def selectChecks (registry : Array Heron.RuleEntry) (requested : Array Lean.Name) :
-    Except String (Array Heron.RuleEntry) :=
-  if requested.isEmpty then .ok registry
-  else requested.mapM fun name =>
-    match registry.find? (·.name == name) with
-    | some entry => .ok entry
-    | none => .error s!"unknown check `{name}`; known checks: {(registry.map (·.name)).toList}"
 
 unsafe def main (args : List String) : IO UInt32 := do
   Lean.initSearchPath (← Lean.findSysroot)
   Lean.enableInitializersExecution
-  let cli ← match parseArgs args with
+  let cli ← match parseCommandLine args with
     | .error e => do IO.eprintln s!"heron-scan: {e}\n{usage}"; return 1
     | .ok c => pure c
+  if cli.listRules then
+    let pal : Palette := { on := ← decideColor cli.color cli.json }
+    emitRuleCatalog (← Heron.ruleCatalog.get) pal cli.json
+    return 0
   let checks ← match selectChecks (← Heron.heronRuleRegistry.get) cli.requestedChecks with
     | .error e => do IO.eprintln s!"heron-scan: {e}"; return 1
     | .ok checks => pure checks

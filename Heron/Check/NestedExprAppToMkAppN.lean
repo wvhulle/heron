@@ -1,6 +1,9 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
+
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Meta Parser Heron
 
@@ -59,6 +62,7 @@ private meta def detectExprAppChain (stx : Syntax) :
 private meta instance : Check NestedExprAppToMkAppNMatch
     where
   name := `nestedExprAppToMkAppN
+  description := "Suggests `mkAppN` instead of nested `Expr.app`."
   kinds := #[``Term.app]
   severity := .information
   category := .simplification
@@ -71,7 +75,7 @@ private meta instance : Check NestedExprAppToMkAppNMatch
     m!"Chains of `Expr.app (Expr.app f a) b` can be simplified to `mkAppN f #[a, b]`. When `f` is \
        a constant, `Lean.Meta.mkAppM` is usually better still: it fills in implicit arguments and \
        universe levels and checks the types."
-  replacements := fun m => do
+  replacements := some fun m => do
     let fn : TSyntax `term := ⟨m.fn⟩
     let args : TSyntaxArray `term := m.args.map (⟨·⟩)
     let mkAppNId := mkIdent `mkAppN
@@ -82,5 +86,4 @@ private meta instance : Check NestedExprAppToMkAppNMatch
           newSyntax := repl
           inlineViolationLabel := m!"Expr.app chain → mkAppN" }]
 
-meta initialize
-  Check.register (α := NestedExprAppToMkAppNMatch)
+register_check NestedExprAppToMkAppNMatch

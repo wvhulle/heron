@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 
 open Lean Elab Command Parser Heron
 
@@ -18,6 +19,7 @@ private meta def isPureUnit : Syntax → Bool
 
 private meta instance : Check RemoveElsePureUnitMatch where
   name := `removeElsePureUnit
+  description := "Suggests dropping a redundant `else pure ()`."
   kinds := #[``Term.doIf]
   severity := .information
   category := .simplification
@@ -32,7 +34,7 @@ private meta instance : Check RemoveElsePureUnitMatch where
   tags := #[.unnecessary]
   sources := #[.functionalProgrammingInLean "Single-branched if" "Monad-Transformers/More-do-Features/#single-branched-if"]
   explanation := fun _ => m!"In a do-block, `if cond then action else pure ()` can be simplified to `if cond then action`."
-  replacements := fun m => do
+  replacements := some fun m => do
     let cond : TSyntax `term := ⟨m.cond⟩
     let thenBody : TSyntax ``Term.doSeq := ⟨m.thenBody⟩
     let repl ← `(doElem| if $cond then $thenBody)
@@ -44,4 +46,4 @@ private meta instance : Check RemoveElsePureUnitMatch where
       inlineViolationLabel := m!"else pure ()"
     }]
 
-meta initialize Check.register (α := RemoveElsePureUnitMatch)
+register_check RemoveElsePureUnitMatch

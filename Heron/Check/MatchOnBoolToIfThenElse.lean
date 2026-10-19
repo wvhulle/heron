@@ -1,7 +1,10 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
 
 open Lean Elab Command Parser Heron
 
@@ -36,7 +39,9 @@ private meta def detectBoolMatchesWhoseIfRewriteElaborates (cmd : Syntax) :
 
 private meta instance : Check MatchOnBoolToIfThenElseMatch where
   name := `matchOnBoolToIfThenElse
+  description := "Suggests `if … then … else …` instead of matching on a `Bool`."
   kinds := #[]
+  wholeCommand := true
   severity := .information
   category := .simplification
   detect := detectBoolMatchesWhoseIfRewriteElaborates
@@ -48,12 +53,11 @@ private meta instance : Check MatchOnBoolToIfThenElseMatch where
     m!"Pattern matching on `true`/`false` can be written as `if ... then ... else ...`, which is \
        more concise. The rewrite is only offered where it type-checks: when the result type \
        depends on the matched `Bool`, `match` is needed to refine it in each branch."
-  replacements := fun m => do
+  replacements := some fun m => do
     return #[{
           emphasizedSyntax := m.matchStx
           oldSyntax := m.matchStx
           newSyntax := ← ifThenElse m
           inlineViolationLabel := m!"bool match" }]
 
-meta initialize
-  Check.register (α := MatchOnBoolToIfThenElseMatch)
+register_check MatchOnBoolToIfThenElseMatch

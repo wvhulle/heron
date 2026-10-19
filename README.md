@@ -3,9 +3,28 @@
 **Heron finds non-idiomatic [Lean 4](https://github.com/leanprover/lean4) code and fixes it: in your editor, on `lake build`, and in CI.**
 
 ```lean
-example : Nat → Nat → True := by intro a; intro b; exact trivial
---                               ^^^^^^^^^^^^^^^^ Merge intros: replace with `intro a b`
+def Weekday.isWeekend (day : Weekday) : Bool :=
+  match day with
+--^^^^^ Match on the parameters directly with `def f : A → B | pattern => …`
+  | .saturday | .sunday => true
+  | _ => false
 ```
+
+The quick fix turns it into
+
+```lean
+def Weekday.isWeekend : Weekday → Bool
+  | .saturday | .sunday => true
+  | _ => false
+```
+
+Hovering the underline explains the rule: when a parameter is named only to be matched on
+immediately, the cases can be written directly after the signature. Move the parameter's type to
+the right of the colon, so the declared type becomes a function type, and replace `:= match … with`
+by the alternatives. The popup links to the rule's source, here the
+[Pattern-matching definitions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions)
+section of _Functional Programming in Lean_, and names the option that turns it off:
+`set_option linter.matchOnParametersToPatternMatchingDefinition false`.
 
 ![The `Id.run` check in the editor](./docs/images/editor-popup.png)
 
@@ -28,7 +47,23 @@ package «your_pkg» where
   lintDriver := "heron/heron"
 ```
 
-See [Rules](docs/Rules.md) for every check and refactor and how to turn them off.
+## Rules
+
+Heron has two kinds of rules. **Checks** run on every command once `linter.heron` is on; each
+underlines the code it flags and, for most checks, offers a quick fix. **Refactors** never flag
+anything and appear in the editor's code-action menu when the cursor is on code they can rewrite.
+Every rule names the book section, style guide or other linter it is based on.
+
+`heron-scan rules` prints every rule with its description and sources, from any Lean project:
+
+```sh
+nix run github:wvhulle/heron/main -- rules   # or, in a project that requires Heron:
+lake exe heron-scan rules
+lake exe heron-scan rules --json              # machine-readable
+```
+
+Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
+in `leanOptions`.
 
 ## Supported Lean versions
 

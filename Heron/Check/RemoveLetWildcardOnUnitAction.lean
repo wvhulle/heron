@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
 
 open Lean Elab Command Meta Parser Heron
@@ -32,6 +33,7 @@ private meta def detectRedundantLetWildcards (doSeq : Syntax) :
 
 private meta instance : Check RemoveLetWildcardOnUnitActionMatch where
   name := `removeLetWildcardOnUnitAction
+  description := "Suggests dropping `let _ ←` before an action that returns `Unit`."
   kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .information
   category := .simplification
@@ -40,7 +42,7 @@ private meta instance : Check RemoveLetWildcardOnUnitActionMatch where
   emphasize := fun m => m.doLetStx
   tags := #[.unnecessary]
   explanation := fun _ => m!"`action` already returns `Unit`, so `let _ ← action` can be simplified to just `action` in a do-block."
-  replacements := fun m => return #[{
+  replacements := some fun m => return #[{
     emphasizedSyntax := m.doLetStx
     oldSyntax := m.doLetStx
     -- Drop the rhs's trailing trivia: a trailing comment lives there but sits *outside*
@@ -49,4 +51,4 @@ private meta instance : Check RemoveLetWildcardOnUnitActionMatch where
     inlineViolationLabel := m!"let _ ←"
   }]
 
-meta initialize Check.register (α := RemoveLetWildcardOnUnitActionMatch)
+register_check RemoveLetWildcardOnUnitActionMatch

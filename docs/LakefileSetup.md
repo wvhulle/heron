@@ -39,4 +39,5 @@ lake lint -- --fix           # rewrite files in place
 builds your targets with the plugin, then prints the fixes. It accepts `--json`, `--fix`,
 `--apply`, `--color` and `--no-color`, and `--no-build` to read the last build's results.
 
-Turn single rules off as described in [Rules](Rules.md#turning-rules-off).
+Turn single rules off as described under [Rules](../README.md#rules) in the README; `lake exe
+heron-scan rules` lists them.

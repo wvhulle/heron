@@ -1,7 +1,13 @@
 module
 
 public meta import Heron.Check
+meta import Heron.Register
 public meta import Heron.Monad
+
+set_option linter.positionalSyntaxAccess false
+set_option linter.sourcePositionInRule false
+set_option linter.syntaxKindOrAtomInspection false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Parser Heron
 
@@ -67,6 +73,7 @@ private meta def detectSingleUseBinds (doSeq : Syntax) : Array SingleUseBindToNe
 
 private meta instance : Check SingleUseBindToNestedActionMatch where
   name := `singleUseBindToNestedAction
+  description := "Suggests a nested action `(← act)` instead of `let x ← act` when `x` is used once, in the next statement."
   kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .information
   category := .style
@@ -79,7 +86,7 @@ private meta instance : Check SingleUseBindToNestedActionMatch where
        stands for its result, so a name bound with `let x ← act` and used once in the next \
        statement can be replaced by the nested action. Nested actions run left to right; the \
        rewrite is only offered when this keeps the order of effects."
-  replacements := fun m => do
+  replacements := some fun m => do
     let nested ← `(term| (← $m.action))
     return #[
       { emphasizedSyntax := m.bindStx
@@ -93,4 +100,4 @@ private meta instance : Check SingleUseBindToNestedActionMatch where
         inlineViolationLabel := m!"nested action" }
     ]
 
-meta initialize Check.register (α := SingleUseBindToNestedActionMatch)
+register_check SingleUseBindToNestedActionMatch
