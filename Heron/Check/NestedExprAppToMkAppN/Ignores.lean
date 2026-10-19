@@ -19,3 +19,10 @@ private inductive Tm where
 
 #assertIgnore nestedExprAppToMkAppN in
 def userAppChain : Tm := .app (.app (.var 0) (.var 1)) (.var 2)
+
+private inductive Expr where
+  | leaf : Expr
+  | app : Expr → Expr → Expr
+
+#assertIgnore nestedExprAppToMkAppN in
+def userExprChain : Expr := Expr.app (Expr.app .leaf .leaf) .leaf

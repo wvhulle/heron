@@ -3,24 +3,22 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Meta Parser Heron
 
 private structure NestedExprAppToMkAppNMatch where
   fullStx : Syntax
-  fn : Syntax
-  args : Array Syntax
+  fn : Term
+  args : TSyntaxArray `term
 
 /-- A single `Expr.app f a` or `.app f a` node, decomposed. -/
 private structure AppNode where
-  fn : Syntax
-  arg : Syntax
+  fn : Term
+  arg : Term
 
 /-- A flattened left-deep app chain: `f a₁ … aₙ`. -/
 private structure AppChain where
-  innermostFn : Syntax
-  args : Array Syntax
+  innermostFn : Term
+  args : TSyntaxArray `term
 
 /-- Strip one layer of parentheses, if present. -/
 private meta def stripParen : Syntax → Syntax
@@ -33,14 +31,6 @@ private meta def matchApp? : Syntax → Option AppNode
   | `(Lean.Expr.app $fn $arg) => some { fn, arg }
   | `(.app $fn $arg) => some { fn, arg }
   | _ => none
-
-private meta def namesExprApp : Syntax → Bool
-  | `(Expr.app $_ $_) => true
-  | `(Lean.Expr.app $_ $_) => true
-  | _ => false
-
-private meta def isExprTyped (e : Expr) : MetaM Bool := do
-  return (← whnfR (← instantiateMVars (← inferType e))).isConstOf ``Lean.Expr
 
 /-- Collect a chain of nested `Expr.app`/`.app` calls. -/
 private meta partial def collectAppChain (stx : Syntax) : Option AppChain := do
@@ -55,9 +45,12 @@ private meta def detectExprAppChain (stx : Syntax) :
     CommandElabM (Array NestedExprAppToMkAppNMatch) := do
   let some { innermostFn, args } := collectAppChain stx | return #[]
   unless args.size >= 2 do return #[]
-  unless namesExprApp stx do
-    let some true ← runMetaMForSyntax stx isExprTyped | return #[]
+  unless ← elaboratesToApplicationOf stx ``Lean.Expr.app do return #[]
   return #[{ fullStx := stx, fn := innermostFn, args }]
+
+set_option hygiene false in
+private meta def mkAppNCall (fn : Term) (args : TSyntaxArray `term) : CommandElabM Term :=
+  `(mkAppN $fn #[$args,*])
 
 private meta instance : Check NestedExprAppToMkAppNMatch
     where
@@ -76,10 +69,7 @@ private meta instance : Check NestedExprAppToMkAppNMatch
        a constant, `Lean.Meta.mkAppM` is usually better still: it fills in implicit arguments and \
        universe levels and checks the types."
   replacements := some fun m => do
-    let fn : TSyntax `term := ⟨m.fn⟩
-    let args : TSyntaxArray `term := m.args.map (⟨·⟩)
-    let mkAppNId := mkIdent `mkAppN
-    let repl ← `($mkAppNId $fn #[$args,*])
+    let repl ← mkAppNCall m.fn m.args
     return #[{
           emphasizedSyntax := m.fullStx
           oldSyntax := m.fullStx
