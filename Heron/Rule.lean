@@ -146,13 +146,17 @@ in `kinds`. When `consumesSubtree` is `true` and `detect` returns a non-empty
 array at a node, descendants of that node are not visited. Used by
 `Rule.detectAll`; the master linter implements the same shape against the
 shared dispatch walk via per-rule consumed-range tracking. -/
+meta def walkedChildren : Syntax → Array Syntax
+  | .node _ kind args => if kind == choiceKind then args.extract 0 1 else args
+  | _ => #[]
+
 private meta partial def walkKinds (kinds within : Array SyntaxNodeKind) (consumesSubtree : Bool)
     (detect : Syntax → CommandElabM (Array α)) (insideScope : Bool) (stx : Syntax) :
     CommandElabM (Array α) := do
   let insideScope := insideScope || within.contains stx.getKind
   let here ← if insideScope && kinds.contains stx.getKind then detect stx else pure #[]
   if consumesSubtree && !here.isEmpty then return here
-  stx.getArgs.foldlM (init := here) fun acc child => do
+  (walkedChildren stx).foldlM (init := here) fun acc child => do
     return acc ++ (← walkKinds kinds within consumesSubtree detect insideScope child)
 
 /-- Run a rule across a whole command's syntax. Used by the test runner and

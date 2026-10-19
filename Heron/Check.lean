@@ -210,7 +210,7 @@ private meta partial def walkDispatch
   if let some hs := table[stx.getKind]? then
     for h in hs do
       if h.within.isEmpty || enclosingKinds.any h.within.contains then h.visit stx
-  for c in stx.getArgs do walkDispatch table enclosingKinds c
+  for c in walkedChildren stx do walkDispatch table enclosingKinds c
 
 /-- Build the kind→handlers dispatch table from a list of live handlers. -/
 private meta def buildDispatchTable (handlers : Array RuleHandler) :
