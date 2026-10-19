@@ -4,66 +4,45 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-set_option linter.sourcePositionInRule false
-set_option linter.syntaxKindOrAtomInspection false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Meta Parser Heron
 
 private structure QualifiedConstructorToLeadingDotMatch where
-  ident : Syntax
+  ident : Ident
   constructorField : Name
 
-private meta partial def qualifiedIdents (stx : Syntax) : Array Syntax :=
-  if stx.isIdent then
-    if stx.getId.getNumParts ≥ 2 then #[stx] else #[]
-  else if stx.getKind == ``Term.explicit || stx.getKind == ``Command.declId then #[]
-  else stx.getArgs.flatMap qualifiedIdents
+private structure ConstructorReference where
+  field : Name
+  expectedTypeNamesItsInductive : Bool
 
-private meta def writtenAsSuffixOf (written resolved : Name) : Bool :=
-  let writtenParts := written.components
-  resolved.components.drop (resolved.getNumParts - writtenParts.length) == writtenParts
-
-private meta def constructorFieldOf? (env : Environment) (written : Name) (ti : TermInfo) :
-    MetaM (Option Name) := do
+private meta def constructorReference? (ti : TermInfo) : MetaM (Option ConstructorReference) := do
   let some ctor := (← instantiateMVars ti.expr).getAppFn.constName? | return none
-  let some (.ctorInfo _) := env.find? ctor | return none
-  unless writtenAsSuffixOf written ctor do return none
-  return ctor.componentsRev.head?
+  let some (.ctorInfo info) := (← getEnv).find? ctor | return none
+  let .str _ field := ctor | return none
+  let expectedTypeNamesItsInductive ← match ti.expectedType? with
+    | some expected => pure ((← whnfR (← instantiateMVars expected)).getAppFn.isConstOf info.induct)
+    | none => pure true
+  return some { field := .mkSimple field, expectedTypeNamesItsInductive }
 
-private meta def qualifiedConstructorField? (ident : Syntax) : CommandElabM (Option Name) := do
-  let env ← getEnv
-  let some pos := ident.getPos? | return none
-  let trees ← collectInfoTrees ident
-  let infosAtIdent := (trees.flatMap collectTermInfos).filter fun (_, ti) => ti.stx.getPos? == some pos
-  infosAtIdent.findSomeM? fun (ci, ti) => runInfoMetaM ci ti.lctx (constructorFieldOf? env ident.getId ti)
-
-private meta def dottedConstructor (field : Name) : CommandElabM (TSyntax `term) :=
+private meta def dottedConstructor (field : Name) : CommandElabM Term :=
   `(.$(mkIdent field):ident)
 
-private meta def withLeadingDots (cmd : Syntax) (candidates : Array QualifiedConstructorToLeadingDotMatch) :
-    CommandElabM Syntax :=
-  candidates.foldlM (init := cmd) fun rewritten candidate => do
-    return replaceSourceNode rewritten candidate.ident (← dottedConstructor candidate.constructorField)
-
-private meta def detectQualifiedConstructors (cmd : Syntax) :
+private meta def detectQualifiedConstructor (site : Syntax) :
     CommandElabM (Array QualifiedConstructorToLeadingDotMatch) := do
-  let candidates ← (qualifiedIdents cmd).filterMapM fun ident => do
-    let some constructorField ← qualifiedConstructorField? ident | return none
-    return some { ident, constructorField }
-  if candidates.isEmpty then return #[]
-  if ← elaboratesWithoutErrorsInProbeNamespace (← withLeadingDots cmd candidates) then return candidates
-  candidates.filterM fun candidate => do
-    elaboratesWithoutErrorsInProbeNamespace (← withLeadingDots cmd #[candidate])
+  let `($ident:ident) := site | return #[]
+  unless ident.getId.getNumParts ≥ 2 do return #[]
+  let references := (← runMetaMForEachExactTermInfo ident constructorReference?).filterMap id
+  let some reference := references[0]? | return #[]
+  unless references.all (·.expectedTypeNamesItsInductive) do return #[]
+  unless ← rewriteElaborates ident (← dottedConstructor reference.field) do return #[]
+  return #[{ ident, constructorField := reference.field }]
 
 private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   name := `qualifiedConstructorToLeadingDot
   description := "Suggests `.leaf` instead of `BinTree.leaf` where the expected type is known."
-  kinds := #[``Lean.Parser.Command.declaration]
+  kinds := #[identKind]
   severity := .information
   category := .style
-  detect := detectQualifiedConstructors
+  detect := detectQualifiedConstructor
   message := fun m => m!"Use `.{m.constructorField}` instead of the fully qualified constructor"
   emphasize := fun m => m.ident
   sources := #[.functionalProgrammingInLean "Leading dot notation"

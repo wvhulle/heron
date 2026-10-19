@@ -11,10 +11,18 @@ inductive BinTree (α : Type) where
 def leafSize := (BinTree.leaf : BinTree Nat).sizeOf
 
 #assertIgnore qualifiedConstructorToLeadingDot in
-def explicitLeaf : BinTree Nat := @BinTree.leaf Nat
+def alreadyDotted : BinTree Nat := .leaf
 
 #assertIgnore qualifiedConstructorToLeadingDot in
-def alreadyDotted : BinTree Nat := .leaf
+def noExpectedType := BinTree.leaf (α := Nat)
+
+private structure Wrapper where
+  tree : BinTree Nat
+
+private instance : Coe (BinTree Nat) Wrapper := ⟨Wrapper.mk⟩
+
+#assertIgnore qualifiedConstructorToLeadingDot in
+def coercedToAnotherType : Wrapper := BinTree.leaf (α := Nat)
 
 #assertIgnore qualifiedConstructorToLeadingDot in
 def leafCount : BinTree Nat → Nat
