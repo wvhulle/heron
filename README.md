@@ -73,7 +73,12 @@ version. Use the ref that matches your `lean-toolchain`:
 | Your `lean-toolchain` | Heron ref |
 | --- | --- |
 | `leanprover/lean4:v4.35.0` | `main` |
+| `leanprover/lean4:v4.34.1` | `lean/v4.34.1` |
+| `leanprover/lean4:v4.34.0` | `lean/v4.34.0` |
+| `leanprover/lean4:v4.33.1` | `lean/v4.33.1` |
 | `leanprover/lean4:v4.33.0` | `lean/v4.33.0` |
+| `leanprover/lean4:v4.32.2` | `lean/v4.32.2` |
+| `leanprover/lean4:v4.32.0` | `lean/v4.32.0` |
 | `leanprover/lean4:v4.31.0` | `lean/v4.31.0` |
 | `leanprover/lean4:v4.30.0` | `lean/v4.30.0` |
 | `leanprover/lean4:v4.29.1` | `lean/v4.29.1` |
