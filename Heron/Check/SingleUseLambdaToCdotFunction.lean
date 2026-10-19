@@ -17,14 +17,25 @@ private structure SingleUseLambdaToCdotFunctionMatch where
 private meta def cdotFunction (body : Term) (occurrence : Syntax) : CommandElabM Term := do
   `(($(body.replacingSourceNode occurrence (← `(·)))))
 
+private meta def isBlockBody : Term → Bool
+  | `(do $_) | `(let $_:letDecl; $_) | `($_:structInst) => true
+  | _ => false
+
+private meta def passesOccurrenceLast (body : Term) (occurrence : Syntax) : Bool :=
+  match body with
+  | `($_ $args*) => args.back?.any (·.raw == occurrence)
+  | _ => false
+
 /-- Match `fun x => body` where `x` is referenced exactly once, as a plain identifier, and
 `(body)` with that reference replaced by `·` elaborates to the same function. -/
 private meta def eligibleCdotFunction? (funStx : Syntax) : CommandElabM (Option Term) := do
   let `(fun $x:ident => $body) := funStx | return none
   if let `($_:ident) := body then return none
+  if isBlockBody body then return none
   let #[occurrence] ← boundVariableReferences x body | return none
   let `($reference:ident) := occurrence | return none
   unless reference.getId == x.getId do return none
+  if passesOccurrenceLast body occurrence then return none
   let candidate ← cdotFunction body occurrence
   unless ← elaboratesLike funStx candidate do return none
   return some candidate
