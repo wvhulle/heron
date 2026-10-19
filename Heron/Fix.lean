@@ -37,19 +37,15 @@ structure FixRecord where
   sources : Array SourceLink := #[]
   deriving ToJson, FromJson
 
-/-- Apply non-overlapping LSP `TextEdit`s to a source string. Edits are sorted by range start
-descending and applied back-to-front so earlier byte offsets stay valid (LSP ranges refer to the
-original document). Shared by `Heron.Assert`, the build sink, and the `heron-lint` tool. -/
 def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
   let sorted := edits.qsort fun a b => text.lspPosToUtf8Pos b.range.start < text.lspPosToUtf8Pos a.range.start
-  sorted.foldl
-    (init :=
-    text.source)
-    fun src edit =>
-    let startPos := text.lspPosToUtf8Pos edit.range.start
-    let endPos := text.lspPosToUtf8Pos edit.range.end
-    let pre := String.Pos.Raw.extract src 0 startPos
-    let post := String.Pos.Raw.extract src endPos src.rawEndPos
-    pre ++ edit.newText ++ post
+  let (patched, _) := sorted.foldl (init := (text.source, text.source.rawEndPos))
+    fun (src, firstAppliedStart) edit =>
+      let startPos := text.lspPosToUtf8Pos edit.range.start
+      let endPos := text.lspPosToUtf8Pos edit.range.end
+      if firstAppliedStart < endPos then (src, firstAppliedStart)
+      else (String.Pos.Raw.extract src 0 startPos ++ edit.newText ++ String.Pos.Raw.extract src endPos src.rawEndPos,
+            startPos)
+  patched
 
 end Heron
