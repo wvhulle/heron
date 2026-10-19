@@ -265,6 +265,9 @@ private meta def liesWithin (scope inner : Syntax) : Bool :=
   | some outer, some r => outer.start ≤ r.start && r.stop ≤ outer.stop
   | _, _ => false
 
+meta def declaredConstant? (declId : Syntax) (infos : Array (ContextInfo × TermInfo)) : Option Name :=
+  infos.findSome? fun (_, ti) => if ti.isBinder && liesWithin declId ti.stx then ti.expr.constName? else none
+
 meta def bindsVariables (scope : Syntax) : CommandElabM Bool := do
   let infos := (← collectInfoTrees scope).flatMap collectTermInfos
   return infos.any fun (_, ti) => ti.isBinder && liesWithin scope ti.stx

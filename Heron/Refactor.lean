@@ -14,13 +14,18 @@ open Server Lsp in
 class Refactor (α : Type) extends Rule α where
   codeActionKind : String := "refactor"
 
+open Lsp in
+meta def syntaxOverlapsRequest (text : FileMap) (params : CodeActionParams) (stx : Syntax) : Bool :=
+  match stx.getRange? with
+  | some range =>
+    range.start ≤ text.lspPosToUtf8Pos params.range.end && text.lspPosToUtf8Pos params.range.start ≤ range.stop
+  | none => false
+
 open Server RequestM Lsp in
 meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
   fun params snap => do
     let doc ← readDoc
     let text := doc.meta.text
-    let startPos := text.lspPosToUtf8Pos params.range.start
-    let endPos := text.lspPosToUtf8Pos params.range.end
     let name := Rule.name (α := α)
     let detectAndReplace : CommandElabM (Array (MessageData × Array Replacement × Array Lsp.TextEdit)) :=
       withTraceNode `heron.profile
@@ -41,11 +46,8 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
             return (Rule.message (α := α) m, repls, textEdits)
     let results ← runCommandElabM snap detectAndReplace
     let kind := Refactor.codeActionKind (α := α)
-    let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with
-      | some range => range.start ≤ endPos && startPos ≤ range.stop
-      | none => false
     results.filterMapM fun (msg, repls, textEdits) => do
-      unless repls.any overlaps do return none
+      unless repls.any (syntaxOverlapsRequest text params ·.emphasizedSyntax) do return none
       if textEdits.isEmpty then return none
       let title := (← msg.format).pretty
       return some {

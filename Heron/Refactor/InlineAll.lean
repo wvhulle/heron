@@ -7,8 +7,6 @@ public meta import Lean.Meta.Tactic.Delta
 public meta import Lean.PrettyPrinter
 public meta import Lean.Server.FileWorker.Utils
 
-set_option linter.sourcePositionInRule false
-
 public section
 
 open Lean Elab Command Meta Heron Server Lsp
@@ -21,21 +19,6 @@ private meta def isInlineableConst (env : Environment) (name : Name) : Bool :=
     match env.find? name >>= (·.value? (allowOpaque := true)) with
     | some v => !isRecursive v name
     | none => false
-
-private meta def resolveConstName? (infos : Array (ContextInfo × TermInfo)) (declIdStx : Syntax) (ns : Name) (env : Environment) : Option Name :=
-  do
-  let pos ← declIdStx.getPos? false
-  -- Match by position, accepting synthetic source info (e.g. from `meta def`)
-  match infos.find? fun (_, ti) => ti.stx.getPos? false == some pos with
-  | some (_, ti) =>
-    ti.expr.constName?
-  | none =>
-    let some plainIdent := declIdStx.find? (·.isIdent) | none
-    let plainName := ns ++ plainIdent.getId
-    if env.contains plainName then some plainName
-    else
-      let privateName := mkPrivateName env plainName
-      if env.contains privateName then some privateName else none
 
 private meta def deltaDelab? (ci : ContextInfo) (ti : TermInfo) : CommandElabM (Option Syntax) := do
   let some expanded ← runInfoMetaM ci ti.lctx (expandConst? ti.expr) |
@@ -96,10 +79,7 @@ register_refactor InlineAllConstMatch
 
 private meta def cursorOnDeclId? (params : CodeActionParams) (text : FileMap) (stx : Syntax) : Option Syntax := do
   let declIdStx ← findDeclId? stx
-  let declIdRange ← declIdStx.getRange?
-  let startPos := text.lspPosToUtf8Pos params.range.start
-  let endPos := text.lspPosToUtf8Pos params.range.end
-  guard (declIdRange.start ≤ endPos && startPos ≤ declIdRange.stop)
+  guard (syntaxOverlapsRequest text params declIdStx)
   return declIdStx
 
 private meta def buildReplacements (declIdStx : Syntax) (defStx : Syntax) (usageRepls : Array (Syntax × Syntax))
@@ -118,9 +98,7 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
   let doc ← RequestM.readDoc
   let some declIdStx := cursorOnDeclId? params doc.meta.text snap.stx |
     return #[]
-  let snapInfos := collectTermInfos snap.infoTree
-  let ns := snap.cmdState.scopes.head!.currNamespace
-  let some constName := resolveConstName? snapInfos declIdStx ns snap.env |
+  let some constName := declaredConstant? declIdStx (collectTermInfos snap.infoTree) |
     return #[]
   unless isInlineableConst snap.env constName && isPrivateName constName do
     return #[]
