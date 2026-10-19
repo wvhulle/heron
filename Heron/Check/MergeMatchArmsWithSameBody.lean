@@ -3,8 +3,6 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Parser Heron
 
 private structure MergeMatchArmsWithSameBodyMatch where
