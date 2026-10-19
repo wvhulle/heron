@@ -252,18 +252,18 @@ private meta def buildDispatchTable (handlers : Array RuleHandler) :
     h.kinds.foldl (init := tbl) fun tbl k =>
       tbl.insert k ((tbl[k]?.getD #[]).push h.visit)
 
-/-- Run the enabled rules against `cmd` and return a `FixRecord` per suggested replacement —
-the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. With
-`all := false` only **checks** (`heronRuleRegistry`, gated by `isEnabled`) run; with `all := true`
-the manual **refactors** (`testRunnerRegistry` entries that aren't checks) are added too. Shared by
-the build sink (below) and the standalone `heron-lint` driver. -/
-meta def collectFixRecords (all : Bool) (stx : Syntax) : CommandElabM (Array FixRecord) := do
+/-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
+the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. Each check
+is still gated by `isEnabled`; with `all := true` the manual **refactors** (`testRunnerRegistry`
+entries that aren't checks) are added too. Shared by the build sink (below) and the standalone
+`heron-scan` driver. -/
+meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax) :
+    CommandElabM (Array FixRecord) := do
   let fileMap ← getFileMap
-  let entries ← heronRuleRegistry.get
   let opts ← getOptions
-  let checkNames := entries.map (·.name)
+  let checkNames := (← heronRuleRegistry.get).map (·.name)
   let mut out : Array FixRecord := #[]
-  for entry in entries do
+  for entry in checks do
     if entry.isEnabled opts then
       let links := entry.sources.map (·.toLink)
       for (msg, expl, repls) in (← entry.findActions stx) do
@@ -293,7 +293,7 @@ truncates any stale content) and stamped with the source hash for freshness chec
 inside the linter, i.e. only when `linter.heron` is enabled. -/
 private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
   let dir := (← IO.getEnv "HERON_FIX_DIR").getD ".lake/build/heron-fixes"
-  let recs ← collectFixRecords (all := false) stx
+  let recs ← collectFixRecords (all := false) (← heronRuleRegistry.get) stx
   let mod ← getMainModule
   let sourceHash := (hash (← getFileMap).source).toNat
   heronFixAccum.atomically (m := IO) do

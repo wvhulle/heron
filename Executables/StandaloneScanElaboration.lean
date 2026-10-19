@@ -6,9 +6,11 @@ the per-command detection loop and a bounded-parallel map. A non-`module` file s
 Heron's `meta` `collectFixRecords`. -/
 
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
-open Heron (FixRecord collectFixRecords)
+open Heron (FixRecord RuleEntry collectFixRecords)
 
 namespace Executables
+
+def scanOptions : Options := (Elab.async.set ({} : Options) false).setBool `linter.heron true
 
 /-- Walk a module's commands, gathering a `FixRecord` per suggested edit.
 
@@ -17,7 +19,8 @@ commands and populates the info trees the two type-aware rules consult — then 
 reusing those trees. `#eval`/`#eval!` are never elaborated (they run user code); `initialize` is
 skipped in imported mode (already present — re-elaborating an imported decl panics). `commitInit`
 (growing-env mode) also commits `initialize`, since declarations there are not pre-imported. -/
-partial def collectLoop (all commitInit : Bool) (acc : Array FixRecord) : FrontendM (Array FixRecord) := do
+partial def collectLoop (all commitInit : Bool) (checks : Array RuleEntry) (acc : Array FixRecord) :
+    FrontendM (Array FixRecord) := do
   updateCmdPos
   let cmdState ← getCommandState
   let ictx ← getInputContext
@@ -33,9 +36,9 @@ partial def collectLoop (all commitInit : Bool) (acc : Array FixRecord) : Fronte
   let isInit := cmd.isOfKind ``Lean.Parser.Command.initialize
   let acc ← if isEval || (imported && isInit) then pure acc else do
     elabCommandAtFrontend cmd
-    let found ← runCommandElabM (collectFixRecords all cmd)
+    let found ← runCommandElabM (collectFixRecords all checks cmd)
     pure (acc ++ found)
-  if isTerminalCommand cmd then return acc else collectLoop all commitInit acc
+  if isTerminalCommand cmd then return acc else collectLoop all commitInit checks acc
 
 /-- Run `f` over `xs` with at most `conc` concurrent tasks (`conc = 1` ⇒ sequential), preserving
 input order. `f` handles its own errors. -/

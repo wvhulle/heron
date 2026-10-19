@@ -85,8 +85,9 @@ that shared env. Imports only dependency modules (not the targets — so leaf ex
 `main` don't collide); `Init` is excluded (listing it re-runs imported initializers); no dynlibs are
 loaded (extern symbols aren't called during elaboration). Per-task stream isolation keeps
 `--json`/`--apply` clean under parallelism. -/
-def lintMods (all useCache : Bool) (conc : Nat) (mods : Array Mod) : IO (Array Report) := do
-  let baseOpts := (Elab.async.set ({} : Options) false).setBool `linter.heron true
+def lintMods (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Nat) (mods : Array Mod) :
+    IO (Array Report) := do
+  let baseOpts := scanOptions
   let cache ← if useCache then loadCache else pure ∅
   let mut hits : Array Report := #[]
   let mut misses : Array Mod := #[]
@@ -118,7 +119,7 @@ def lintMods (all useCache : Bool) (conc : Nat) (mods : Array Mod) : IO (Array R
       let fst : Frontend.State :=
         { commandState := Command.mkState env {} baseOpts, parserState := pstate, cmdPos := pstate.pos }
       let (_, (fixes, _)) ← IO.FS.withIsolatedStreams
-        (((collectLoop all false #[]).run { inputCtx := ictx }).run fst)
+        (((collectLoop all false checks #[]).run { inputCtx := ictx }).run fst)
       return { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
       IO.eprintln s!"heron-scan: {m.name}: {e.toString}"
@@ -133,8 +134,9 @@ def lintMods (all useCache : Bool) (conc : Nat) (mods : Array Mod) : IO (Array R
   return hits ++ fresh
 
 /-- Lint explicit files/dirs (module names derived from paths). -/
-def lintShared (all useCache : Bool) (conc : Nat) (files : Array String) : IO (Array Report) := do
+def lintShared (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Nat)
+    (files : Array String) : IO (Array Report) := do
   let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
-  lintMods all useCache conc mods
+  lintMods all useCache checks conc mods
 
 end Executables

@@ -78,4 +78,5 @@ echo 'def f := fun x => x + 1' | lake exe heron-scan -
 ```
 
 It accepts `--json`, `--fix`, `--apply`, `--color` and `--no-color`, plus `--per-file`,
-`--no-cache` and `--no-parallel`, and reads stdin with `-`.
+`--no-cache` and `--no-parallel`, and reads stdin with `-`. `--rule <name>`, which can be repeated,
+runs only the named checks.
