@@ -57,17 +57,42 @@ meta def _root_.Lean.TSyntax.replacingSourceNode (stx : TSyntax k) (target repla
 private meta def spans (outer inner : Syntax.Range) : Bool :=
   outer.start ≤ inner.start && inner.stop ≤ outer.stop
 
-meta def enclosingCommand? (node : Syntax) : CommandElabM (Option Syntax) := do
-  let some range := node.getRange? | return none
-  let commands := (← getInfoState).trees.toArray.flatMap fun tree =>
+private meta def commandsContaining (node : Syntax) : CommandElabM (Array Syntax) := do
+  let some range := node.getRange? | return #[]
+  return (← getInfoState).trees.toArray.flatMap fun tree =>
     tree.foldInfo (init := #[]) fun _ info acc =>
       match info with
       | .ofCommandInfo ci => if ci.stx.getRange?.any (spans · range) then acc.push ci.stx else acc
       | _ => acc
-  return commands.foldl (init := none) fun outermost? candidate =>
-    match outermost?.bind (·.getRange?), candidate.getRange? with
-    | some current, some next => if spans next current then some candidate else outermost?
+
+private meta def widest (commands : Array Syntax) (wider : Syntax.Range → Syntax.Range → Bool) :
+    Option Syntax :=
+  commands.foldl (init := none) fun chosen? candidate =>
+    match chosen?.bind (·.getRange?), candidate.getRange? with
+    | some current, some next => if wider next current then some candidate else chosen?
     | _, _ => some candidate
+
+meta def enclosingCommand? (node : Syntax) : CommandElabM (Option Syntax) :=
+  return widest (← commandsContaining node) spans
+
+meta def innermostEnclosingCommand? (node : Syntax) : CommandElabM (Option Syntax) :=
+  return widest (← commandsContaining node) fun next current => spans current next
+
+meta def declaresTheorem (node : Syntax) : CommandElabM Bool := do
+  let some decl ← innermostEnclosingCommand? node | return false
+  let some declId := findDeclId? decl | return false
+  let infos := (← collectInfoTrees decl).flatMap collectTermInfos
+  let some name := declaredConstant? declId infos | return false
+  return (← getEnv).find? name matches some (.thmInfo _)
+
+private meta def parenthesesIn (stx : Syntax) : Nat :=
+  ((subtreeNodes stx).filter (·.isOfKind ``Parser.Term.paren)).size
+
+meta def needsParenthesesAt (target : Syntax) (replacement : Term) : CommandElabM Bool := do
+  let some cmd ← enclosingCommand? target | return false
+  let substituted := replaceSourceNode cmd target replacement
+  let parenthesized ← liftCoreM <| PrettyPrinter.parenthesizeCommand substituted
+  return parenthesesIn parenthesized > parenthesesIn substituted
 
 meta def rewriteElaborates (target replacement : Syntax) : CommandElabM Bool := do
   let some cmd ← enclosingCommand? target | return false

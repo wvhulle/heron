@@ -4,82 +4,62 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-set_option linter.syntaxKindOrAtomInspection false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Parser Heron
 
 private inductive NatConstructorsToLiteralsMatch where
   | zero (zeroStx : Syntax)
-  | succ (appStx : Syntax) (base : Syntax) (succCount : Nat) (needsParens : Bool)
+  | succ (appStx : Syntax) (replacement : Term)
   | unappliedSucc (succStx : Syntax)
 
-private meta def unwrapParens : Syntax → Syntax
+private meta def unwrapParens : Term → Term
   | `(($inner)) => inner
   | stx => stx
 
-private meta partial def peelSuccs (stx : Syntax) (succCount : Nat := 0) : Syntax × Nat :=
-  match stx with
-  | `(Nat.succ $arg) => peelSuccs (unwrapParens arg) (succCount + 1)
-  | _ => (stx, succCount)
+private meta def refersTo (stx : Syntax) (constName : Name) : CommandElabM Bool := do
+  let results ← runMetaMForEachExactSyntax stx fun e => return (← instantiateMVars e).isConstOf constName
+  return results.any id
 
-private meta def delimitingParentKinds : Array SyntaxNodeKind :=
-  #[.anonymous, nullKind, ``Term.paren, ``Term.tuple, ``Term.anonymousCtor, ``Term.typeAscription,
-    ``Term.matchAlt, ``Command.declValSimple]
+private meta def succArgument? (stx : Syntax) : CommandElabM (Option Term) := do
+  let `($f:ident $arg) := stx | return none
+  unless ← refersTo f ``Nat.succ do return none
+  return some (unwrapParens arg)
 
-private meta def bindsTighterThanAddition (parentKind : SyntaxNodeKind) : Bool :=
-  !delimitingParentKinds.contains parentKind
+private meta partial def peelSuccs (arg : Term) (succCount : Nat) : CommandElabM (Term × Nat) := do
+  match ← succArgument? arg with
+  | some inner => peelSuccs inner (succCount + 1)
+  | none => return (arg, succCount)
 
-private structure NatConstructorContext where
-  parentKind : SyntaxNodeKind := .anonymous
-  insidePattern : Bool := false
-  expressionsRewritable : Bool := true
+private meta def literalFor (base : Term) (succCount : Nat) : CommandElabM Term := do
+  if ← refersTo base ``Nat.zero then return quote succCount
+  if let `($n:num) := base then return quote (n.getNat + succCount)
+  `($base + $(quote succCount))
 
-private meta def matchAltPatternsAndRhs? : Syntax → Option (Array Syntax × Syntax)
-  | `(Term.matchAltExpr| | $[$patss,*]|* => $rhs) => some (patss.flatMap (·.getElems.map (·.raw)), rhs)
-  | _ => none
+private meta def succReplacement (appStx : Syntax) (arg : Term) : CommandElabM Term := do
+  let (base, succCount) ← peelSuccs arg 1
+  let literal ← literalFor base succCount
+  if ← needsParenthesesAt appStx literal then `(($literal)) else return literal
 
-private meta partial def detectNatConstructors (stx : Syntax) (pos : NatConstructorContext) :
-    Array NatConstructorsToLiteralsMatch :=
-  let reportable := pos.insidePattern || pos.expressionsRewritable
-  let descend (child : Syntax) := detectNatConstructors child { pos with parentKind := stx.getKind }
-  match stx with
-  | `(Nat.succ $_) =>
-    let (base, succCount) := peelSuccs stx
-    let here := if reportable then #[.succ stx base succCount (bindsTighterThanAddition pos.parentKind)] else #[]
-    here ++ base.getArgs.flatMap fun child => detectNatConstructors child { pos with parentKind := base.getKind }
-  | `(Nat.zero) => if reportable then #[.zero stx] else #[]
-  | `(Nat.succ) => if reportable && !pos.insidePattern then #[.unappliedSucc stx] else #[]
-  | _ =>
-    match matchAltPatternsAndRhs? stx with
-    | some (patterns, rhs) =>
-      patterns.flatMap (detectNatConstructors · { pos with parentKind := .anonymous, insidePattern := true })
-        ++ detectNatConstructors rhs { pos with parentKind := stx.getKind, insidePattern := false }
-    | none => stx.getArgs.flatMap descend
+private meta def detectNatConstructor? (stx : Syntax) : CommandElabM (Option NatConstructorsToLiteralsMatch) := do
+  if let some arg ← succArgument? stx then
+    return some (.succ stx (← succReplacement stx arg))
+  let `($x:ident) := stx | return none
+  if ← refersTo x ``Nat.zero then return some (.zero stx)
+  if ← refersTo x ``Nat.succ then return some (.unappliedSucc stx)
+  return none
 
-private meta def statesTheorem (cmd : Syntax) : Bool :=
-  (subtreeNodes cmd).any (·.getKind == ``Lean.Parser.Command.theorem)
-
-private meta def literalFor (base : Syntax) (succCount : Nat) : CommandElabM (TSyntax `term) := do
-  match base with
-  | `(Nat.zero) => `($(Syntax.mkNumLit (toString succCount)):num)
-  | `($n:num) => `($(Syntax.mkNumLit (toString (n.getNat + succCount))):num)
-  | _ => `($(⟨base⟩) + $(Syntax.mkNumLit (toString succCount)):num)
-
-private meta def isOffsetSum (base : Syntax) : Bool :=
-  match base with
-  | `(Nat.zero) | `($_:num) => false
-  | _ => true
+private meta def detectNatConstructors (stx : Syntax) : CommandElabM (Array NatConstructorsToLiteralsMatch) := do
+  let some m ← detectNatConstructor? stx | return #[]
+  if ← declaresTheorem stx then return #[]
+  return #[m]
 
 private meta instance : Check NatConstructorsToLiteralsMatch where
   name := `natConstructorsToLiterals
   description := "Suggests `0`, `n + k` and `(· + 1)` instead of `Nat.zero` and `Nat.succ`."
-  kinds := #[``Lean.Parser.Command.declaration]
+  kinds := #[``Term.app, identKind]
+  consumesSubtree := true
   severity := .information
   category := .style
-  detect := fun cmd => pure <|
-    detectNatConstructors cmd { expressionsRewritable := !statesTheorem cmd }
+  detect := detectNatConstructors
   message := fun
     | .zero .. => m!"Use `0` instead of `Nat.zero`"
     | .succ .. => m!"Use `n + 1` instead of `Nat.succ n`"
@@ -100,10 +80,8 @@ private meta instance : Check NatConstructorsToLiteralsMatch where
     | .zero s => do
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := ← `(0), inlineViolationLabel := m!"Nat.zero → 0" }
       return #[r]
-    | .succ s base succCount needsParens => do
-      let literal ← literalFor base succCount
-      let repl ← if needsParens && isOffsetSum base then `(($literal)) else pure literal
-      let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := repl, inlineViolationLabel := m!"Nat.succ → + 1" }
+    | .succ s replacement => do
+      let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := replacement, inlineViolationLabel := m!"Nat.succ → + 1" }
       return #[r]
     | .unappliedSucc s => do
       let r : Replacement := { emphasizedSyntax := s, oldSyntax := s, newSyntax := ← `((· + 1)), inlineViolationLabel := m!"Nat.succ → (· + 1)" }

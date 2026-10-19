@@ -11,3 +11,8 @@ def g (n : Nat) : Nat := match n with
 
 #assertIgnore natConstructorsToLiterals in
 theorem succEqAddOne (n : Nat) : Nat.succ n = n + 1 := rfl
+
+private def succ (n : Nat) : Nat := n
+
+#assertIgnore natConstructorsToLiterals in
+def userFunctionNamedSucc : Nat := succ 3

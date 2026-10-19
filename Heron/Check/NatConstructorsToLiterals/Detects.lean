@@ -56,3 +56,9 @@ becomes `(command| def doubledSuccessor (n : Nat) : Nat := (n + 1) * 2)
 #assertCheck natConstructorsToLiterals in
 def successors (xs : List Nat) : List Nat := xs.map Nat.succ
 becomes `(command| def successors (xs : List Nat) : List Nat := xs.map (· + 1))
+
+#assertCheck natConstructorsToLiterals in
+open Nat in
+def viaOpenNamespace (n : Nat) : Nat := succ n
+becomes `(command| open Nat in
+def viaOpenNamespace (n : Nat) : Nat := n + 1)
