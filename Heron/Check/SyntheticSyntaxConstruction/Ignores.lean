@@ -13,3 +13,6 @@ def rebuild : Lean.Syntax → Lean.MacroM Lean.Syntax
 
 #assertIgnore syntheticSyntaxConstruction in
 def one : Lean.NumLit := Lean.quote (1 : Nat)
+
+#assertIgnore syntheticSyntaxConstruction in
+def spanOf (first last : Lean.Syntax) : Lean.Syntax := Lean.mkNullNode #[first, last]

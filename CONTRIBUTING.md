@@ -53,8 +53,10 @@ already parsed and elaborated, and never go back to the source text. Concretely:
 3. **Build the fix with a quotation** in the replacement's `category`, reusing the matched
    `TSyntax` pieces; delete with `Syntax.missing`; make literals with `quote`.
    `Heron/Check/TupleMatchToSimultaneousMatch.lean` and `RemoveIdRunWithoutEffects.lean` show
-   the shape; `Lean.Elab.Tactic.Simpa` is the upstream example. A check that only flags code
-   leaves `replacements` out, and the listing then says it has no automatic fix.
+   the shape; `Lean.Elab.Tactic.Simpa` is the upstream example. A fix that replaces a run of
+   consecutive nodes, separators included, uses `mkNullNode #[first, last]` as its
+   `oldSyntax`: the null node only spans the source nodes, as in `Simpa`. A check that only
+   flags code leaves `replacements` out, and the listing then says it has no automatic fix.
 4. **Test every shape and every guard.** `Detects.lean` has one `#assertCheck … becomes` per
    rewrite the rule performs. `Ignores.lean` has one `#assertIgnore` per `return #[]` branch in
    `detect`, so each guard against a false positive is pinned.
@@ -73,16 +75,15 @@ Seven of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.
 | --- | --- |
 | `positionalSyntaxAccess` | `getArg`, `getArgs`, `getNumArgs`, `stx[i]`, `subtreeNodes`, `signatureNodes` |
 | `syntaxKindOrAtomInspection` | `getKind`, `isOfKind`, `getAtomVal`, `getHead?` |
-| `syntheticSyntaxConstruction` | `mkAtom`, `mkIdent`, `mkNode`, `mkNullNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns |
+| `syntheticSyntaxConstruction` | `mkAtom`, `mkIdent`, `mkNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns |
 | `sourcePositionInRule` | `getPos?`, `getTailPos?`, `getRange?`, `FileMap` lookups |
 | `sourceTextInRule` | `reprint`, `getSubstring?`, `Name.toString`, `String.splitOn`, `trimAscii*`, `startsWith`, `endsWith` |
 | `syntaxKindComparisonToQuotationPattern` | a kind comparison followed by positional access |
 | `tsyntaxRawToTypedAccess` | `.raw` followed by positional access |
 
 Run them locally with `lake build && lake exe heron-self-lint`. A rule written before these
-checks existed may carry
-`set_option linter.<check> false` at the top of its file; that list only shrinks, and a new rule
-never gets one.
+checks existed may carry `set_option linter.<check> false` at the top of its file; that list
+only shrinks, and a new rule never gets one.
 
 ## Testing
 

@@ -9,13 +9,13 @@ private structure SyntheticSyntaxConstructionMatch where
   site : Syntax
 
 private meta def syntaxConstructors : Array Name :=
-  #[``Lean.mkAtom, ``Lean.mkIdent, ``Lean.mkIdentFrom, ``Lean.mkNullNode, ``Lean.mkNode,
+  #[``Lean.mkAtom, ``Lean.mkIdent, ``Lean.mkIdentFrom, ``Lean.mkNode,
     ``Lean.Syntax.mkNumLit, ``Lean.Syntax.mkStrLit, ``Lean.Syntax.mkLit, ``Lean.Syntax.ofRange,
     ``Lean.Syntax.node, ``Lean.Syntax.atom, ``Lean.Syntax.ident]
 
 private meta instance : Check SyntheticSyntaxConstructionMatch where
   name := `syntheticSyntaxConstruction
-  description := "Flags syntax assembled from atoms, identifiers or raw nodes instead of a quotation."
+  description := "Flags syntax assembled from atoms, identifiers or raw nodes instead of a quotation; `mkNullNode` over source nodes, used as a span, is allowed."
   kinds := #[]
   wholeCommand := true
   severity := .warning
