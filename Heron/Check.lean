@@ -8,6 +8,7 @@ public meta import Lean.Server.CodeActions.Basic
 -- `withSetOptionIn` lives in `Lean.Linter.Basic`; under newer toolchains it is no
 -- longer pulled in transitively, so import it directly (see `heronMasterLinter`).
 meta import Lean.Linter.Basic
+meta import Lean.Elab.BuiltinTerm
 
 public section
 
@@ -56,13 +57,25 @@ private meta def termInfosWithin (stx : Syntax) (isInside : Syntax.Range → Syn
 meta def isPositionalSyntaxAccess (e : Expr) : Bool :=
   positionalSyntaxAccessors.any e.getAppFn.isConstOf || indexesIntoSyntax e
 
+private meta def isApplicationSyntax : Syntax → Bool
+  | `($_:term $_*) => true
+  | _ => false
+
+private meta def termInfosOutsideNameLiterals (tree : InfoTree) : Array (ContextInfo × TermInfo) :=
+  let collect : StateM (Array (ContextInfo × TermInfo)) Unit :=
+    tree.visitM' (preNode := fun ci info _ => do
+      let .ofTermInfo ti := info | return true
+      if ti.elaborator == ``Lean.Elab.Term.elabDoubleQuotedName then return false
+      modify (·.push (ci, ti))
+      return true)
+  (collect.run #[]).2
+
 meta def originalCallSitesOf (cmd : Syntax) (isTarget : Expr → Bool) : CommandElabM (Array Syntax) := do
   let trees ← collectInfoTrees cmd
-  let hits ← (trees.flatMap collectTermInfos).filterM fun (ci, ti) => do
+  let hits ← (trees.flatMap termInfosOutsideNameLiterals).filterM fun (ci, ti) => do
     let .original .. := ti.stx.getHeadInfo | return false
-    runInfoMetaM ci ti.lctx do
-      let e ← instantiateMVars ti.expr
-      return e.isApp && isTarget e
+    if isApplicationSyntax ti.stx then return false
+    runInfoMetaM ci ti.lctx do return isTarget (← instantiateMVars ti.expr)
   return (deduplicateTermInfos hits).map (·.2.stx)
 
 meta def usesPositionalSyntaxAccess (cmd : Syntax) : CommandElabM Bool := do

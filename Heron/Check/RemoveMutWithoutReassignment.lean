@@ -4,6 +4,8 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
+set_option linter.positionalSyntaxAccess false
+
 open Lean Elab Command Parser Heron
 
 private structure RemoveMutWithoutReassignmentMatch where

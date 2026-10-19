@@ -16,3 +16,6 @@ def one : Lean.NumLit := Lean.quote (1 : Nat)
 
 #assertIgnore syntheticSyntaxConstruction in
 def spanOf (first last : Lean.Syntax) : Lean.Syntax := Lean.mkNullNode #[first, last]
+
+#assertIgnore syntheticSyntaxConstruction in
+def constructorsByName : Array Lean.Name := #[``Lean.mkAtom, ``Lean.Syntax.node]

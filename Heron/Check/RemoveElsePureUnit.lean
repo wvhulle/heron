@@ -3,6 +3,8 @@ module
 public meta import Heron.Check
 meta import Heron.Register
 
+set_option linter.positionalSyntaxAccess false
+
 open Lean Elab Command Parser Heron
 
 private structure RemoveElsePureUnitMatch where

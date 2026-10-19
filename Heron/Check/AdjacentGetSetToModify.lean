@@ -4,6 +4,7 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
+set_option linter.positionalSyntaxAccess false
 set_option linter.sourcePositionInRule false
 set_option linter.syntheticSyntaxConstruction false
 

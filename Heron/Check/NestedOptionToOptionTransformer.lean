@@ -5,6 +5,7 @@ meta import Heron.Register
 public meta import Heron.Monad
 
 set_option linter.positionalSyntaxAccess false
+set_option linter.syntheticSyntaxConstruction false
 
 open Lean Elab Command Meta Parser Heron
 
