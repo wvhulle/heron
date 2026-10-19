@@ -8,7 +8,6 @@ open Lean Elab Command Parser Heron
 
 private structure AdjacentGetSetToModifyMatch where
   getStx : Syntax
-  setStx : Syntax
   fullRange : Syntax
   varName : Ident
   structInst : TSyntax ``Lean.Parser.Term.structInst
@@ -39,7 +38,6 @@ private meta def findSetForGet (elems : Array (TSyntax `doElem)) (i : Nat)
     unless (← boundVariableReferences varName later).isEmpty do return none
   return some {
     getStx := getElem
-    setStx := setElem
     fullRange := mkNullNode #[getElem, setElem]
     varName
     structInst
@@ -71,19 +69,12 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
        shorter, `modify` rules out writing back a stale copy of the state (`set s` where `set s'` \
        was meant), and it keeps a single reference to the state, which the compiler needs to \
        update it in place instead of copying it."
-  replacements := some fun m => do
-    let repl ← modifyCall m
-    return #[
-      { emphasizedSyntax := m.getStx
-        oldSyntax := m.getStx
-        newSyntax := repl
-        prettyPrint := PrettyPrinter.ppCategory `doElem
-        inlineViolationLabel := m!"get/set → modify" },
-      { emphasizedSyntax := m.setStx
-        oldSyntax := m.setStx
-        newSyntax := Syntax.missing
-        inlineViolationLabel := m!"remove set" }
-    ]
+  replacements := some fun m => return #[{
+    emphasizedSyntax := m.getStx
+    oldSyntax := m.fullRange
+    newSyntax := ← modifyCall m
+    prettyPrint := PrettyPrinter.ppCategory `doElem
+    inlineViolationLabel := m!"get/set → modify" }]
   labels := fun m => return #[
     { span := m.varName
       text := m!"state binding `{m.varName}` becomes the parameter of `modify`" },
