@@ -4,24 +4,14 @@ public meta import Heron.Check
 meta import Heron.Register
 public meta import Heron.Monad
 
-set_option linter.positionalSyntaxAccess false
-set_option linter.sourcePositionInRule false
-set_option linter.syntheticSyntaxConstruction false
-
 open Lean Elab Command Parser Heron
-
-/-- Create a `Syntax` spanning two syntax nodes. -/
-private meta def mkSpan (stx1 stx2 : Syntax) : Option Syntax := do
-  let r1 ← stx1.getRange?
-  let r2 ← stx2.getRange?
-  return Syntax.ofRange ⟨r1.start, r2.stop⟩
 
 private structure AdjacentGetSetToModifyMatch where
   getStx : Syntax
   setStx : Syntax
   fullRange : Syntax
-  varName : Syntax
-  structInst : Syntax
+  varName : Ident
+  structInst : TSyntax ``Lean.Parser.Term.structInst
 
 /-- Check if a do-element is `let <name> ← get`. -/
 private meta def isGetBinding? : TSyntax `doElem → Option (TSyntax `doElem × TSyntax `ident)
@@ -39,37 +29,32 @@ private meta def isSetWithStructUpdate? (elem : TSyntax `doElem) (varName : Name
     | _ => none
   | _ => none
 
-/-- Check if a variable name appears anywhere in a syntax tree,
-either as an exact ident match or as the leading component of a dotted name. -/
-private meta partial def containsName (varName : Name) (stx : Syntax) : Bool :=
-  if stx.isIdent then
-    let n := stx.getId
-    n == varName || n.getRoot == varName
-  else
-    stx.getArgs.any (containsName varName)
-
 /-- For a get-binding at index `i`, match a `set` directly after it whose state
 binding is not used by any later element. -/
 private meta def findSetForGet (elems : Array (TSyntax `doElem)) (i : Nat)
-    (getElem : TSyntax `doElem) (varNameStx : TSyntax `ident)
-    : Option AdjacentGetSetToModifyMatch := do
-  let varName := varNameStx.getId
-  let (setElem, structInst) ← isSetWithStructUpdate? (← elems[i + 1]?) varName
-  guard !((elems.extract (i + 2)).any fun later => containsName varName later)
-  return {
+    (getElem : TSyntax `doElem) (varName : Ident) : CommandElabM (Option AdjacentGetSetToModifyMatch) := do
+  let some next := elems[i + 1]? | return none
+  let some (setElem, structInst) := isSetWithStructUpdate? next varName.getId | return none
+  for later in elems.extract (i + 2) do
+    unless (← boundVariableReferences varName later).isEmpty do return none
+  return some {
     getStx := getElem
     setStx := setElem
-    fullRange := mkSpan getElem setElem |>.getD getElem
-    varName := varNameStx
+    fullRange := mkNullNode #[getElem, setElem]
+    varName
     structInst
   }
 
-private meta def detectGetSetToModify (doSeq : Syntax) : Array AdjacentGetSetToModifyMatch :=
+private meta def detectGetSetToModify (doSeq : Syntax) : CommandElabM (Array AdjacentGetSetToModifyMatch) := do
   let elems := getDoElems doSeq
-  (Array.range elems.size).filterMap fun i =>
-    match isGetBinding? elems[i]! with
-    | some (getElem, varName) => findSetForGet elems i getElem varName
-    | none => none
+  (Array.range elems.size).filterMapM fun i => do
+    let some elem := elems[i]? | return none
+    let some (getElem, varName) := isGetBinding? elem | return none
+    findSetForGet elems i getElem varName
+
+set_option hygiene false in
+private meta def modifyCall (m : AdjacentGetSetToModifyMatch) : CommandElabM (TSyntax `doElem) :=
+  `(doElem| modify fun $m.varName => $m.structInst:structInst)
 
 private meta instance : Check AdjacentGetSetToModifyMatch where
   name := `adjacentGetSetToModify
@@ -77,7 +62,7 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
   kinds := #[``Term.doSeqIndent, ``Term.doSeqBracketed]
   severity := .warning
   category := .simplification
-  detect := fun stx => pure (detectGetSetToModify stx)
+  detect := detectGetSetToModify
   message := fun _ => m!"Use `modify` instead of `get`/`set`"
   emphasize := fun m => m.fullRange
   sources := #[.functionalProgrammingInLean "State" "Monad-Transformers/A-Monad-Construction-Kit/#state-monad"]
@@ -87,10 +72,7 @@ private meta instance : Check AdjacentGetSetToModifyMatch where
        was meant), and it keeps a single reference to the state, which the compiler needs to \
        update it in place instead of copying it."
   replacements := some fun m => do
-    let varId : TSyntax `ident := ⟨m.varName⟩
-    let structInst : TSyntax `term := ⟨m.structInst⟩
-    let modifyId := mkIdent `modify
-    let repl ← `(doElem| $modifyId:ident fun $varId => $structInst)
+    let repl ← modifyCall m
     return #[
       { emphasizedSyntax := m.getStx
         oldSyntax := m.getStx
