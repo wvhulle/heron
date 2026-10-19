@@ -35,7 +35,8 @@ meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (O
   if r.newSyntax.isMissing then
     return some { range := lspRange, newText := "" }
   let newText ← try
-    pure (← PrettyPrinter.ppCategory r.category r.newSyntax).pretty
+    let column := (fileMap.toPosition range.start).column
+    pure ((← PrettyPrinter.ppCategory r.category r.newSyntax).pretty (indent := column) (column := column))
   catch _ =>
     let some text := r.newSyntax.reprint | return none
     pure text.trimAscii.toString
