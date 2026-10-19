@@ -32,15 +32,8 @@ meta def doBlockOf [Monad m] [MonadQuotation m] (elems : Array (TSyntax `doElem)
   let seq : TSyntax ``Parser.Term.doSeq := ⟨← `(Parser.Term.doSeqIndent| $items:doSeqItem*)⟩
   `(do $seq)
 
-meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
+private meta partial def subtreeNodes (stx : Syntax) : Array Syntax :=
   #[stx] ++ stx.getArgs.flatMap subtreeNodes
-
-meta partial def signatureNodes (cmd : Syntax) : Array Syntax :=
-  match cmd with
-  | .node _ kind args =>
-    if kind == ``Parser.Command.declSig || kind == ``Parser.Command.optDeclSig then subtreeNodes cmd
-    else args.flatMap signatureNodes
-  | _ => #[]
 
 private meta def isSameSourceNode (candidate target : Syntax) : Bool :=
   candidate.getKind == target.getKind &&

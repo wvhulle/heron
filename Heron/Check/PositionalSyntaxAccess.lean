@@ -8,9 +8,6 @@ open Lean Elab Command Heron
 private structure PositionalSyntaxAccessMatch where
   site : Syntax
 
-private meta def walksSyntaxByHand (e : Expr) : Bool :=
-  e.getAppFn.isConstOf ``Heron.subtreeNodes || e.getAppFn.isConstOf ``Heron.signatureNodes
-
 private meta instance : Check PositionalSyntaxAccessMatch where
   name := `positionalSyntaxAccess
   description := "Flags syntax children read by position (`getArg`, `stx[i]`) or hand-written walks in a rule."
@@ -18,7 +15,7 @@ private meta instance : Check PositionalSyntaxAccessMatch where
   severity := .warning
   category := .style
   detect := fun cmd => do
-    let sites ← originalCallSitesOf cmd fun e => isPositionalSyntaxAccess e || walksSyntaxByHand e
+    let sites ← originalCallSitesOf cmd isPositionalSyntaxAccess
     return sites.map ({ site := · })
   message := fun _ => m!"Match syntax children with a quotation pattern instead of reading them by position"
   emphasize := fun m => m.site

@@ -75,15 +75,15 @@ Five of Heron's own checks run over `Heron/Check/*.lean` and `Heron/Refactor/*.l
 
 | Check | Rejects |
 | --- | --- |
-| `positionalSyntaxAccess` | `getArg`, `getArgs`, `getNumArgs`, `stx[i]`, `subtreeNodes`, `signatureNodes` |
+| `positionalSyntaxAccess` | `getArg`, `getArgs`, `getNumArgs`, `stx[i]` |
 | `syntaxKindOrAtomInspection` | `getKind`, `isOfKind`, `getAtomVal`, `getHead?` |
 | `syntheticSyntaxConstruction` | `mkAtom`, `mkNode`, `Syntax.mkNumLit`, `Syntax.ofRange`, `Syntax.node`/`.atom`/`.ident` patterns, and `mkIdent` of a literal name (write it in a quotation under `set_option hygiene false in`) |
 | `sourcePositionInRule` | `getPos?`, `getTailPos?`, `getRange?`, `FileMap` lookups |
 | `sourceTextInRule` | `reprint`, `getSubstring?`, `Name.toString`, `String.splitOn`, `trimAscii*`, `startsWith`, `endsWith` |
 
-Run them locally with `lake build && lake exe heron-self-lint`. A rule written before these
-checks existed may carry `set_option linter.<check> false` at the top of its file; that list
-only shrinks, and a new rule never gets one.
+Run them locally with `lake build && lake exe heron-self-lint`. No rule disables them; when one
+seems to be in the way, the framework is missing a helper, and the helper belongs in
+`Heron/Rule.lean`, `Heron/Check.lean` or `Heron/Monad.lean`, which the self-lints do not check.
 
 ## Testing
 

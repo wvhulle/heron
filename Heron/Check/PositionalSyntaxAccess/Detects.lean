@@ -13,7 +13,4 @@ def firstArgIndexed (stx : Lean.Syntax) : Lean.Syntax := stx[0]
 def allArgs (stx : Lean.Syntax) : Array Lean.Syntax := stx.getArgs
 
 #assertCheck positionalSyntaxAccess in
-def everything (stx : Lean.Syntax) : Array Lean.Syntax := Heron.subtreeNodes stx
-
-#assertCheck positionalSyntaxAccess in
 def anyChild (stx : Lean.Syntax) : Bool := stx.getArgs.any (·.isMissing)
