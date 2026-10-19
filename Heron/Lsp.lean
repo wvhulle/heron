@@ -2,6 +2,7 @@ module
 
 public meta import Heron.Rule
 public meta import Lean.PrettyPrinter
+meta import Lean.Meta.TryThis
 
 public section
 
@@ -32,8 +33,8 @@ meta def Replacement.toTextEdit (r : Replacement) (fileMap : FileMap) : CoreM (O
   let lspRange := fileMap.utf8RangeToLspRange range
   if r.newSyntax.isMissing then
     return some { range := lspRange, newText := "" }
-  let column := (fileMap.toPosition range.start).column
-  let newText := (← r.prettyPrint r.newSyntax).pretty (indent := column) (column := column)
+  let (indent, column) := Tactic.TryThis.getIndentAndColumn fileMap range
+  let newText := (← r.prettyPrint r.newSyntax).pretty (indent := indent) (column := column)
   return some { range := lspRange, newText }
 
 /-- Build a type-erased test runner for a `Rule` instance. -/
