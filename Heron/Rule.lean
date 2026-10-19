@@ -39,7 +39,11 @@ structure Replacement where
   inlineViolationLabel : MessageData
   prettyPrint : Syntax → CoreM Format := PrettyPrinter.ppCategory `term
 
-meta def printKeyword (keyword : Syntax) : CoreM Format := pure keyword.getAtomVal
+meta def printTokens (tokens : Syntax) : CoreM Format := do
+  let parts ← (if tokens.isAtom then #[tokens] else tokens.getArgs).mapM fun
+    | .atom _ keyword => pure (keyword : Format)
+    | term => PrettyPrinter.ppTerm ⟨term⟩
+  return Format.joinSep parts.toList " "
 
 /-- Promote a replacement's label metadata to a standalone `Label` for
 relatedInformation emission. -/

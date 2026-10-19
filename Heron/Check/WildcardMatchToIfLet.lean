@@ -7,36 +7,33 @@ open Lean Elab Command Parser Heron
 
 private structure WildcardMatchToIfLetMatch where
   matchStx : Syntax
-  matchKw : Syntax
   pat : TSyntax `term
   discr : TSyntax `term
-  thenRhs : TSyntax `term
-  elseRhs : TSyntax `term
+  matchThroughFirstBar : Syntax
+  firstArrow : Syntax
+  wildcardArmHead : Syntax
 
-/-- Recognise a wildcard match arm `| _ => rhs`, returning its RHS. -/
-private meta def wildcardArmRhs? : TSyntax ``Term.matchAlt → Option (TSyntax `term)
-  | `(Term.matchAltExpr| | _ => $rhs) => some rhs
+private meta def wildcardArmHead? : TSyntax ``Term.matchAlt → Option Syntax
+  | `(Term.matchAltExpr| |%$bar _ =>%$arrow $_) => some (mkNullNode #[bar, arrow])
   | _ => none
 
-/-- Recognise a single-pattern arm `| pat => rhs`. -/
-private meta def singlePatternArm? :
-    TSyntax ``Term.matchAlt → Option (TSyntax `term × TSyntax `term)
-  | `(Term.matchAltExpr| | $pat:term => $rhs) => some (pat, rhs)
+private meta def singlePatternArm? : TSyntax ``Term.matchAlt → Option (Syntax × TSyntax `term × Syntax)
+  | `(Term.matchAltExpr| |%$bar $pat:term =>%$arrow $_) => some (bar, pat, arrow)
   | _ => none
 
 private meta def detectMatchToIfLet? : Syntax → Option WildcardMatchToIfLetMatch
   | stx@`(match%$matchKw $discr:term with $patAlt:matchAlt $wildAlt:matchAlt) => do
-    guard (wildcardArmRhs? patAlt).isNone
-    let (pat, thenRhs) ← singlePatternArm? patAlt
-    let elseRhs ← wildcardArmRhs? wildAlt
-    return { matchStx := stx, matchKw, pat, discr, thenRhs, elseRhs }
+    guard (wildcardArmHead? patAlt).isNone
+    let (firstBar, pat, firstArrow) ← singlePatternArm? patAlt
+    let wildcardArmHead ← wildcardArmHead? wildAlt
+    return { matchStx := stx, pat, discr, matchThroughFirstBar := mkNullNode #[matchKw, firstBar],
+             firstArrow, wildcardArmHead }
   | _ => none
 
 private meta instance : Check WildcardMatchToIfLetMatch where
   name := `wildcardMatchToIfLet
   description := "Suggests `if let` instead of a two-arm `match` whose second arm is a wildcard."
   kinds := #[``Term.match]
-  consumesSubtree := true
   severity := .information
   category := .style
   detect := fun stx => do
@@ -51,12 +48,17 @@ private meta instance : Check WildcardMatchToIfLetMatch where
        states that directly, and in some contexts reads better than a two-arm `match` with a \
        wildcard."
   replacements := some fun m => do
-    let repl ← `(if let $m.pat := $m.discr then $m.thenRhs else $m.elseRhs)
-    return #[{
-      emphasizedSyntax := m.matchStx
-      oldSyntax := m.matchStx
-      newSyntax := repl
-      inlineViolationLabel := m!"match to if let"
-    }]
+    let `(if%$ifKw let%$letKw $_ :=%$assignKw $_ then%$thenKw $_ else%$elseKw $_) ←
+        `(if let x := y then x else y) | return #[]
+    return #[
+      { emphasizedSyntax := m.matchStx, oldSyntax := m.matchThroughFirstBar,
+        newSyntax := mkNullNode #[ifKw, letKw], prettyPrint := printTokens,
+        inlineViolationLabel := m!"match to if let" },
+      { emphasizedSyntax := m.firstArrow, oldSyntax := m.firstArrow,
+        newSyntax := mkNullNode #[assignKw, m.discr, thenKw], prettyPrint := printTokens,
+        inlineViolationLabel := m!"the discriminant moves after the pattern" },
+      { emphasizedSyntax := m.wildcardArmHead, oldSyntax := m.wildcardArmHead,
+        newSyntax := elseKw, prettyPrint := printTokens,
+        inlineViolationLabel := m!"wildcard arm becomes else" }]
 
 register_check WildcardMatchToIfLetMatch

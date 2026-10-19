@@ -41,10 +41,10 @@ private meta instance : Check NegatedIfToUnlessMatch where
       | return #[]
     return #[
     { emphasizedSyntax := m.ifKeyword, oldSyntax := m.ifKeyword, newSyntax := unlessKeyword,
-      prettyPrint := printKeyword, inlineViolationLabel := m!"if not → unless" },
+      prettyPrint := printTokens, inlineViolationLabel := m!"if not → unless" },
     { emphasizedSyntax := m.negation, oldSyntax := m.negation, newSyntax := m.withoutNegation,
       inlineViolationLabel := m!"drop the negation" },
     { emphasizedSyntax := m.thenKeyword, oldSyntax := m.thenKeyword, newSyntax := doKeyword,
-      prettyPrint := printKeyword, inlineViolationLabel := m!"then → do" }]
+      prettyPrint := printTokens, inlineViolationLabel := m!"then → do" }]
 
 register_check NegatedIfToUnlessMatch
