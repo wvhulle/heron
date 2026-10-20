@@ -1,27 +1,5 @@
 # Contributing to Heron
 
-## Repository layout
-
-- [`Heron/`](./Heron): the rules, built as the `@heron/plugin` shared library. Checks live in
-  [`Heron/Check/`](./Heron/Check), refactors in [`Heron/Refactor/`](./Heron/Refactor).
-- [`Executables/`](./Executables): only the roots of the three user tools:
-  - `LakeLintDriver`: `heron`, the driver behind `lake lint`.
-  - `StandaloneScan`: `heron-scan`.
-  - `SecondLanguageServer`: `heron-language-server`.
-- [`ToolSupport/`](./ToolSupport): code the tools share, kept out of the plugin library. A file
-  name that starts with a tool's root name (`LakeLint*`, `StandaloneScan*`) serves that tool;
-  `FixReportRendering` and `HeronPluginLocation` are used by several.
-- [`DeveloperTools/`](./DeveloperTools): `dump-syntax-tree`, `heron-self-lint` with the
-  self-lint checks in `SelfLint/`, and `RuleShowcase.lean`, see [Developer tools](#developer-tools) and
-  [What the self-lints reject](#what-the-self-lints-reject).
-- [`EndToEndTests/`](./EndToEndTests): one directory per usage scenario (`LakefileSetup`,
-  `PerFileImport`, `NoProjectChanges`), each a small Lake project with the Nu scripts that test
-  it. `SampleConsumerLibrary` holds the code the first and last scenarios run Heron on, and
-  `expected-fixes.json` the fixes Heron must report for it.
-- [`docs/`](./docs): user documentation linked from the README.
-- [`Lean4NixManifests/`](./Lean4NixManifests): Lean toolchains that lean4-nix does not package
-  yet.
-
 ## Writing a rule
 
 Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
@@ -75,7 +53,7 @@ already parsed and elaborated, and never go back to the source text. Concretely:
 ### What the self-lints reject
 
 Five checks in `DeveloperTools/SelfLint/` run over `Heron/Check/*.lean`, `Heron/Refactor/*.lean`
-and their own files in CI (the `rule-hygiene` check), and any finding fails the build. They live
+and their own files in CI (the `developer-tools` check), and any finding fails the build. They live
 outside the `Heron` library, so `linter.heron` never turns them on in other projects:
 
 | Check | Rejects |
@@ -117,16 +95,27 @@ becomes `(example : Nat := (42))
 example : Nat → Nat → True := by intro a; skip; intro b; exact trivial
 ```
 
-## End-to-end tests
+## Flake checks
 
-Each usage scenario has its own checks, named after it, which CI runs as separate steps:
+CI runs one command, and it is the same locally:
 
 ```sh
-nix build -L .#checks.x86_64-linux.no-project-changes-editor
+nix flake check -L --keep-going
 ```
 
-The list is in [`.woodpecker/build.yaml`](./.woodpecker/build.yaml). The `rules` check builds
-the library with all `#assert*` tests above.
+It builds four checks; run one with `nix build -L .#checks.x86_64-linux.<name>`:
+
+| Check | What it verifies |
+| --- | --- |
+| `rules` | the library with all `#assert*` tests above |
+| `developer-tools` | the developer tools and their tests, then `lake exe heron-self-lint` |
+| `lakefile-setup` | a consumer with the lakefile setup: a cold build, Heron's warnings, `lake lint --json` against [`EndToEndTests/expected-fixes.json`](./EndToEndTests/expected-fixes.json), and hints and quick fixes in the editor |
+| `per-file-import` | a consumer that imports Heron in one file: the build and the editor |
+
+[`EndToEndTests/ScenarioCheck.lean`](./EndToEndTests/ScenarioCheck.lean) runs both consumer checks
+with `lean --run`; its editor probes talk LSP to `lake serve` and `heron-language-server`. On Lean
+4.29 and 4.30 the probes are skipped, because those language servers read `/etc/localtime`, which
+the Nix build environment does not have.
 
 ## Developer tools
 
