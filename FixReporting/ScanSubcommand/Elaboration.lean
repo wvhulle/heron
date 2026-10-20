@@ -50,16 +50,23 @@ partial def collectLoop (all commitInit : Bool) (checks : Array RuleEntry) (acc 
 
 /-- Run `f` over `xs` with at most `conc` concurrent tasks (`conc = 1` ⇒ sequential), preserving
 input order. `f` handles its own errors. -/
-partial def parMap {α β : Type} (conc : Nat) (xs : Array α) (f : α → IO β) (i : Nat := 0)
-    (acc : Array β := #[]) : IO (Array β) := do
-  if i ≥ xs.size then return acc
-  let stop := min (i + max 1 conc) xs.size
-  let tasks ← (xs.extract i stop).mapM fun x => IO.asTask (f x)
-  let mut acc := acc
-  for t in tasks do
-    match ← IO.wait t with
-    | .ok b => acc := acc.push b
-    | .error _ => pure ()
-  parMap conc xs f stop acc
+private partial def drainSharedQueue {α β : Type} (xs : Array α) (f : α → IO β) (nextIndex : IO.Ref Nat)
+    (results : IO.Ref (Array (Option β))) : IO Unit := do
+  let index ← nextIndex.modifyGet fun index => (index, index + 1)
+  let some x := xs[index]? | return
+  try
+    let result ← f x
+    results.modify (·.set! index (some result))
+  catch _ => pure ()
+  drainSharedQueue xs f nextIndex results
+
+def parMap {α β : Type} (conc : Nat) (xs : Array α) (f : α → IO β) : IO (Array β) := do
+  let nextIndex ← IO.mkRef 0
+  let results ← IO.mkRef (Array.replicate xs.size none)
+  let workers ← (Array.range (min (max 1 conc) xs.size)).mapM fun _ =>
+    IO.asTask (drainSharedQueue xs f nextIndex results)
+  for worker in workers do
+    let _ ← IO.wait worker
+  return (← results.get).filterMap id
 
 end FixReporting
