@@ -41,13 +41,22 @@ xs.map g |>.map f            -- becomes List.map (f ∘ g) xs
 
 The fix prints the right-hand side with the matched source pieces (`f`, `g`, `xs`) in place of
 the equation's variables, and is only offered where the rewritten declaration still elaborates.
-The proof of the equation is what makes the fix correct. When the standard library has no lemma
-in the needed direction, state and prove one next to the rule:
+The proof of the equation is what makes the fix correct. Instance arguments the left-hand side does
+not fix are synthesized, and a match is refused when one cannot be or when a hypothesis is left.
+
+The equation must come from Lean's core library: the rule looks it up in the user's environment,
+and a project that loads Heron as a plugin does not import Heron's own declarations, so a lemma
+proved in Heron would never be found there. When core states the equation the other way round,
+set `rightToLeft`; [`ListFlattenOfMapToFlatMap.lean`](./Heron/Check/ListFlattenOfMapToFlatMap.lean)
+reads `List.flatMap_def` backwards:
 
 ```lean
-private theorem expressionToReplace_eq (x : α) : expressionToReplace x = replacement x := by
-  simp [expressionToReplace, replacement]
+  equation := ``List.flatMap_def
+  rightToLeft := true
 ```
+
+An equation whose replacement introduces a `fun` (`List.foldr_map`, `List.filter_filter`) is not
+supported yet: the lemma's bound variable could capture a source variable of the same name.
 
 Tests are the usual `Detects.lean` and `Ignores.lean`, with one `#assertCheck` per spelling.
 
