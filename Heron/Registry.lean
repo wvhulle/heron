@@ -25,6 +25,15 @@ public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
 public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
 public import Heron.Check.ListMapMapToSingleMap
+public import Heron.Check.ListMapIdToList
+public import Heron.Check.ListReverseReverseToList
+public import Heron.Check.ListHeadOfReverseToGetLast
+public import Heron.Check.ListAnyOfMapToComposedAny
+public import Heron.Check.ListAllOfMapToComposedAll
+public import Heron.Check.ListMapOfReplicateToReplicate
+public import Heron.Check.OptionMapMapToSingleMap
+public import Heron.Check.IdApplicationToArgument
+public import Heron.Check.ListFlattenOfMapToFlatMap
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
