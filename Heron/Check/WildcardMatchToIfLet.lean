@@ -9,25 +9,23 @@ private structure WildcardMatchToIfLetMatch where
   matchStx : Syntax
   pat : TSyntax `term
   discr : TSyntax `term
-  matchThroughFirstBar : Syntax
-  firstArrow : Syntax
-  wildcardArmHead : Syntax
+  thenRhs : TSyntax `term
+  elseRhs : TSyntax `term
 
-private meta def wildcardArmHead? : TSyntax ``Term.matchAlt → Option Syntax
-  | `(Term.matchAltExpr| |%$bar _ =>%$arrow $_) => some (mkNullNode #[bar, arrow])
+private meta def wildcardArmRhs? : TSyntax ``Term.matchAlt → Option (TSyntax `term)
+  | `(Term.matchAltExpr| | _ => $rhs) => some rhs
   | _ => none
 
-private meta def singlePatternArm? : TSyntax ``Term.matchAlt → Option (Syntax × TSyntax `term × Syntax)
-  | `(Term.matchAltExpr| |%$bar $pat:term =>%$arrow $_) => some (bar, pat, arrow)
+private meta def singlePatternArm? : TSyntax ``Term.matchAlt → Option (TSyntax `term × TSyntax `term)
+  | `(Term.matchAltExpr| | $pat:term => $rhs) => some (pat, rhs)
   | _ => none
 
 private meta def detectMatchToIfLet? : Syntax → Option WildcardMatchToIfLetMatch
-  | stx@`(match%$matchKw $discr:term with $patAlt:matchAlt $wildAlt:matchAlt) => do
-    guard (wildcardArmHead? patAlt).isNone
-    let (firstBar, pat, firstArrow) ← singlePatternArm? patAlt
-    let wildcardArmHead ← wildcardArmHead? wildAlt
-    return { matchStx := stx, pat, discr, matchThroughFirstBar := mkNullNode #[matchKw, firstBar],
-             firstArrow, wildcardArmHead }
+  | stx@`(match $discr:term with $patAlt:matchAlt $wildAlt:matchAlt) => do
+    guard (wildcardArmRhs? patAlt).isNone
+    let (pat, thenRhs) ← singlePatternArm? patAlt
+    let elseRhs ← wildcardArmRhs? wildAlt
+    return { matchStx := stx, pat, discr, thenRhs, elseRhs }
   | _ => none
 
 private meta instance : Check WildcardMatchToIfLetMatch where
@@ -47,18 +45,10 @@ private meta instance : Check WildcardMatchToIfLetMatch where
     m!"When only one constructor of a sum type is of interest, `if let pat := e then … else …` \
        states that directly, and in some contexts reads better than a two-arm `match` with a \
        wildcard."
-  replacements := some fun m => do
-    let `(if%$ifKw let%$letKw $_ :=%$assignKw $_ then%$thenKw $_ else%$elseKw $_) ←
-        `(if let x := y then x else y) | return #[]
-    return #[
-      { emphasizedSyntax := m.matchStx, oldSyntax := m.matchThroughFirstBar,
-        newSyntax := mkNullNode #[ifKw, letKw], prettyPrint := printTokens,
-        inlineViolationLabel := m!"match to if let" },
-      { emphasizedSyntax := m.firstArrow, oldSyntax := m.firstArrow,
-        newSyntax := mkNullNode #[assignKw, m.discr, thenKw], prettyPrint := printTokens,
-        inlineViolationLabel := m!"the discriminant moves after the pattern" },
-      { emphasizedSyntax := m.wildcardArmHead, oldSyntax := m.wildcardArmHead,
-        newSyntax := elseKw, prettyPrint := printTokens,
-        inlineViolationLabel := m!"wildcard arm becomes else" }]
+  replacements := some fun m => return #[{
+    emphasizedSyntax := m.matchStx
+    oldSyntax := m.matchStx
+    newSyntax := ← `(if let $m.pat := $m.discr then $m.thenRhs else $m.elseRhs)
+    inlineViolationLabel := m!"match to if let" }]
 
 register_check WildcardMatchToIfLetMatch
