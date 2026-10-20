@@ -49,7 +49,11 @@ Only subterms whose head is the equation's head constant, or a class method such
 subterm.
 
 The fix prints the right-hand side with the matched source pieces (`f`, `g`, `xs`) in place of
-the equation's variables, and is only offered where the rewritten declaration still elaborates.
+the equation's variables. A piece with no source of its own, such as a coerced argument, is
+printed from its elaborated form. The fix is only offered when the printed replacement elaborates
+back to the equation's instantiated right-hand side, which also catches a lemma binder capturing a
+source variable; binders that would capture one are renamed first, so `List.foldr_map` prints
+`fun x_1 y_1 => x (f x_1) y_1` when the source already uses `x` and `y`.
 The proof of the equation is what makes the fix correct. Instance arguments the left-hand side does
 not fix are synthesized, and a match is refused when one cannot be or when a hypothesis is left.
 
@@ -63,9 +67,6 @@ reads `List.flatMap_def` backwards:
   equation := ``List.flatMap_def
   rightToLeft := true
 ```
-
-An equation whose replacement introduces a `fun` (`List.foldr_map`, `List.filter_filter`) is not
-supported yet: the lemma's bound variable could capture a source variable of the same name.
 
 Tests are the usual `Detects.lean` and `Ignores.lean`, with one `#assertCheck` per spelling.
 
