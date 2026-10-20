@@ -7,21 +7,12 @@ open Lean Elab Command Parser Heron
 
 private structure NegatedIfToUnlessMatch where
   ifStx : Syntax
-  ifKeyword : Syntax
-  thenKeyword : Syntax
-  negation : Syntax
-  withoutNegation : Syntax
+  innerCond : Term
+  thenBody : TSyntax ``Term.doSeq
 
-private meta def negationAndRemainder? : Term → Option (Syntax × Syntax)
-  | `(!%$bang $_) => some (bang, Syntax.missing)
-  | negated@`(not $inner) => some (negated, inner)
-  | negated@`(Not $inner) => some (negated, inner)
+private meta def negatedCondition? : Term → Option Term
+  | `(!$inner) | `(not $inner) | `(Not $inner) => some inner
   | _ => none
-
-private meta def detectNegatedIf (stx : Syntax) : CommandElabM (Array NegatedIfToUnlessMatch) := do
-  let `(doElem| if%$ifKeyword $cond:term then%$thenKeyword $_) := stx | return #[]
-  let some (negation, withoutNegation) := negationAndRemainder? cond | return #[]
-  return #[{ ifStx := stx, ifKeyword, thenKeyword, negation, withoutNegation }]
 
 private meta instance : Check NegatedIfToUnlessMatch where
   name := `negatedIfToUnless
@@ -29,22 +20,20 @@ private meta instance : Check NegatedIfToUnlessMatch where
   kinds := #[``Term.doIf]
   severity := .information
   category := .simplification
-  detect := detectNegatedIf
+  detect := fun stx => pure <| Option.toArray do
+    let `(doElem| if $cond:term then $thenBody) := stx | none
+    return { ifStx := stx, innerCond := ← negatedCondition? cond, thenBody }
   message := fun _ => m!"Use `unless` instead of `if not`"
   emphasize := fun m => m.ifStx
   sources := #[
     .functionalProgrammingInLean "unless" "Monad-Transformers/More-do-Features/#single-branched-if",
     .hlint "when (not x) ==> unless x"]
   explanation := fun _ => m!"In a do-block, `if not cond then body` can be simplified to `unless cond do body`."
-  replacements := some fun m => do
-    let `(doElem| unless%$unlessKeyword $_ do%$doKeyword $_) ← `(doElem| unless true do pure ())
-      | return #[]
-    return #[
-    { emphasizedSyntax := m.ifKeyword, oldSyntax := m.ifKeyword, newSyntax := unlessKeyword,
-      prettyPrint := printTokens, inlineViolationLabel := m!"if not → unless" },
-    { emphasizedSyntax := m.negation, oldSyntax := m.negation, newSyntax := m.withoutNegation,
-      inlineViolationLabel := m!"drop the negation" },
-    { emphasizedSyntax := m.thenKeyword, oldSyntax := m.thenKeyword, newSyntax := doKeyword,
-      prettyPrint := printTokens, inlineViolationLabel := m!"then → do" }]
+  replacements := some fun m => return #[{
+    emphasizedSyntax := m.ifStx
+    oldSyntax := m.ifStx
+    newSyntax := ← `(doElem| unless $m.innerCond do $m.thenBody)
+    prettyPrint := PrettyPrinter.ppCategory `doElem
+    inlineViolationLabel := m!"if not → unless" }]
 
 register_check NegatedIfToUnlessMatch
