@@ -34,6 +34,7 @@ public import Heron.Check.ListMapOfReplicateToReplicate
 public import Heron.Check.OptionMapMapToSingleMap
 public import Heron.Check.IdApplicationToArgument
 public import Heron.Check.ListFlattenOfMapToFlatMap
+public import Heron.Check.BoolNotNotToBool
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
