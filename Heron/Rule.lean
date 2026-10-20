@@ -373,11 +373,15 @@ private meta def delaboratedEquationSide (equation : Name) (rightToLeft : Bool) 
     let some (_, printed) := matchedAndPrintedSides statement rightToLeft | return none
     return some (← PrettyPrinter.delab printed).raw
 
+private meta def withoutParentheses : Syntax → Syntax
+  | `(($inner)) => inner
+  | piece => piece
+
 private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Syntax)) : Option Syntax :=
   rhs.replaceM fun stx => do
     let some index := (List.range pieces.size).find? fun index => stx.isIdent && stx.getId == equationVariableName index
       | return none
-    return some (← pieces[index]?.join)
+    return some (withoutParentheses (← pieces[index]?.join))
 
 meta def rewriteByEquationAt? (node : Syntax) (equation : Name) (rightToLeft : Bool) :
     CommandElabM (Option Syntax) := do
