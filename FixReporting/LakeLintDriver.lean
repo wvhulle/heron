@@ -53,7 +53,7 @@ def main (args : List String) : IO UInt32 := do
     -- Ensure the plugin `.so` exists so the consumer's always-on `--plugin` wiring resolves.
     match ← ensurePluginSo with
     | none =>
-      IO.eprintln "heron: could not build or locate libheron_Heron.so \
+      IO.eprintln "heron: could not build or locate the Heron plugin \
                    (set HERON_PLUGIN_SO, or use --no-build to read an existing sink)"
       return 1
     | some _ => runBuild fixDir.toString targets

@@ -33,9 +33,6 @@ def cacheRoot : IO FilePath := do
   | some home => return FilePath.mk home / ".cache" / "heron"
   | none => stayIdle "neither HERON_CACHE_DIR, XDG_CACHE_HOME nor HOME is set"
 
-def builtPlugin (checkout : FilePath) : FilePath :=
-  checkout / ".lake" / "build" / "lib" / pluginSoFileName
-
 def environmentOfOtherToolchain : Array (String × Option String) :=
   #["ELAN_TOOLCHAIN", "LAKE", "LEAN", "LEAN_SYSROOT", "LEAN_PATH", "LEAN_SRC_PATH"].map (·, none)
 
@@ -79,16 +76,16 @@ def buildPluginInCheckout (version branch : String) (checkout : FilePath) : IO S
     IO.FS.removeDirAll checkout
     stayIdle s!"Heron has no branch lean/v{version}, and main targets {toolchain}"
   IO.eprintln s!"heron-language-server: building the Heron plugin for Lean {version} in {checkout}"
-  let plugin := builtPlugin checkout
-  unless (← runReportingToStderr "lake" #["build", "Heron:shared"] checkout) && (← plugin.pathExists) do
-    stayIdle s!"building the Heron plugin in {checkout} failed"
-  return plugin.toString
+  let some plugin ← queryPluginPath checkout environmentOfOtherToolchain
+    | stayIdle s!"building the Heron plugin in {checkout} failed"
+  return plugin
 
 def cachedPluginFor (version : String) : IO String := do
   let root ← cacheRoot
   IO.FS.createDirAll root
   let checkout := root / version
-  if ← (builtPlugin checkout).pathExists then return (builtPlugin checkout).toString
+  if toolchainTargetsVersion (← checkoutToolchain checkout) version then
+    if let some plugin ← queryPluginPath checkout environmentOfOtherToolchain then return plugin
   let branchList ← remoteBranchList
   let failure := root / s!"{version}.failure"
   let lastFailure? ← (some <$> IO.FS.readFile failure) <|> pure none
