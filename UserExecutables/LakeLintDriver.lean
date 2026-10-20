@@ -1,5 +1,5 @@
-import ToolSupport.FixReportRendering
-import ToolSupport.LakeLintBuildFixSink
+import UserExecutables.FixReportRendering
+import UserExecutables.LakeLintDriver.BuildFixSink
 
 /-!
 # `heron` — build-integrated Heron fix reporter (clippy model)
@@ -17,7 +17,7 @@ makes it the project's `lake lint`.
     lake lint -- --no-build         # read the existing sink only
 -/
 
-open ToolSupport
+open UserExecutables
 
 structure Cli where
   fix : Bool := false

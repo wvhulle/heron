@@ -7,7 +7,7 @@ renders identically. -/
 
 open Lean Heron
 
-namespace ToolSupport
+namespace UserExecutables
 
 /-- A file's findings, with the `FileMap` of its current source for rendering/applying. -/
 structure Report where
@@ -211,4 +211,4 @@ def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO U
   IO.eprintln (pal.warn s!"heron: {(reports.map (·.fixes.size)).sum} finding(s) across {reports.size} file(s)")
   return 0
 
-end ToolSupport
+end UserExecutables

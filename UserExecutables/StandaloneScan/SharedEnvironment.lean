@@ -1,7 +1,7 @@
 import Lean
 import Heron
-import ToolSupport.FixReportRendering
-import ToolSupport.StandaloneScanElaboration
+import UserExecutables.FixReportRendering
+import UserExecutables.StandaloneScan.Elaboration
 
 /-! **Shared-environment engine.** Import the dependency closure ONCE, then detect every target file
 against that shared imported env — instead of re-importing per file. Incremental cache (by source
@@ -12,7 +12,7 @@ unbuilt modules are skipped. -/
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 open Heron (FixRecord)
 
-namespace ToolSupport
+namespace UserExecutables
 
 /-- A target module: name, source path + contents, and header imports. -/
 structure Mod where
@@ -139,4 +139,4 @@ def lintShared (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Na
   let mods ← files.mapM fun (f : String) => buildMod (modNameOfFile f) f
   lintMods all useCache checks conc mods
 
-end ToolSupport
+end UserExecutables

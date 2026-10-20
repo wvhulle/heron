@@ -1,8 +1,8 @@
-import ToolSupport.HeronPluginLocation
+import UserExecutables.HeronPluginLocation
 import Lean.Data.Lsp.Communication
 import Std.Data.HashMap
 
-open System ToolSupport Lean JsonRpc
+open System UserExecutables Lean JsonRpc
 
 def heronRepository : String := "https://github.com/wvhulle/heron"
 

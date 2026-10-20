@@ -8,7 +8,7 @@ Heron's `meta` `collectFixRecords`. -/
 open Lean Lean.Elab Lean.Elab.Command Lean.Elab.Frontend Lean.Parser
 open Heron (FixRecord RuleEntry collectFixRecords)
 
-namespace ToolSupport
+namespace UserExecutables
 
 def scanOptions : Options := (Elab.async.set ({} : Options) false).setBool `linter.heron true
 
@@ -62,4 +62,4 @@ partial def parMap {α β : Type} (conc : Nat) (xs : Array α) (f : α → IO β
     | .error _ => pure ()
   parMap conc xs f stop acc
 
-end ToolSupport
+end UserExecutables
