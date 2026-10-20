@@ -26,3 +26,12 @@ example (b : Bool) : IO Unit := do
   if b then
     IO.println "hello"
   IO.println "after")
+
+#assertCheck removeElsePureUnit in
+example (b : Bool) : IO Unit := do
+  if b then IO.println (1 >= 0) else pure ()
+  IO.println "after"
+becomes `(command|
+example (b : Bool) : IO Unit := do
+  if b then IO.println (1 >= 0)
+  IO.println "after")
