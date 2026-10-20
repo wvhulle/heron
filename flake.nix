@@ -51,6 +51,7 @@
           name,
           targets,
           lakeArtifacts ? null,
+          afterBuild ? "",
         }:
         lake2nix.mkPackage (
           {
@@ -60,6 +61,7 @@
             buildPhase = ''
               runHook preBuild
               lake build ${targets}
+              ${afterBuild}
               runHook postBuild
             '';
           }
@@ -85,34 +87,15 @@
 
       developer-tools = buildLakeTargets {
         name = "heron-developer-tools";
-        targets = "dump-syntax-tree DeveloperTools";
+        targets = "dump-syntax-tree DeveloperTools heron-self-lint";
         lakeArtifacts = library;
+        afterBuild = "lake exe heron-self-lint";
       };
 
       heronScanInProject = pkgs.writeShellApplication {
         name = "heron-scan";
         runtimeInputs = [ pkgs.lean.lean-all ];
         text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
-      };
-
-      self-lint-build = buildLakeTargets {
-        name = "heron-self-lint-build";
-        targets = "heron-self-lint";
-        lakeArtifacts = library;
-      };
-
-      rule-hygiene = pkgs.stdenv.mkDerivation {
-        name = "heron-rule-hygiene";
-        src = ./.;
-        nativeBuildInputs = [ pkgs.lean.lean-all ];
-        buildPhase = ''
-          runHook preBuild
-          cp -R ${self-lint-build}/.lake .
-          chmod -R +w .lake
-          lake exe heron-self-lint
-          runHook postBuild
-        '';
-        installPhase = "touch $out";
       };
 
       language-server-build = buildLakeTargets {
@@ -148,7 +131,7 @@
 
       checks.${system} = {
         rules = library;
-        inherit developer-tools rule-hygiene;
+        inherit developer-tools;
       }
       // import ./EndToEndTests {
         inherit
