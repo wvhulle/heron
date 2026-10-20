@@ -2,7 +2,7 @@ module
 
 public meta import Heron.Check
 meta import Heron.Register
-public meta import DevExecutables.SelfLint.OriginalCallSites
+public meta import RuleDevelopment.SelfLint.OriginalCallSites
 
 open Lean Elab Command Heron
 

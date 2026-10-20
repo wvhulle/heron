@@ -14,14 +14,14 @@ package heron where
   globs := #[`Heron.*]
   defaultFacets := #[`lean_lib.shared]
 
-@[default_target] lean_lib DevExecutables where globs := #[`DevExecutables.+]
+@[default_target] lean_lib RuleDevelopment where globs := #[`RuleDevelopment.+]
 
 lean_lib FixReporting where globs := #[`FixReporting.+]
 
-lean_exe «dump-syntax-tree» where root := `DevExecutables.DumpSyntaxTree
+lean_exe «dump-syntax-tree» where root := `RuleDevelopment.DumpSyntaxTree
 
 lean_exe «heron-self-lint» where
-  root := `DevExecutables.SelfLint
+  root := `RuleDevelopment.SelfLint
   supportInterpreter := true
 
 lean_exe heron where
