@@ -305,22 +305,76 @@ meta def boundVariableReferences (binder scope : Syntax) : CommandElabM (Array S
     !ti.isBinder && ti.expr == .fvar fvarId && liesWithin scope ti.stx
   return (deduplicateTermInfos references).map (·.2.stx)
 
+private meta def runTermElabAtTermInfo (ci : ContextInfo) (ti : TermInfo) (x : TermElabM α) : CommandElabM α := do
+  let fileMap ← getFileMap
+  let fileName ← getFileName
+  runInfoMetaM ci ti.lctx do
+    withTheReader Core.Context (fun ctx => { ctx with fileMap, fileName }) do
+    Meta.withLocalInstances (ti.lctx.decls.toList.filterMap id) do
+      x.run'
+
 meta def elaboratesLike (original : Syntax) (candidate : Term) : CommandElabM Bool := do
   let infos := (← collectInfoTrees original).flatMap collectTermInfos
   let some (ci, ti) := infos.find? fun (_, ti) => sameRange ti.stx original | return false
-  let candidateExpr : TermElabM Expr := withRef original <| Term.withoutErrToSorry do
-    let e ← Term.elabTermEnsuringType candidate ti.expectedType?
-    Term.synthesizeSyntheticMVarsNoPostponing
-    instantiateMVars e
-  let fileMap ← getFileMap
-  let fileName ← getFileName
   try
-    runInfoMetaM ci ti.lctx do
-      withTheReader Core.Context (fun ctx => { ctx with fileMap, fileName }) do
-      Meta.withLocalInstances (ti.lctx.decls.toList.filterMap id) do
-        let candidate ← candidateExpr.run'
-        Meta.withReducible <| Meta.isDefEq (← instantiateMVars ti.expr) candidate
+    runTermElabAtTermInfo ci ti <| withRef original <| Term.withoutErrToSorry do
+      let candidate ← Term.elabTermEnsuringType candidate ti.expectedType?
+      Term.synthesizeSyntheticMVarsNoPostponing
+      Meta.withReducible <| Meta.isDefEq (← instantiateMVars ti.expr) (← instantiateMVars candidate)
   catch _ => return false
+
+private meta def outermostSourceOf (candidates : Array (ContextInfo × TermInfo)) (assigned : Expr) :
+    MetaM (Option Syntax) := do
+  let mut outermost : Option Syntax := none
+  for (_, ti) in candidates do
+    unless (← instantiateMVars ti.expr) == assigned do continue
+    let wider := match outermost with
+      | some current => liesWithin ti.stx current
+      | none => true
+    if wider then outermost := some ti.stx
+  return outermost
+
+private meta def equationVariableName (index : Nat) : Name := .mkSimple s!"heronEquationVariable{index}"
+
+private meta partial def withEquationVariables (statement : Expr) (variables : Array Expr)
+    (k : Array Expr → Expr → MetaM α) : MetaM α :=
+  match statement with
+  | .forallE _ domain body binderInfo =>
+    withLocalDecl (equationVariableName variables.size) binderInfo domain fun boundVariable =>
+      withEquationVariables (body.instantiate1 boundVariable) (variables.push boundVariable) k
+  | body => k variables body
+
+private meta def sourcePiecesForEquationLhs (equation : Name) (candidates : Array (ContextInfo × TermInfo))
+    (target : Expr) : MetaM (Option (Array (Option Syntax))) := do
+  let (variables, _, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
+  let some (_, lhs, _) := statement.eq? | return none
+  unless ← withTransparency .instances <| isDefEq lhs (← instantiateMVars target) do return none
+  some <$> variables.mapM fun patternVariable => do
+    outermostSourceOf candidates (← instantiateMVars patternVariable)
+
+private meta def delaboratedEquationRhs (equation : Name) : MetaM (Option Syntax) := do
+  withEquationVariables (← inferType (← mkConstWithFreshMVarLevels equation)) #[] fun _ statement => do
+    let some (_, _, rhs) := statement.eq? | return none
+    return some (← PrettyPrinter.delab rhs).raw
+
+private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Syntax)) : Option Syntax :=
+  rhs.replaceM fun stx => do
+    let some index := (List.range pieces.size).find? fun index => stx.isIdent && stx.getId == equationVariableName index
+      | return none
+    return some (← pieces[index]?.join)
+
+meta def rewriteByEquationAt? (node : Syntax) (equation : Name) : CommandElabM (Option Syntax) := do
+  let infos := (← collectInfoTrees node).flatMap collectTermInfos
+  let candidates := infos.filter fun (_, ti) =>
+    !ti.isBinder && liesWithin node ti.stx && !sameRange ti.stx node
+  for (ci, ti) in infos.filter fun (_, ti) => sameRange ti.stx node do
+    let attempt : TermElabM (Option Syntax) := withRef node do
+      let some pieces ← sourcePiecesForEquationLhs equation candidates ti.expr | return none
+      let some rhs ← delaboratedEquationRhs equation | return none
+      return spliceSourcePieces rhs pieces
+    if let some replacement ← (try runTermElabAtTermInfo ci ti attempt catch _ => pure none) then
+      return some replacement
+  return none
 
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax
