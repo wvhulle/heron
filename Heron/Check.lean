@@ -122,13 +122,7 @@ private meta def emitLabelHints (ruleName : Name) (primaryRange? : Option Syntax
 one of these per enabled rule per command, calls `visit` at every node whose
 kind matches the rule, then calls `emit` once at the end. -/
 structure RuleHandler where
-  /-- Syntax kinds at which `visit` should be invoked. -/
-  kinds : Array SyntaxNodeKind
-  within : Array SyntaxNodeKind
-  /-- Called once per matching node during the master walk; accumulates matches
-  in handler-private state. -/
-  visit : Syntax → CommandElabM Unit
-  /-- Called once after the walk; emits one diagnostic per accumulated match. -/
+  visitor : SyntaxVisitor
   emit : CommandElabM Unit
 
 /-- A type-erased registration. The registry stores `setup` thunks that build a
@@ -153,34 +147,13 @@ structure RuleEntry where
 
 meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 
-/-- Build a fresh `RuleHandler` for one `Check` rule for one command.
-
-When `Rule.consumesSubtree` is `true`, the visit closure tracks ranges of
-nodes where `detect` produced matches and short-circuits at any descendant of
-those ranges. Because the shared dispatch walk is preorder, ancestors are
-always visited before their descendants, so a flat array of consumed ranges
-filters descendants without a second pass. -/
 private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
   let matchesRef ← IO.mkRef (#[] : Array α)
-  let consumedRef ← IO.mkRef (#[] : Array Lean.Syntax.Range)
-  let consumes := Rule.consumesSubtree (α := α)
   let name := Rule.name (α := α)
   let profiling := Heron.isProfilingEnabled (← getOptions)
   let walkStart ← IO.monoNanosNow
   return {
-    kinds := Rule.kinds (α := α)
-    within := Rule.within (α := α)
-    visit := fun node => do
-      if consumes then
-        if let some r := node.getRange? then
-          if (← consumedRef.get).any fun c => c.start ≤ r.start ∧ r.stop ≤ c.stop then
-            return
-      let found ← Rule.detect (α := α) node
-      if found.isEmpty then return
-      matchesRef.modify (· ++ found)
-      if consumes then
-        if let some r := node.getRange? then
-          consumedRef.modify (·.push r)
+    visitor := ← Rule.collectingVisitor matchesRef
     emit := do
       let collected ← matchesRef.get
       let detectEnd ← IO.monoNanosNow
@@ -201,23 +174,6 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
         Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) collected.size
   }
 
-/-- Walk `stx` once, dispatching each node to every handler that registered for
-its kind. -/
-private meta partial def walkDispatch
-    (table : Std.HashMap SyntaxNodeKind (Array RuleHandler)) (enclosingKinds : Array SyntaxNodeKind)
-    (stx : Syntax) : CommandElabM Unit := do
-  let enclosingKinds := enclosingKinds.push stx.getKind
-  if let some hs := table[stx.getKind]? then
-    for h in hs do
-      if h.within.isEmpty || enclosingKinds.any h.within.contains then h.visit stx
-  for c in walkedChildren stx do walkDispatch table enclosingKinds c
-
-/-- Build the kind→handlers dispatch table from a list of live handlers. -/
-private meta def buildDispatchTable (handlers : Array RuleHandler) :
-    Std.HashMap SyntaxNodeKind (Array RuleHandler) :=
-  handlers.foldl (init := {}) fun tbl h =>
-    h.kinds.foldl (init := tbl) fun tbl k =>
-      tbl.insert k ((tbl[k]?.getD #[]).push h)
 
 /-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
 the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. Each check
@@ -291,7 +247,7 @@ private meta def heronMasterLinter : Linter where
     let active := entries.filter (·.isEnabled opts)
     if active.isEmpty then return
     let handlers ← active.mapM (·.setup)
-    walkDispatch (buildDispatchTable handlers) #[] stx
+    walkVisitors (handlers.map (·.visitor)) stx
     for h in handlers do h.emit
     writeFixSink stx
 

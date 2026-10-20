@@ -145,31 +145,49 @@ meta initialize
 meta def Heron.isReelaboratingGuardSet (opts : Options) : Bool :=
   Heron.reelaboratingGuardOption.get opts
 
-/-- Walk a syntax tree top-down, applying `detect` only at nodes whose kind is
-in `kinds`. When `consumesSubtree` is `true` and `detect` returns a non-empty
-array at a node, descendants of that node are not visited. Used by
-`Rule.detectAll`; the master linter implements the same shape against the
-shared dispatch walk via per-rule consumed-range tracking. -/
+structure SyntaxVisitor where
+  kinds : Array SyntaxNodeKind
+  within : Array SyntaxNodeKind
+  visit : Syntax → CommandElabM Unit
+
 meta def walkedChildren : Syntax → Array Syntax
   | .node _ kind args => if kind == choiceKind then args.extract 0 1 else args
   | _ => #[]
 
-private meta partial def walkKinds (kinds within : Array SyntaxNodeKind) (consumesSubtree : Bool)
-    (detect : Syntax → CommandElabM (Array α)) (insideScope : Bool) (stx : Syntax) :
-    CommandElabM (Array α) := do
-  let insideScope := insideScope || within.contains stx.getKind
-  let here ← if insideScope && kinds.contains stx.getKind then detect stx else pure #[]
-  if consumesSubtree && !here.isEmpty then return here
-  (walkedChildren stx).foldlM (init := here) fun acc child => do
-    return acc ++ (← walkKinds kinds within consumesSubtree detect insideScope child)
+private meta partial def walkWithVisitorTable (table : Std.HashMap SyntaxNodeKind (Array SyntaxVisitor))
+    (enclosingKinds : Array SyntaxNodeKind) (stx : Syntax) : CommandElabM Unit := do
+  let enclosingKinds := enclosingKinds.push stx.getKind
+  if let some visitors := table[stx.getKind]? then
+    for visitor in visitors do
+      if visitor.within.isEmpty || enclosingKinds.any visitor.within.contains then visitor.visit stx
+  for child in walkedChildren stx do walkWithVisitorTable table enclosingKinds child
 
-/-- Run a rule across a whole command's syntax. Used by the test runner and
-code-action provider; the master linter inlines the same shape so it can share
-the walk across all rules. -/
-meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) :=
-  let within := Rule.within (α := α)
-  walkKinds (Rule.kinds (α := α)) within (Rule.consumesSubtree (α := α)) (Rule.detect (α := α))
-    within.isEmpty stx
+meta def walkVisitors (visitors : Array SyntaxVisitor) (stx : Syntax) : CommandElabM Unit :=
+  let table := visitors.foldl (init := {}) fun table visitor =>
+    visitor.kinds.foldl (init := table) fun table kind =>
+      table.insert kind ((table[kind]?.getD #[]).push visitor)
+  walkWithVisitorTable table #[] stx
+
+meta def Rule.collectingVisitor [Rule α] (found : IO.Ref (Array α)) : CommandElabM SyntaxVisitor := do
+  let consumedRanges ← IO.mkRef (#[] : Array Syntax.Range)
+  let consumes := Rule.consumesSubtree (α := α)
+  return {
+    kinds := Rule.kinds (α := α)
+    within := Rule.within (α := α)
+    visit := fun node => do
+      if consumes then
+        if let some r := node.getRange? then
+          if (← consumedRanges.get).any fun c => c.start ≤ r.start ∧ r.stop ≤ c.stop then return
+      let detected ← Rule.detect (α := α) node
+      if detected.isEmpty then return
+      found.modify (· ++ detected)
+      if consumes then
+        if let some r := node.getRange? then consumedRanges.modify (·.push r) }
+
+meta def Rule.detectAll [Rule α] (stx : Syntax) : CommandElabM (Array α) := do
+  let found ← IO.mkRef #[]
+  walkVisitors #[← Rule.collectingVisitor found] stx
+  found.get
 
 /-- Re-elaborate a command collecting info trees.
 
