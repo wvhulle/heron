@@ -15,11 +15,6 @@ private meta def singleIdentBind? : TSyntax `doElem → Option (TSyntax `ident �
   | `(doElem| let $x:ident ← $action:term) => some (x, action)
   | _ => none
 
-private meta def isSingleStatement : TSyntax `doElem → Bool
-  | `(doElem| let $_:ident := $_) | `(doElem| let $_:ident ← $_) | `(doElem| return $_)
-  | `(doElem| $_:term) => true
-  | _ => false
-
 private meta def nestedAction (action : Term) : CommandElabM Term := do
   `(term| (← $action))
 
@@ -36,7 +31,6 @@ private meta def pairToNestedAction? (doTerm : Syntax) (elems : Array (TSyntax `
     CommandElabM (Option SingleUseBindToNestedActionMatch) := do
   let some bind := elems[i]? | return none
   let some next := elems[i + 1]? | return none
-  unless isSingleStatement next do return none
   let some (x, action) := singleIdentBind? bind | return none
   let some use ← singleUseInNext? x next (elems.extract (i + 2)) | return none
   let rewrittenNext := next.replacingSourceNode use (← nestedAction action)

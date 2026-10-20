@@ -25,13 +25,6 @@ def usedInsideLambda (xs : List Nat) : IO (List Nat) := do
   pure (xs.map fun x => x + n)
 
 #assertIgnore singleUseBindToNestedAction in
-def usedAsMatchDiscriminant (read : IO (Option Nat)) : IO Nat := do
-  let chunk? ← read
-  match chunk? with
-  | none => return 0
-  | some chunk => return chunk
-
-#assertIgnore singleUseBindToNestedAction in
 def usedInsideBranch (b : Bool) : IO Nat := do
   let n ← pure 1
   if b then
