@@ -60,14 +60,6 @@ def shadowedByInnerLambda (g : (Nat → Nat) → Nat) := fun (x : Nat) => g fun 
 def etaReducible (offset : Nat) := List.map (fun n => Nat.add offset n) [1, 2]
 
 #assertIgnore singleUseLambdaToCdotFunction in
-def doBody : List (IO Nat) := [1, 2].map fun n => do
+def useInsideInnerParentheses : List (IO Nat) := [1, 2].map fun n => do
   IO.println "step"
   pure (n + 1)
-
-#assertIgnore singleUseLambdaToCdotFunction in
-def letBody := [1, 2].map fun n =>
-  let doubled := n * 2
-  doubled + 1
-
-#assertIgnore singleUseLambdaToCdotFunction in
-def structureBody := [1, 2].map fun n => { fst := n, snd := 0 : Nat × Nat }

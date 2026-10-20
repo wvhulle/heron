@@ -26,10 +26,6 @@ private meta def sourceIdentContaining (body : Term) (occurrence : Syntax) : Opt
     | stx@`($_:ident) => liesWithin stx occurrence
     | _ => false
 
-private meta def isBlockBody : Term → Bool
-  | `(do $_) | `(let $_:letDecl; $_) | `($_:structInst) => true
-  | _ => false
-
 private meta def passesOccurrenceLast (body : Term) (occurrence : Syntax) : Bool :=
   match body with
   | `($_ $args*) => args.back?.any (·.raw == occurrence)
@@ -40,7 +36,6 @@ head of a projection `x.f`, and `(body)` with that reference replaced by `·` or
 to the same function. -/
 private meta def eligibleCdotFunction? (funStx : Syntax) : CommandElabM (Option Term) := do
   let `(fun $x:ident => $body) := funStx | return none
-  if isBlockBody body then return none
   let #[occurrence] ← boundVariableReferences x body | return none
   let some sourceIdent := sourceIdentContaining body occurrence | return none
   let `($reference:ident) := sourceIdent | return none

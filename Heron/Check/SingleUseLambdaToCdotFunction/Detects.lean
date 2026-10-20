@@ -34,3 +34,27 @@ becomes `(command| def longWords (words : List String) := words.filter (·.lengt
 #assertCheck singleUseLambdaToCdotFunction in
 def prefixes (words : List String) := words.map fun w => w.take 2
 becomes `(command| def prefixes (words : List String) := words.map (·.take 2))
+
+#assertCheck singleUseLambdaToCdotFunction in
+def longWordsAscii (words : List String) := words.filter fun w => w.length >= 5
+becomes `(command| def longWordsAscii (words : List String) := words.filter (·.length >= 5))
+
+#assertCheck singleUseLambdaToCdotFunction in
+def doBody : List (IO Nat) := [1, 2].map fun n => do
+  IO.println "step"
+  pure n
+becomes `(command| def doBody : List (IO Nat) := [1, 2].map (do
+  IO.println "step"
+  pure ·))
+
+#assertCheck singleUseLambdaToCdotFunction in
+def letBody := [1, 2].map fun n =>
+  let doubled := n * 2
+  doubled + 1
+becomes `(command| def letBody := [1, 2].map (
+  let doubled := · * 2
+  doubled + 1))
+
+#assertCheck singleUseLambdaToCdotFunction in
+def structureBody := [1, 2].map fun n => { fst := n, snd := 0 : Nat × Nat }
+becomes `(command| def structureBody := [1, 2].map ({ fst := ·, snd := 0 : Nat × Nat }))
