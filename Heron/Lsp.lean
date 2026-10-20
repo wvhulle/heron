@@ -153,7 +153,8 @@ private meta def gapEdit (fileMap : FileMap) (output : String) (sourceTokens : A
       pure (⟨if keepsLeading then first.start else gap.sourceStart, if keepsTrailing then last.stop else gap.sourceStop⟩,
         slice (if keepsLeading then addedStart else gap.outputStart) (if keepsTrailing then addedStop else gap.outputStop))
     | none, _, some (addedStart, _), some (_, addedStop) =>
-      if gap.isLast then pure (⟨gap.sourceStart, gap.sourceStart⟩, slice gap.outputStart addedStop)
+      if gap.isLast || (!gap.isFirst && addedStart == gap.outputStart) then
+        pure (⟨gap.sourceStart, gap.sourceStart⟩, slice gap.outputStart addedStop)
       else pure (⟨gap.sourceStop, gap.sourceStop⟩, slice addedStart gap.outputStop)
     | some first, some last, none, _ =>
       let (lineIndent, lineColumn) := Tactic.TryThis.getIndentAndColumn fileMap ⟨first.start, first.start⟩
