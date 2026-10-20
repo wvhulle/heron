@@ -1,7 +1,7 @@
 [
   {
-    "after": "let y := x",
-    "before": "let mut y := x",
+    "after": "let",
+    "before": "let mut",
     "col": 3,
     "file": "Consumer/Basic.lean",
     "line": 2,
@@ -9,29 +9,65 @@
     "rule": "removeMutWithoutReassignment"
   },
   {
-    "after": "intro a b",
-    "before": "intro a; intro b",
-    "col": 34,
+    "after": " ",
+    "before": "; intro ",
+    "col": 41,
     "file": "Consumer/Basic.lean",
     "line": 5,
     "message": "Merge intros",
     "rule": "mergeConsecutiveIntros"
   },
   {
-    "after": "def incrementOrZero : Option Nat → Nat\n  | some v => increment v\n  | _ => 0",
-    "before": "def incrementOrZero (o : Option Nat) : Nat := match o with\n  | some v => increment v\n  | _ => 0",
-    "col": 1,
+    "after": ":",
+    "before": "(o :",
+    "col": 21,
     "file": "Consumer/UsesBasic.lean",
     "line": 3,
     "message": "Match on the parameters directly with `def f : A → B | pattern => …`",
     "rule": "matchOnParametersToPatternMatchingDefinition"
   },
   {
-    "after": "if let some v := o then increment v else 0",
-    "before": "match o with\n  | some v => increment v\n  | _ => 0",
+    "after": " →",
+    "before": ") :",
+    "col": 36,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 3,
+    "message": "Match on the parameters directly with `def f : A → B | pattern => …`",
+    "rule": "matchOnParametersToPatternMatchingDefinition"
+  },
+  {
+    "after": "",
+    "before": " := match o with",
+    "col": 43,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 3,
+    "message": "Match on the parameters directly with `def f : A → B | pattern => …`",
+    "rule": "matchOnParametersToPatternMatchingDefinition"
+  },
+  {
+    "after": "if let",
+    "before": "match o with\n  |",
     "col": 47,
     "file": "Consumer/UsesBasic.lean",
     "line": 3,
+    "message": "Use `if let` instead of two-arm `match` with wildcard",
+    "rule": "wildcardMatchToIfLet"
+  },
+  {
+    "after": ":= o then",
+    "before": "=>",
+    "col": 12,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 4,
+    "message": "Use `if let` instead of two-arm `match` with wildcard",
+    "rule": "wildcardMatchToIfLet"
+  },
+  {
+    "after": "else",
+    "before": "| _ =>",
+    "col": 3,
+    "file": "Consumer/UsesBasic.lean",
+    "line": 5,
     "message": "Use `if let` instead of two-arm `match` with wildcard",
     "rule": "wildcardMatchToIfLet"
   },

@@ -176,7 +176,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
 
 
 /-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
-the same `findActions` → `Replacement.toTextEdit` path the code-action provider uses. Each check
+the same `findActions` → `Replacement.toTextEdits` path the code-action provider uses. Each check
 is still gated by `isEnabled`; with `all := true` the manual **refactors** (`testRunnerRegistry`
 entries that aren't checks) are added too. Shared by the build sink (below) and the standalone
 `heron-scan` driver. -/
@@ -192,7 +192,7 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
       for finding in (← entry.findActions stx) do
         let title := (← finding.message.toString).trimAscii.toString
         let explStr := (← finding.explanation.toString).trimAscii.toString
-        let edits ← finding.replacements.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        let edits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
         if edits.isEmpty then
           let some range := finding.emphasized.getRange? | continue
           out := out.push { rule := entry.name.toString, message := title,
@@ -298,7 +298,7 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
     entries.flatMapM fun entry => do
       let detected ← entry.findActions snap.stx
       detected.mapM fun finding => do
-        let edits ← finding.replacements.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        let edits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
         return (finding.message, finding.replacements, edits)
   let results ← runCommandElabM snap collect
   let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with

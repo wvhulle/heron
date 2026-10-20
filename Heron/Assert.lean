@@ -29,7 +29,7 @@ private meta def elabCommandSilently (cmd : Syntax) : CommandElabM Unit :=
 /-- Run a rule against a command for testing.
 
 Looks up the rule's runner by name and calls it directly — the same
-`Rule.detect` + `Rule.replacements` + `Replacement.toTextEdit?` path
+`Rule.detect` + `Rule.replacements` + `Replacement.toTextEdits` path
 used by the code action providers. Returns both the detection count and
 the resulting text edits so callers can distinguish "rule did not fire"
 from "rule fired but produced no automatic fix". -/

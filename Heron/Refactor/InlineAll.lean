@@ -111,7 +111,7 @@ meta unsafe def inlineAllFromDefProvider : CodeActionProvider := fun params snap
         let usageRepls ← findAndExpandUsages trees (getDeclIdRange? snap.stx) constName
         let repls := buildReplacements declIdStx snap.stx usageRepls constName
         let fileMap ← getFileMap
-        repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+        repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
   if textEdits.isEmpty then
     return #[]
   let title := s! "Inline all usages of '{constName}'"

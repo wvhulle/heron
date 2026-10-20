@@ -52,8 +52,12 @@ already parsed and elaborated, and never go back to the source text. Concretely:
    `Lean.Linter.UnusedVariables` in Lean core are the models;
    `Heron/Check/RemoveLetWildcardOnUnitAction.lean` and `NestedExprAppToMkAppN.lean` are local
    ones. An analysis that follows a variable follows its `FVarId`, not its written name.
-3. **Build the fix with a quotation** in the replacement's `category`, reusing the matched
-   `TSyntax` pieces; delete with `Syntax.missing`; make literals with `quote`.
+3. **Build the fix with one quotation** over the whole matched node, reusing the matched
+   `TSyntax` pieces; delete with `Syntax.missing`; make literals with `quote`. Set
+   `prettyPrint` when the node is not a term (`PrettyPrinter.ppCategory `doElem`, or a parser's
+   formatter for binders and match arms). `Replacement.toTextEdits` prints the quotation once and
+   edits only the gaps between reused pieces, so their source text, comments and layout stay as
+   written; do not split a fix into token-sized replacements to protect user code.
    `Heron/Check/TupleMatchToSimultaneousMatch.lean` and `RemoveIdRunWithoutEffects.lean` show
    the shape; `Lean.Elab.Tactic.Simpa` is the upstream example. A fix that replaces a run of
    consecutive nodes, separators included, uses `mkNullNode #[first, last]` as its

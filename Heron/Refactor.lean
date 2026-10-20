@@ -42,7 +42,7 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
           detected.mapM fun m => do
             let repls ← Rule.replacementsFor m
             let fileMap ← getFileMap
-            let textEdits ← repls.filterMapM (liftCoreM <| ·.toTextEdit fileMap)
+            let textEdits ← repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
             return (Rule.message (α := α) m, repls, textEdits)
     let results ← runCommandElabM snap detectAndReplace
     let kind := Refactor.codeActionKind (α := α)
