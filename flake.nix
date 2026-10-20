@@ -139,9 +139,9 @@
           lint-driver
           heron-language-server
           ;
-        heron-scan = heronScanInProject;
         leanToolchain = pkgs.lean.lean-all;
         heronSource = ./.;
+        runsEditorProbes = pkgs.lib.versionAtLeast (pkgs.lib.removePrefix "v" toolchainTag) "4.31.0";
       };
 
       devShells.${system} = rec {

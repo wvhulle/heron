@@ -1,1 +1,0 @@
-../SampleConsumerLibrary/Consumer.lean
