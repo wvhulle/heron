@@ -11,6 +11,7 @@ private structure UnusedImportMatch where
   moduleName : Name
 
 private meta def detectUnusedImports (stx : Syntax) : CommandElabM (Array UnusedImportMatch) := do
+  if (← getEnv).constants.map₂.isEmpty then return #[]
   let analyses ← ImportAnalysis.analyzeImports stx
   return analyses.filterMap fun a =>
     if !a.isUsed then
