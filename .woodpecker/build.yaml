@@ -1,8 +1,8 @@
 when:
   - event: [push, pull_request, manual, tag]
 
-variables:
-  - &build_flake_check_named_after_step
+steps:
+  - name: flake-check
     image: nixos/nix:2.34.9
     environment:
       NIX_CONFIG: |
@@ -13,31 +13,8 @@ variables:
         from_secret: cachix_auth_token
     commands:
       - |
-        check=".#checks.x86_64-linux.$${CI_STEP_NAME}"
         if [ -n "$${CACHIX_AUTH_TOKEN}" ]; then
-          nix run --inputs-from . nixpkgs#cachix -- watch-exec wvhulle -- nix build -L --no-link "$check"
+          nix run --inputs-from . nixpkgs#cachix -- watch-exec wvhulle -- nix flake check -L --keep-going
         else
-          nix build -L --no-link "$check"
+          nix flake check -L --keep-going
         fi
-
-steps:
-  - name: rules
-    <<: *build_flake_check_named_after_step
-  - name: developer-tools
-    <<: *build_flake_check_named_after_step
-  - name: rule-hygiene
-    <<: *build_flake_check_named_after_step
-  - name: lakefile-setup-build-and-lint
-    <<: *build_flake_check_named_after_step
-  - name: lakefile-setup-cold-build
-    <<: *build_flake_check_named_after_step
-  - name: lakefile-setup-editor
-    <<: *build_flake_check_named_after_step
-  - name: per-file-import-build
-    <<: *build_flake_check_named_after_step
-  - name: per-file-import-editor
-    <<: *build_flake_check_named_after_step
-  - name: no-project-changes-scan
-    <<: *build_flake_check_named_after_step
-  - name: no-project-changes-editor
-    <<: *build_flake_check_named_after_step
