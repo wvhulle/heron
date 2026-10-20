@@ -6,9 +6,11 @@ Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
 [`Heron/Refactor/`](./Heron/Refactor). A rule is one file `<Rule>.lean` with a match struct, a
 one-sentence `description` (`heron rules` prints it), `detect`, `message`, `replacements`
 and `sources`, plus the tests `<Rule>/Detects.lean` and `<Rule>/Ignores.lean`. The file ends
-with `register_check <Match>` or `register_refactor <Match>`. Registration refuses a rule whose
-`kinds` is empty, whose `kinds` or `within` name something that is not a syntax node kind, or
-that lacks either test file.
+with `register_check <Match>` or `register_refactor <Match>`. `kinds` lists syntax node kinds or
+syntax categories: `` kinds := #[`command] `` runs a rule on every command, including commands
+from libraries Heron does not know, such as Mathlib's `lemma`. Registration refuses a rule whose
+`kinds` is empty or names neither a node kind nor a category, whose `within` names something that
+is not a node kind, or that lacks either test file.
 
 ### Rules that apply an equation
 
@@ -30,14 +32,21 @@ private meta instance : Check ListMapMapToSingleMap := rewriteByEquation {
 register_check ListMapMapToSingleMap
 ```
 
-`List.map_map` states `List.map g (List.map f l) = List.map (g ∘ f) l`. The rule matches the
-left-hand side against what each application elaborates to, so every spelling is found:
+`List.map_map` states `List.map g (List.map f l) = List.map (g ∘ f) l`. The rule runs on every
+command and matches the left-hand side against every subterm's elaborated form, so every
+spelling is found, operators and dot chains included:
 
 ```lean
 List.map f (List.map g xs)   -- becomes List.map (f ∘ g) xs
 (xs.map g).map f             -- becomes List.map (f ∘ g) xs
 xs.map g |>.map f            -- becomes List.map (f ∘ g) xs
+f <$> g <$> o                -- Option.map_map: becomes Option.map (f ∘ g) o
+!!b                          -- Bool.not_not: becomes b
 ```
+
+Only subterms whose head is the equation's head constant, or a class method such as
+`Functor.map` that unfolds to it, are unified, so the cost stays close to one comparison per
+subterm.
 
 The fix prints the right-hand side with the matched source pieces (`f`, `g`, `xs`) in place of
 the equation's variables, and is only offered where the rewritten declaration still elaborates.
