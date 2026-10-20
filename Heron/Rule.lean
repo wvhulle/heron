@@ -390,19 +390,53 @@ private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Synta
       | return none
     return some (withoutParentheses (← pieces[index]?.join))
 
-meta def rewriteByEquationAt? (node : Syntax) (equation : Name) (rightToLeft : Bool) :
-    CommandElabM (Option Syntax) := do
-  let infos := (← collectInfoTrees node).flatMap collectTermInfos
-  let candidates := infos.filter fun (_, ti) =>
-    !ti.isBinder && liesWithin node ti.stx && !sameRange ti.stx node
-  for (ci, ti) in infos.filter fun (_, ti) => sameRange ti.stx node do
+private meta def equationSideHead? (equation : Name) (rightToLeft : Bool) : MetaM (Option Name) := do
+  let (_, _, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
+  let some (matched, _) := matchedAndPrintedSides statement rightToLeft | return none
+  return matched.getAppFn.constName?
+
+private meta def headsLike (head : Name) (target : Expr) : MetaM Bool := do
+  if target.getAppFn.isConstOf head then return true
+  let some unfolded ← unfoldProjInst? target | return false
+  return unfolded.getAppFn.isConstOf head
+
+private meta def sourceNodeAt (command piece : Syntax) : Syntax :=
+  (command.find? fun node =>
+    !node.isOfKind nullKind && node.getRange? (canonicalOnly := true) == piece.getRange?).getD piece
+
+private meta def oneInfoPerRange (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
+  infos.foldl (init := #[]) fun kept (ci, ti) =>
+    if kept.any fun (_, seen) => sameRange seen.stx ti.stx then kept else kept.push (ci, ti)
+
+private meta def rangeSize (stx : Syntax) : Nat :=
+  (stx.getRange?.map fun range => range.stop.byteIdx - range.start.byteIdx).getD 0
+
+meta def rewritesByEquationIn (command : Syntax) (equation : Name) (rightToLeft : Bool) :
+    CommandElabM (Array (Syntax × Syntax)) := do
+  let infos := (← collectInfoTrees command).flatMap collectTermInfos |>.filter fun (_, ti) =>
+    !ti.isBinder && liesWithin command ti.stx
+  let some (firstContext, firstInfo) := infos[0]? | return #[]
+  let some head ← (try runTermElabAtTermInfo firstContext firstInfo (equationSideHead? equation rightToLeft)
+      catch _ => pure none) | return #[]
+  let env ← getEnv
+  let mayHeadLike (target : Expr) := match target.getAppFn.constName? with
+    | some name => name == head || env.isProjectionFn name
+    | none => false
+  let targets := (oneInfoPerRange (infos.filter (mayHeadLike ·.2.expr)))
+    |>.qsort fun (_, wider) (_, narrower) => rangeSize wider.stx > rangeSize narrower.stx
+  let mut rewrites : Array (Syntax × Syntax) := #[]
+  for (ci, ti) in targets do
+    if rewrites.any fun (rewritten, _) => liesWithin rewritten ti.stx then continue
+    let node := sourceNodeAt command ti.stx
+    let pieceCandidates := infos.filter fun (_, inner) => liesWithin node inner.stx && !sameRange inner.stx node
     let attempt : TermElabM (Option Syntax) := withRef node do
-      let some pieces ← sourcePiecesForEquationSide equation rightToLeft candidates ti.expr | return none
+      unless ← headsLike head (← instantiateMVars ti.expr) do return none
+      let some pieces ← sourcePiecesForEquationSide equation rightToLeft pieceCandidates ti.expr | return none
       let some printed ← delaboratedEquationSide equation rightToLeft | return none
-      return spliceSourcePieces printed pieces
+      return spliceSourcePieces printed (pieces.map (·.map (sourceNodeAt command)))
     if let some replacement ← (try runTermElabAtTermInfo ci ti attempt catch _ => pure none) then
-      return some replacement
-  return none
+      rewrites := rewrites.push (node, replacement)
+  return rewrites
 
 /-- Find the `declId` node in a command syntax tree. -/
 meta partial def findDeclId? : Syntax → Option Syntax

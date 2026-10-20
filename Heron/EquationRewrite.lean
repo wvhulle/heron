@@ -26,20 +26,20 @@ structure EquationRewrite where
   tags : Array Lsp.DiagnosticTag := #[]
   sources : Array Source := #[]
 
-private meta def detectEquationSide (equation : Name) (rightToLeft : Bool) (node : Syntax) :
+private meta def detectEquationSides (equation : Name) (rightToLeft : Bool) (command : Syntax) :
     CommandElabM (Array EquationRewriteMatch) := do
-  let some replacement ← rewriteByEquationAt? node equation rightToLeft | return #[]
-  unless ← rewriteElaborates node replacement do return #[]
-  let replacement : Term := ⟨← liftCoreM <| PrettyPrinter.parenthesizeTerm replacement⟩
-  let replacement ← if ← needsParenthesesAt node replacement then `(($replacement)) else pure replacement
-  return #[{ node, replacement }]
+  (← rewritesByEquationIn command equation rightToLeft).filterMapM fun (node, replacement) => do
+    unless ← rewriteElaborates node replacement do return none
+    let replacement : Term := ⟨← liftCoreM <| PrettyPrinter.parenthesizeTerm replacement⟩
+    let replacement ← if ← needsParenthesesAt node replacement then `(($replacement)) else pure replacement
+    return some { node, replacement }
 
 @[reducible] meta def rewriteByEquation (spec : EquationRewrite) : Check EquationRewriteMatch where
   name := spec.name
   description := spec.description
-  kinds := #[``Parser.Term.app, ``Parser.Term.pipeProj, ``Parser.Term.proj]
+  kinds := #[`command]
   consumesSubtree := true
-  detect := detectEquationSide spec.equation spec.rightToLeft
+  detect := detectEquationSides spec.equation spec.rightToLeft
   message := fun _ => spec.message
   explanation := fun _ => spec.explanation
   emphasize := (·.node)
