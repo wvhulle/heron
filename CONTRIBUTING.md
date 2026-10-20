@@ -10,6 +10,47 @@ with `register_check <Match>` or `register_refactor <Match>`. Registration refus
 `kinds` is empty, whose `kinds` or `within` name something that is not a syntax node kind, or
 that lacks either test file.
 
+### Rules that apply an equation
+
+A rule that replaces one expression by an equal one, as most hlint hints do, names the equation
+instead of writing `detect` and `replacements`. The whole rule is
+[`ListMapMapToSingleMap.lean`](./Heron/Check/ListMapMapToSingleMap.lean):
+
+```lean
+private meta def ListMapMapToSingleMap := EquationRewriteMatch
+
+private meta instance : Check ListMapMapToSingleMap := rewriteByEquation {
+  name := `listMapMapToSingleMap
+  description := "Suggests one `List.map` with a composed function instead of two consecutive maps."
+  equation := ``List.map_map
+  message := m!"Use one `List.map` with a composed function"
+  label := m!"map fusion"
+  sources := #[.hlint "Use map once"] }
+
+register_check ListMapMapToSingleMap
+```
+
+`List.map_map` states `List.map g (List.map f l) = List.map (g ∘ f) l`. The rule matches the
+left-hand side against what each application elaborates to, so every spelling is found:
+
+```lean
+List.map f (List.map g xs)   -- becomes List.map (f ∘ g) xs
+(xs.map g).map f             -- becomes List.map (f ∘ g) xs
+xs.map g |>.map f            -- becomes List.map (f ∘ g) xs
+```
+
+The fix prints the right-hand side with the matched source pieces (`f`, `g`, `xs`) in place of
+the equation's variables, and is only offered where the rewritten declaration still elaborates.
+The proof of the equation is what makes the fix correct. When the standard library has no lemma
+in the needed direction, state and prove one next to the rule:
+
+```lean
+private theorem expressionToReplace_eq (x : α) : expressionToReplace x = replacement x := by
+  simp [expressionToReplace, replacement]
+```
+
+Tests are the usual `Detects.lean` and `Ignores.lean`, with one `#assertCheck` per spelling.
+
 Rules work the way the linters in Lean core and Mathlib do: they match the structure Lean has
 already parsed and elaborated, and never go back to the source text. Concretely:
 
