@@ -320,14 +320,20 @@ private meta def runTermElabAtTermInfo (ci : ContextInfo) (ti : TermInfo) (x : T
     Meta.withLocalInstances (ti.lctx.decls.toList.filterMap id) do
       x.run'
 
+private meta def elaboratesToExpected (candidate : Syntax) (expectedType? : Option Expr) (expected : Expr) :
+    TermElabM Bool := do
+  try
+    Term.withoutErrToSorry do
+      let elaborated ← Term.elabTermEnsuringType candidate expectedType?
+      Term.synthesizeSyntheticMVarsNoPostponing
+      Meta.withReducible <| Meta.isDefEq (← instantiateMVars elaborated) (← instantiateMVars expected)
+  catch _ => return false
+
 meta def elaboratesLike (original : Syntax) (candidate : Term) : CommandElabM Bool := do
   let infos := (← collectInfoTrees original).flatMap collectTermInfos
   let some (ci, ti) := infos.find? fun (_, ti) => sameRange ti.stx original | return false
   try
-    runTermElabAtTermInfo ci ti <| withRef original <| Term.withoutErrToSorry do
-      let candidate ← Term.elabTermEnsuringType candidate ti.expectedType?
-      Term.synthesizeSyntheticMVarsNoPostponing
-      Meta.withReducible <| Meta.isDefEq (← instantiateMVars ti.expr) (← instantiateMVars candidate)
+    runTermElabAtTermInfo ci ti <| withRef original <| elaboratesToExpected candidate ti.expectedType? ti.expr
   catch _ => return false
 
 private meta def outermostSourceOf (candidates : Array (ContextInfo × TermInfo)) (assigned : Expr) :
@@ -366,29 +372,57 @@ private meta def dischargeHypotheses (variables : Array Expr) (binderInfos : Arr
     else if ← isProp type then return false
   return true
 
-private meta def sourcePiecesForEquationSide (equation : Name) (rightToLeft : Bool)
-    (candidates : Array (ContextInfo × TermInfo)) (target : Expr) : MetaM (Option (Array (Option Syntax))) := do
+private structure EquationSideMatch where
+  pieces : Array Syntax
+  expected : Expr
+
+private meta def matchEquationSide (equation : Name) (rightToLeft : Bool)
+    (candidates : Array (ContextInfo × TermInfo)) (target : Expr) : MetaM (Option EquationSideMatch) := do
   let (variables, binderInfos, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
-  let some (matched, _) := matchedAndPrintedSides statement rightToLeft | return none
+  let some (matched, printed) := matchedAndPrintedSides statement rightToLeft | return none
   unless ← withTransparency .instances <| isDefEq matched (← instantiateMVars target) do return none
   unless ← dischargeHypotheses variables binderInfos do return none
-  some <$> variables.mapM fun patternVariable => do
-    outermostSourceOf candidates (← instantiateMVars patternVariable)
+  let pieces ← variables.mapM fun patternVariable => do
+    let assigned ← instantiateMVars patternVariable
+    match ← outermostSourceOf candidates assigned with
+    | some piece => return piece
+    | none => return (← PrettyPrinter.delab assigned).raw
+  return some { pieces, expected := ← instantiateMVars printed }
 
-private meta def delaboratedEquationSide (equation : Name) (rightToLeft : Bool) : MetaM (Option Syntax) := do
+private meta partial def identifierNamesIn (stx : Syntax) : Array Name :=
+  if stx.isIdent then #[stx.getId] else stx.getArgs.flatMap identifierNamesIn
+
+private meta def freshNameAvoiding (taken : Array Name) (name : Name) : Name := Id.run do
+  unless taken.contains name do return name
+  let mut index := 1
+  while taken.contains (name.appendIndexAfter index) do index := index + 1
+  return name.appendIndexAfter index
+
+private meta partial def renameBindersAvoiding (taken : Array Name) : Expr → Expr
+  | .lam name type body info =>
+    .lam (freshNameAvoiding taken name) (renameBindersAvoiding taken type) (renameBindersAvoiding taken body) info
+  | .forallE name type body info =>
+    .forallE (freshNameAvoiding taken name) (renameBindersAvoiding taken type) (renameBindersAvoiding taken body) info
+  | .app function argument => .app (renameBindersAvoiding taken function) (renameBindersAvoiding taken argument)
+  | .mdata data inner => .mdata data (renameBindersAvoiding taken inner)
+  | other => other
+
+private meta def delaboratedEquationSide (equation : Name) (rightToLeft : Bool) (pieces : Array Syntax) :
+    MetaM (Option Syntax) := do
+  let taken := pieces.flatMap identifierNamesIn
   withEquationVariables (← inferType (← mkConstWithFreshMVarLevels equation)) #[] fun _ statement => do
     let some (_, printed) := matchedAndPrintedSides statement rightToLeft | return none
-    return some (← PrettyPrinter.delab printed).raw
+    return some (← PrettyPrinter.delab (renameBindersAvoiding taken printed)).raw
 
 private meta def withoutParentheses : Syntax → Syntax
   | `(($inner)) => inner
   | piece => piece
 
-private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Syntax)) : Option Syntax :=
+private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array Syntax) : Option Syntax :=
   rhs.replaceM fun stx => do
     let some index := (List.range pieces.size).find? fun index => stx.isIdent && stx.getId == equationVariableName index
       | return none
-    return some (withoutParentheses (← pieces[index]?.join))
+    return some (withoutParentheses (← pieces[index]?))
 
 private meta def equationSideHead? (equation : Name) (rightToLeft : Bool) : MetaM (Option Name) := do
   let (_, _, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
@@ -400,9 +434,10 @@ private meta def headsLike (head : Name) (target : Expr) : MetaM Bool := do
   let some unfolded ← unfoldProjInst? target | return false
   return unfolded.getAppFn.isConstOf head
 
-private meta def sourceNodeAt (command piece : Syntax) : Syntax :=
-  (command.find? fun node =>
-    !node.isOfKind nullKind && node.getRange? (canonicalOnly := true) == piece.getRange?).getD piece
+private meta def sourceNodeAt (command piece : Syntax) : Syntax := Id.run do
+  let some range := piece.getRange? | return piece
+  return (command.find? fun node =>
+    !node.isOfKind nullKind && node.getRange? (canonicalOnly := true) == some range).getD piece
 
 private meta def oneInfoPerRange (infos : Array (ContextInfo × TermInfo)) : Array (ContextInfo × TermInfo) :=
   infos.foldl (init := #[]) fun kept (ci, ti) =>
@@ -419,6 +454,9 @@ meta def rewritesByEquationIn (command : Syntax) (equation : Name) (rightToLeft 
   let some head ← (try runTermElabAtTermInfo firstContext firstInfo (equationSideHead? equation rightToLeft)
       catch _ => pure none) | return #[]
   let env ← getEnv
+  let termKinds := ((Parser.parserExtension.getState env).categories.find? `term).map (·.kinds)
+  let isTermNode (node : Syntax) :=
+    node.isIdent || (!node.isOfKind ``Parser.Term.do && termKinds.any (·.contains node.getKind))
   let mayHeadLike (target : Expr) := match target.getAppFn.constName? with
     | some name => name == head || env.isProjectionFn name
     | none => false
@@ -428,12 +466,16 @@ meta def rewritesByEquationIn (command : Syntax) (equation : Name) (rightToLeft 
   for (ci, ti) in targets do
     if rewrites.any fun (rewritten, _) => liesWithin rewritten ti.stx then continue
     let node := sourceNodeAt command ti.stx
+    unless isTermNode node do continue
     let pieceCandidates := infos.filter fun (_, inner) => liesWithin node inner.stx && !sameRange inner.stx node
     let attempt : TermElabM (Option Syntax) := withRef node do
       unless ← headsLike head (← instantiateMVars ti.expr) do return none
-      let some pieces ← sourcePiecesForEquationSide equation rightToLeft pieceCandidates ti.expr | return none
-      let some printed ← delaboratedEquationSide equation rightToLeft | return none
-      return spliceSourcePieces printed (pieces.map (·.map (sourceNodeAt command)))
+      let some found ← matchEquationSide equation rightToLeft pieceCandidates ti.expr | return none
+      let pieces := found.pieces.map (sourceNodeAt command)
+      let some printed ← delaboratedEquationSide equation rightToLeft pieces | return none
+      let some replacement := spliceSourcePieces printed pieces | return none
+      unless ← elaboratesToExpected replacement (← inferType found.expected) found.expected do return none
+      return some replacement
     if let some replacement ← (try runTermElabAtTermInfo ci ti attempt catch _ => pure none) then
       rewrites := rewrites.push (node, replacement)
   return rewrites

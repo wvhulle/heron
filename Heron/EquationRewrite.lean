@@ -28,11 +28,10 @@ structure EquationRewrite where
 
 private meta def detectEquationSides (equation : Name) (rightToLeft : Bool) (command : Syntax) :
     CommandElabM (Array EquationRewriteMatch) := do
-  (← rewritesByEquationIn command equation rightToLeft).filterMapM fun (node, replacement) => do
-    unless ← rewriteElaborates node replacement do return none
+  (← rewritesByEquationIn command equation rightToLeft).mapM fun (node, replacement) => do
     let replacement : Term := ⟨← liftCoreM <| PrettyPrinter.parenthesizeTerm replacement⟩
     let replacement ← if ← needsParenthesesAt node replacement then `(($replacement)) else pure replacement
-    return some { node, replacement }
+    return { node, replacement }
 
 @[reducible] meta def rewriteByEquation (spec : EquationRewrite) : Check EquationRewriteMatch where
   name := spec.name
