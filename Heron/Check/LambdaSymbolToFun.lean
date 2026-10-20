@@ -2,10 +2,12 @@ module
 
 public meta import Heron.Check
 meta import Heron.Register
+public meta import Heron.Monad
 
 open Lean Elab Command Parser Heron
 
 private structure LambdaSymbolToFunMatch where
+  funStx : Syntax
   lambdaKeyword : Syntax
   funKeyword : Syntax
 
@@ -18,7 +20,7 @@ private meta def detectLambdaKeyword (stx : Syntax) : CommandElabM (Array Lambda
   let some keyword := keywordOf stx | return #[]
   let some funKeyword := keywordOf (← `(fun x => x)) | return #[]
   if keyword.structEq funKeyword then return #[]
-  return #[{ lambdaKeyword := keyword, funKeyword }]
+  return #[{ funStx := stx, lambdaKeyword := keyword, funKeyword }]
 
 private meta instance : Check LambdaSymbolToFunMatch where
   name := `lambdaSymbolToFun
@@ -38,10 +40,8 @@ private meta instance : Check LambdaSymbolToFunMatch where
        books use, and it is easier to type."
   replacements := some fun m => return #[{
     emphasizedSyntax := m.lambdaKeyword
-    oldSyntax := m.lambdaKeyword
-    newSyntax := m.funKeyword
-    prettyPrint := printTokens
-    inlineViolationLabel := m!"λ → fun"
-  }]
+    oldSyntax := m.funStx
+    newSyntax := replaceSourceNode m.funStx m.lambdaKeyword m.funKeyword
+    inlineViolationLabel := m!"λ → fun" }]
 
 register_check LambdaSymbolToFunMatch
