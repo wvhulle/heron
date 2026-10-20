@@ -40,12 +40,15 @@ private meta def checkKinds (rule : Ident) : CommandElabM Unit := do
   let within ← liftTermElabM (evalRuleWithin rule)
   if kinds.isEmpty then
     throwErrorAt rule m!"rule `{rule}` has `kinds := #[]`: declare the node kinds it fires on; \
-      a rule that analyses a whole declaration fires at `Lean.Parser.Command.declaration`"
+      a rule that analyses a whole declaration fires at `Lean.Parser.Command.declaration`, one that \
+      analyses every command at the category `command`"
   let env ← getEnv
-  for (field, listed) in [("kinds", kinds), ("within", within)] do
-    for kind in listed do
-      unless isValidSyntaxNodeKind env kind do
-        throwErrorAt rule m!"rule `{rule}` lists `{kind}` in `{field}`, which is not a syntax node kind"
+  for kind in kinds do
+    unless isValidSyntaxNodeKind env kind || Parser.isParserCategory env kind do
+      throwErrorAt rule m!"rule `{rule}` lists `{kind}` in `kinds`, which is neither a syntax node kind nor a syntax category"
+  for kind in within do
+    unless isValidSyntaxNodeKind env kind do
+      throwErrorAt rule m!"rule `{rule}` lists `{kind}` in `within`, which is not a syntax node kind"
 
 private meta def checkTestFiles (rule : Ident) : CommandElabM Unit := do
   let ruleFile : System.FilePath := ← getFileName

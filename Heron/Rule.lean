@@ -155,9 +155,16 @@ private meta partial def walkWithVisitorTable (table : Std.HashMap SyntaxNodeKin
       if visitor.within.isEmpty || enclosingKinds.any visitor.within.contains then visitor.visit stx
   for child in walkedChildren stx do walkWithVisitorTable table enclosingKinds child
 
-meta def walkVisitors (visitors : Array SyntaxVisitor) (stx : Syntax) : CommandElabM Unit :=
+private meta def nodeKindsNamedBy (categories : Parser.ParserCategories) (kind : SyntaxNodeKind) :
+    Array SyntaxNodeKind :=
+  match categories.find? kind with
+  | some category => category.kinds.foldl (init := #[]) fun kinds categoryKind _ => kinds.push categoryKind
+  | none => #[kind]
+
+meta def walkVisitors (visitors : Array SyntaxVisitor) (stx : Syntax) : CommandElabM Unit := do
+  let categories := (Parser.parserExtension.getState (← getEnv)).categories
   let table := visitors.foldl (init := {}) fun table visitor =>
-    visitor.kinds.foldl (init := table) fun table kind =>
+    (visitor.kinds.flatMap (nodeKindsNamedBy categories)).foldl (init := table) fun table kind =>
       table.insert kind ((table[kind]?.getD #[]).push visitor)
   walkWithVisitorTable table #[] stx
 
