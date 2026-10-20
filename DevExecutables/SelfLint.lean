@@ -1,5 +1,5 @@
-import UserExecutables.FixReportRendering
-import UserExecutables.StandaloneScan.SharedEnvironment
+import FixReporting.FixReportRendering
+import FixReporting.StandaloneScan.SharedEnvironment
 import DevExecutables.SelfLint.PositionalSyntaxAccess
 import DevExecutables.SelfLint.SyntaxKindOrAtomInspection
 import DevExecutables.SelfLint.SyntheticSyntaxConstruction
@@ -16,7 +16,7 @@ exits with status 1 when there are any. Requires the library to be built.
     lake build && lake exe heron-self-lint
 -/
 
-open UserExecutables Lean
+open FixReporting Lean
 
 def selfLints : Array Name := #[
   `positionalSyntaxAccess, `syntaxKindOrAtomInspection, `syntheticSyntaxConstruction,

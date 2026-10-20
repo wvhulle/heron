@@ -16,7 +16,7 @@ package heron where
 
 @[default_target] lean_lib DevExecutables where globs := #[`DevExecutables.+]
 
-lean_lib UserExecutables where globs := #[`UserExecutables.+]
+lean_lib FixReporting where globs := #[`FixReporting.+]
 
 lean_exe «dump-syntax-tree» where root := `DevExecutables.DumpSyntaxTree
 
@@ -25,14 +25,14 @@ lean_exe «heron-self-lint» where
   supportInterpreter := true
 
 lean_exe heron where
-  root := `UserExecutables.LakeLintDriver
+  root := `FixReporting.LakeLintDriver
   supportInterpreter := true
 
 lean_exe «heron-scan» where
-  root := `UserExecutables.StandaloneScan
+  root := `FixReporting.StandaloneScan
   supportInterpreter := true
 
-lean_exe «heron-language-server» where root := `UserExecutables.SecondLanguageServer
+lean_exe «heron-language-server» where root := `FixReporting.SecondLanguageServer
 
 target plugin : Dynlib := do
   let some heron ← findLeanLib? `Heron

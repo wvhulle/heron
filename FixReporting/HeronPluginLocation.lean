@@ -1,4 +1,4 @@
-namespace UserExecutables
+namespace FixReporting
 
 def pluginSoFileName : String := "libheron_Heron.so"
 
@@ -7,4 +7,4 @@ def findPluginSo : IO (Option String) := do
   let cand := (← IO.appDir) / ".." / "lib" / pluginSoFileName
   (some <$> (IO.FS.realPath cand).map (·.toString)) <|> pure none
 
-end UserExecutables
+end FixReporting

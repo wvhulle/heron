@@ -1,7 +1,7 @@
-import UserExecutables.FixReportRendering
-import UserExecutables.StandaloneScan.SharedEnvironment
-import UserExecutables.StandaloneScan.PerFile
-import UserExecutables.StandaloneScan.RuleListing
+import FixReporting.FixReportRendering
+import FixReporting.StandaloneScan.SharedEnvironment
+import FixReporting.StandaloneScan.PerFile
+import FixReporting.StandaloneScan.RuleListing
 
 /-!
 # `heron-scan` — self-contained Heron fix reporter
@@ -19,7 +19,7 @@ simpler per-file engine (and `-` reads stdin). Requires the scope to be built (o
     lake exe heron-scan rules                    # list every check and refactor
 -/
 
-open UserExecutables
+open FixReporting
 
 structure Cli where
   fix : Bool := false

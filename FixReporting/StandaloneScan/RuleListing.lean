@@ -1,10 +1,10 @@
 import Lean
 import Heron
-import UserExecutables.FixReportRendering
+import FixReporting.FixReportRendering
 
 open Lean Heron
 
-namespace UserExecutables
+namespace FixReporting
 
 private def kindLabel : RuleKind → String
   | .check => "check"
@@ -48,4 +48,4 @@ def emitRuleCatalog (summaries : Array RuleSummary) (pal : Palette) (json : Bool
   else
     IO.println (renderRuleCatalog pal summaries)
 
-end UserExecutables
+end FixReporting
