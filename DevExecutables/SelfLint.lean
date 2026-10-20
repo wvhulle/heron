@@ -1,16 +1,16 @@
 import UserExecutables.FixReportRendering
 import UserExecutables.StandaloneScan.SharedEnvironment
-import DeveloperTools.SelfLint.PositionalSyntaxAccess
-import DeveloperTools.SelfLint.SyntaxKindOrAtomInspection
-import DeveloperTools.SelfLint.SyntheticSyntaxConstruction
-import DeveloperTools.SelfLint.SourcePositionInRule
-import DeveloperTools.SelfLint.SourceTextInRule
+import DevExecutables.SelfLint.PositionalSyntaxAccess
+import DevExecutables.SelfLint.SyntaxKindOrAtomInspection
+import DevExecutables.SelfLint.SyntheticSyntaxConstruction
+import DevExecutables.SelfLint.SourcePositionInRule
+import DevExecutables.SelfLint.SourceTextInRule
 
 /-!
 # `heron-self-lint` — Heron's own rules, checked against their implementations
 
 Runs the self-lint checks named in `selfLints` over every rule file in `Heron/Check`,
-`Heron/Refactor` and `DeveloperTools/SelfLint`, prints the findings like `heron-scan` does, and
+`Heron/Refactor` and `DevExecutables/SelfLint`, prints the findings like `heron-scan` does, and
 exits with status 1 when there are any. Requires the library to be built.
 
     lake build && lake exe heron-self-lint
@@ -23,7 +23,7 @@ def selfLints : Array Name := #[
   `sourcePositionInRule, `sourceTextInRule]
 
 def ruleDirectories : Array System.FilePath :=
-  #["Heron" / "Check", "Heron" / "Refactor", "DeveloperTools" / "SelfLint"]
+  #["Heron" / "Check", "Heron" / "Refactor", "DevExecutables" / "SelfLint"]
 
 def ruleFiles : IO (Array String) := do
   let mut files := #[]

@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SourceTextInRule
+meta import DevExecutables.SelfLint.SourceTextInRule
 
 #assertIgnore sourceTextInRule in
 def isSome : Lean.Syntax → Bool

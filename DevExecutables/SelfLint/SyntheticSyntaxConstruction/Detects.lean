@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SyntheticSyntaxConstruction
+meta import DevExecutables.SelfLint.SyntheticSyntaxConstruction
 
 #assertCheck syntheticSyntaxConstruction in
 def funKeyword : Lean.Syntax := Lean.mkAtom "fun"

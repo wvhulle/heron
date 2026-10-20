@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SyntaxKindOrAtomInspection
+meta import DevExecutables.SelfLint.SyntaxKindOrAtomInspection
 
 #assertCheck syntaxKindOrAtomInspection in
 def isApp (stx : Lean.Syntax) : Bool := stx.getKind == `Lean.Parser.Term.app

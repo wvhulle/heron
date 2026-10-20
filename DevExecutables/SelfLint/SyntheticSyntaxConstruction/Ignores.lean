@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SyntheticSyntaxConstruction
+meta import DevExecutables.SelfLint.SyntheticSyntaxConstruction
 
 #assertIgnore syntheticSyntaxConstruction in
 def identity : Lean.MacroM Lean.Syntax := `(fun x => x)

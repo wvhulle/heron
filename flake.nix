@@ -87,7 +87,7 @@
 
       developer-tools = buildLakeTargets {
         name = "heron-developer-tools";
-        targets = "dump-syntax-tree DeveloperTools heron-self-lint";
+        targets = "dump-syntax-tree DevExecutables heron-self-lint";
         lakeArtifacts = library;
         afterBuild = "lake exe heron-self-lint";
       };

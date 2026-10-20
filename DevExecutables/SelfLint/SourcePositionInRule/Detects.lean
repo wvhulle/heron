@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SourcePositionInRule
+meta import DevExecutables.SelfLint.SourcePositionInRule
 
 #assertCheck sourcePositionInRule in
 def startsBefore (a b : Lean.Syntax) : Bool := a.getPos? < b.getPos?

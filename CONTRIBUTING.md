@@ -52,7 +52,7 @@ already parsed and elaborated, and never go back to the source text. Concretely:
 
 ### What the self-lints reject
 
-Five checks in `DeveloperTools/SelfLint/` run over `Heron/Check/*.lean`, `Heron/Refactor/*.lean`
+Five checks in `DevExecutables/SelfLint/` run over `Heron/Check/*.lean`, `Heron/Refactor/*.lean`
 and their own files in CI (the `developer-tools` check), and any finding fails the build. They live
 outside the `Heron` library, so `linter.heron` never turns them on in other projects:
 
@@ -119,7 +119,7 @@ the Nix build environment does not have.
 
 ## Developer tools
 
-Open [`DeveloperTools/RuleShowcase.lean`](./DeveloperTools/RuleShowcase.lean) in your editor to
+Open [`DevExecutables/RuleShowcase.lean`](./DevExecutables/RuleShowcase.lean) in your editor to
 see every rule fire at once.
 
 ## Inspecting Lean syntax trees

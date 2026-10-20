@@ -1,7 +1,7 @@
 module
 
 meta import Heron.Assert
-meta import DeveloperTools.SelfLint.SyntaxKindOrAtomInspection
+meta import DevExecutables.SelfLint.SyntaxKindOrAtomInspection
 
 #assertIgnore syntaxKindOrAtomInspection in
 def isLambda : Lean.Syntax → Bool
