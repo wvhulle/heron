@@ -344,18 +344,34 @@ private meta partial def withEquationVariables (statement : Expr) (variables : A
       withEquationVariables (body.instantiate1 boundVariable) (variables.push boundVariable) k
   | body => k variables body
 
-private meta def sourcePiecesForEquationLhs (equation : Name) (candidates : Array (ContextInfo × TermInfo))
-    (target : Expr) : MetaM (Option (Array (Option Syntax))) := do
-  let (variables, _, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
-  let some (_, lhs, _) := statement.eq? | return none
-  unless ← withTransparency .instances <| isDefEq lhs (← instantiateMVars target) do return none
+private meta def matchedAndPrintedSides (statement : Expr) (rightToLeft : Bool) : Option (Expr × Expr) := do
+  let (_, lhs, rhs) ← statement.eq?
+  return if rightToLeft then (rhs, lhs) else (lhs, rhs)
+
+private meta def dischargeHypotheses (variables : Array Expr) (binderInfos : Array BinderInfo) : MetaM Bool := do
+  for (hypothesis, binderInfo) in variables.zip binderInfos do
+    let hypothesis ← instantiateMVars hypothesis
+    unless hypothesis.isMVar do continue
+    let type ← instantiateMVars (← inferType hypothesis)
+    if binderInfo.isInstImplicit then
+      let some synthesized ← synthInstance? type | return false
+      unless ← isDefEq hypothesis synthesized do return false
+    else if ← isProp type then return false
+  return true
+
+private meta def sourcePiecesForEquationSide (equation : Name) (rightToLeft : Bool)
+    (candidates : Array (ContextInfo × TermInfo)) (target : Expr) : MetaM (Option (Array (Option Syntax))) := do
+  let (variables, binderInfos, statement) ← forallMetaTelescope (← inferType (← mkConstWithFreshMVarLevels equation))
+  let some (matched, _) := matchedAndPrintedSides statement rightToLeft | return none
+  unless ← withTransparency .instances <| isDefEq matched (← instantiateMVars target) do return none
+  unless ← dischargeHypotheses variables binderInfos do return none
   some <$> variables.mapM fun patternVariable => do
     outermostSourceOf candidates (← instantiateMVars patternVariable)
 
-private meta def delaboratedEquationRhs (equation : Name) : MetaM (Option Syntax) := do
+private meta def delaboratedEquationSide (equation : Name) (rightToLeft : Bool) : MetaM (Option Syntax) := do
   withEquationVariables (← inferType (← mkConstWithFreshMVarLevels equation)) #[] fun _ statement => do
-    let some (_, _, rhs) := statement.eq? | return none
-    return some (← PrettyPrinter.delab rhs).raw
+    let some (_, printed) := matchedAndPrintedSides statement rightToLeft | return none
+    return some (← PrettyPrinter.delab printed).raw
 
 private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Syntax)) : Option Syntax :=
   rhs.replaceM fun stx => do
@@ -363,15 +379,16 @@ private meta def spliceSourcePieces (rhs : Syntax) (pieces : Array (Option Synta
       | return none
     return some (← pieces[index]?.join)
 
-meta def rewriteByEquationAt? (node : Syntax) (equation : Name) : CommandElabM (Option Syntax) := do
+meta def rewriteByEquationAt? (node : Syntax) (equation : Name) (rightToLeft : Bool) :
+    CommandElabM (Option Syntax) := do
   let infos := (← collectInfoTrees node).flatMap collectTermInfos
   let candidates := infos.filter fun (_, ti) =>
     !ti.isBinder && liesWithin node ti.stx && !sameRange ti.stx node
   for (ci, ti) in infos.filter fun (_, ti) => sameRange ti.stx node do
     let attempt : TermElabM (Option Syntax) := withRef node do
-      let some pieces ← sourcePiecesForEquationLhs equation candidates ti.expr | return none
-      let some rhs ← delaboratedEquationRhs equation | return none
-      return spliceSourcePieces rhs pieces
+      let some pieces ← sourcePiecesForEquationSide equation rightToLeft candidates ti.expr | return none
+      let some printed ← delaboratedEquationSide equation rightToLeft | return none
+      return spliceSourcePieces printed pieces
     if let some replacement ← (try runTermElabAtTermInfo ci ti attempt catch _ => pure none) then
       return some replacement
   return none
