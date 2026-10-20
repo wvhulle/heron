@@ -1,5 +1,5 @@
 import FixReporting.FixReportRendering
-import FixReporting.StandaloneScan.SharedEnvironment
+import FixReporting.ScanSubcommand.SharedEnvironment
 import RuleDevelopment.SelfLint.PositionalSyntaxAccess
 import RuleDevelopment.SelfLint.SyntaxKindOrAtomInspection
 import RuleDevelopment.SelfLint.SyntheticSyntaxConstruction
@@ -10,7 +10,7 @@ import RuleDevelopment.SelfLint.SourceTextInRule
 # `heron-self-lint` — Heron's own rules, checked against their implementations
 
 Runs the self-lint checks named in `selfLints` over every rule file in `Heron/Check`,
-`Heron/Refactor` and `RuleDevelopment/SelfLint`, prints the findings like `heron-scan` does, and
+`Heron/Refactor` and `RuleDevelopment/SelfLint`, prints the findings like `heron scan` does, and
 exits with status 1 when there are any. Requires the library to be built.
 
     lake build && lake exe heron-self-lint

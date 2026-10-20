@@ -15,6 +15,7 @@ package «your_pkg» where
   leanOptions := #[⟨`linter.heron, true⟩]
   plugins := #[`@heron/plugin]
   lintDriver := "heron/heron"
+  lintDriverArgs := #["lint"]
 ```
 
 `lakefile.toml` cannot refer to a dependency's targets. Convert it with
@@ -35,9 +36,9 @@ lake lint -- --json | jq     # machine-readable
 lake lint -- --fix           # rewrite files in place
 ```
 
-`lake lint` runs Heron's `heron` executable, which you can also call as `lake exe heron`. It
-builds your targets with the plugin, then prints the fixes. It accepts `--json`, `--fix`,
-`--apply`, `--color` and `--no-color`, and `--no-build` to read the last build's results.
+`lake lint` runs `heron lint`, which you can also call as `lake exe heron lint`. It builds your
+targets with the plugin, then prints the fixes. It accepts `--json`, `--fix`, `--apply`, `--color`
+and `--no-color`, and `--no-build` to read the last build's results.
 
 Turn single rules off as described under [Rules](../README.md#rules) in the README; `lake exe
-heron-scan rules` lists them.
+heron rules` lists them.

@@ -1,11 +1,11 @@
 # No project changes
 
-Two tools run Heron on a Lean project that has never heard of it: `heron-language-server` in your
-editor and `heron-scan` on the command line. Neither needs a `require`, plugin or `import`.
+Two subcommands of `heron` run Heron on a Lean project that has never heard of it: `heron serve`
+in your editor and `heron scan` on the command line. Neither needs a `require`, plugin or `import`.
 
-## In the editor: `heron-language-server`
+## In the editor: `heron serve`
 
-`heron-language-server` is a second Lean language server that runs next to your normal one. It
+`heron serve` is a second Lean language server that runs next to your normal one. It
 starts its own `lake serve` with Heron loaded as a plugin and passes on only Heron's warnings,
 quick fixes and refactors, so your normal Lean server stays untouched. Each open file is
 elaborated twice, once per server, which costs extra CPU and memory on large projects.
@@ -21,14 +21,14 @@ home-manager.users.<you> = {
 };
 ```
 
-With other editor setups, add `heron-language-server` as an extra Lean language server, for
-example in Helix:
+With other editor setups, add `heron serve` as an extra Lean language server, for example in
+Helix:
 
 ```toml
 # languages.toml
 [language-server.heron]
 command = "nix"
-args = ["run", "github:wvhulle/heron#heron-language-server"]
+args = ["run", "github:wvhulle/heron", "--", "serve"]
 
 [[language]]
 name = "lean"
@@ -40,8 +40,8 @@ binary:
 
 ```sh
 git clone --branch main https://github.com/wvhulle/heron && cd heron
-lake build Heron:shared heron-language-server
-# editor command: <checkout>/.lake/build/bin/heron-language-server
+lake build plugin heron
+# editor command: <checkout>/.lake/build/bin/heron serve
 ```
 
 ### Lean versions and when the server stays idle
@@ -59,26 +59,27 @@ unsupported project costs one quick `git ls-remote` per start.
 
 Like the lakefile setup, the linter writes `.lake/build/heron-fixes/` in each project you open.
 
-## On the command line: `heron-scan`
+## On the command line: `heron scan`
 
-Build your project, then run `heron-scan` from the Heron ref that matches your toolchain. It
-re-elaborates the files itself, so it is slower than the lakefile setup on large projects.
+Build your project, then run `heron scan` in its root directory, from the Heron ref that matches
+your toolchain. It re-elaborates the files itself, so it is slower than the lakefile setup on large
+projects.
 
 ```sh
 lake build
-nix run github:wvhulle/heron/main -- Consumer        # check a library or directory
-nix run github:wvhulle/heron/main -- --fix Foo.lean  # apply fixes
+nix run github:wvhulle/heron/main -- scan Consumer        # check a library or directory
+nix run github:wvhulle/heron/main -- scan --fix Foo.lean  # apply fixes
 ```
 
-A project that requires Heron can also run it as `lake exe heron-scan`:
+A project that requires Heron can also run it as `lake exe heron scan`:
 
 ```sh
-lake exe heron-scan --fix Foo/Bar.lean
-echo 'def f := fun x => x + 1' | lake exe heron-scan -
+lake exe heron scan --fix Foo/Bar.lean
+echo 'def f := fun x => x + 1' | lake exe heron scan -
 ```
 
 It accepts `--json`, `--fix`, `--apply`, `--color` and `--no-color`, plus `--per-file`,
-`--no-cache` and `--no-parallel`, and reads stdin with `-`. `--rule <name>`, which can be repeated,
-runs only the named checks. `heron-scan rules` lists every check and refactor with its description
-and sources; with `--json` it prints them as a JSON array. A check that flags code without a fix
+`--no-cache` and `--no-parallel`, and reads stdin with `-`. `--rule <names>` runs only the named
+checks, separated by commas. `heron rules` lists every check and refactor with its description and
+sources; with `--json` it prints them as a JSON array. A check that flags code without a fix
 is reported like any other finding; in `--json` output such a finding has no `after` field.

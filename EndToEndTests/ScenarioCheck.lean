@@ -5,13 +5,13 @@ open IO Lean Lsp JsonRpc
 structure ScenarioOptions where
   scenario : String := ""
   expectedFixes : Option System.FilePath := none
-  languageServer : Option String := none
+  heronExecutable : Option String := none
   skipEditorProbes : Bool := false
 
 def parseOptions : List String → Except String ScenarioOptions
   | [] => .ok {}
   | "--expected-fixes" :: path :: rest => do pure { (← parseOptions rest) with expectedFixes := path }
-  | "--language-server" :: path :: rest => do pure { (← parseOptions rest) with languageServer := path }
+  | "--heron" :: path :: rest => do pure { (← parseOptions rest) with heronExecutable := path }
   | "--skip-editor-probes" :: rest => do pure { (← parseOptions rest) with skipEditorProbes := true }
   | arg :: rest =>
     if arg.startsWith "-" then .error s!"unknown flag: {arg}"
@@ -19,7 +19,7 @@ def parseOptions : List String → Except String ScenarioOptions
 
 def usage : String :=
   "usage: lean --run ScenarioCheck.lean (lakefile-setup | per-file-import) \
-   [--expected-fixes FILE] [--language-server PATH] [--skip-editor-probes]"
+   [--expected-fixes FILE] [--heron PATH] [--skip-editor-probes]"
 
 abbrev CheckM := StateT (Array String) IO
 
@@ -123,8 +123,9 @@ def checkLakefileSetup (options : ScenarioOptions) : CheckM Unit := do
   if options.skipEditorProbes then return
   runEditorProbe { file := "Consumer/Basic.lean", expected := #["Merge intros", "mut"],
                    expectQuickFix := true, server := "lake", serverArgs := #["serve"] }
-  let some languageServer := options.languageServer | fail "--language-server is required"; return
-  runEditorProbe { file := "Consumer/Basic.lean", rejected := #["Merge intros"], server := languageServer }
+  let some heronExecutable := options.heronExecutable | fail "--heron is required"; return
+  runEditorProbe { file := "Consumer/Basic.lean", rejected := #["Merge intros"],
+                   server := heronExecutable, serverArgs := #["serve"] }
 
 def checkPerFileImport (options : ScenarioOptions) : CheckM Unit := do
   let build ← runAndPrint "lake" #["build"]

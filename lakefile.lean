@@ -10,6 +10,8 @@ package heron where
   homepage := "https://codeberg.org/wvhulle/heron"
   license := "Apache-2.0"
 
+require Cli from git "https://github.com/leanprover/lean4-cli" @ "v4.31.0"
+
 @[default_target] lean_lib Heron where
   globs := #[`Heron.*]
   defaultFacets := #[`lean_lib.shared]
@@ -25,14 +27,8 @@ lean_exe «heron-self-lint» where
   supportInterpreter := true
 
 lean_exe heron where
-  root := `FixReporting.LakeLintDriver
+  root := `FixReporting.HeronCommand
   supportInterpreter := true
-
-lean_exe «heron-scan» where
-  root := `FixReporting.StandaloneScan
-  supportInterpreter := true
-
-lean_exe «heron-language-server» where root := `FixReporting.SecondLanguageServer
 
 target plugin : Dynlib := do
   let some heron ← findLeanLib? `Heron

@@ -34,7 +34,7 @@ section of _Functional Programming in Lean_, and names the option that turns it 
 | --- | --- | --- |
 | [Lakefile setup](docs/LakefileSetup.md) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
 | [Per-file import](docs/PerFileImport.md) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
-| [No project changes](docs/NoProjectChanges.md) | nothing | editor hints and quick fixes through `heron-language-server`; reports and fixes through `heron-scan` |
+| [No project changes](docs/NoProjectChanges.md) | nothing | editor hints and quick fixes through `heron serve`; reports and fixes through `heron scan` |
 
 Most projects want the lakefile setup:
 
@@ -45,6 +45,7 @@ package «your_pkg» where
   leanOptions := #[⟨`linter.heron, true⟩]
   plugins := #[`@heron/plugin]
   lintDriver := "heron/heron"
+  lintDriverArgs := #["lint"]
 ```
 
 ## Rules
@@ -54,13 +55,15 @@ underlines the code it flags and, for most checks, offers a quick fix. **Refacto
 anything and appear in the editor's code-action menu when the cursor is on code they can rewrite.
 Every rule names the book section, style guide or other linter it is based on.
 
-`heron-scan rules` prints every rule with its description and sources, from any Lean project:
+`heron rules` prints every rule with its description and sources, from any Lean project:
 
 ```sh
 nix run github:wvhulle/heron/main -- rules   # or, in a project that requires Heron:
-lake exe heron-scan rules
-lake exe heron-scan rules --json              # machine-readable
+lake exe heron rules
+lake exe heron rules --json                  # machine-readable
 ```
+
+`heron --help` lists the subcommands, and `heron <subcommand> --help` their flags.
 
 Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
 in `leanOptions`.

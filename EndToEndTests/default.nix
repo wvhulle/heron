@@ -1,9 +1,10 @@
 {
   pkgs,
-  leanToolchain,
+  lake2nix,
   heronSource,
-  lint-driver,
-  heron-language-server,
+  heron-build,
+  heron,
+  lakeDeps,
   runsEditorProbes,
 }:
 let
@@ -11,22 +12,20 @@ let
     {
       name,
       scenario,
-      heronArtifacts ? null,
+      heronDependency ? heronSource,
       checkArgs ? [ ],
     }:
-    pkgs.stdenv.mkDerivation {
+    lake2nix.mkPackage {
       inherit name;
-      src = heronSource;
+      src = "${heronSource}/EndToEndTests/${scenario}";
+      lakeDeps = lakeDeps // {
+        heron = heronDependency;
+      };
       TZDIR = "${pkgs.tzdata}/share/zoneinfo";
-      nativeBuildInputs = [ leanToolchain ];
+      postConfigure = "chmod -R u+w .lake/packages/heron";
       buildPhase = ''
         runHook preBuild
-        ${pkgs.lib.optionalString (heronArtifacts != null) ''
-          cp -R ${heronArtifacts}/.lake .
-          chmod -R +w .lake
-        ''}
-        cd EndToEndTests/${scenario}
-        lean --run ../ScenarioCheck.lean ${name} ${
+        lean --run ${heronSource}/EndToEndTests/ScenarioCheck.lean ${name} ${
           pkgs.lib.escapeShellArgs (checkArgs ++ pkgs.lib.optional (!runsEditorProbes) "--skip-editor-probes")
         }
         runHook postBuild
@@ -40,15 +39,15 @@ in
     scenario = "LakefileSetup";
     checkArgs = [
       "--expected-fixes"
-      "../expected-fixes.json"
-      "--language-server"
-      (pkgs.lib.getExe heron-language-server)
+      "${heronSource}/EndToEndTests/expected-fixes.json"
+      "--heron"
+      (pkgs.lib.getExe heron)
     ];
   };
 
   per-file-import = runScenarioCheck {
     name = "per-file-import";
     scenario = "PerFileImport";
-    heronArtifacts = lint-driver;
+    heronDependency = heron-build;
   };
 }

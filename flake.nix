@@ -73,15 +73,9 @@
         targets = "Heron Heron:shared";
       };
 
-      lint-driver = buildLakeTargets {
-        name = "heron-lint-driver";
+      heron-build = buildLakeTargets {
+        name = "heron-build";
         targets = "heron";
-        lakeArtifacts = library;
-      };
-
-      heron-scan-unwrapped = buildLakeTargets {
-        name = "heron-scan-unwrapped";
-        targets = "heron-scan";
         lakeArtifacts = library;
       };
 
@@ -92,30 +86,15 @@
         afterBuild = "lake exe heron-self-lint";
       };
 
-      heronScanInProject = pkgs.writeShellApplication {
-        name = "heron-scan";
-        runtimeInputs = [ pkgs.lean.lean-all ];
-        text = ''exec lake env ${heron-scan-unwrapped}/bin/heron-scan "$@"'';
-      };
-
-      language-server-build = buildLakeTargets {
-        name = "heron-language-server-build";
-        targets = "heron-language-server";
-        lakeArtifacts = library;
-      };
-
-      heron-language-server =
-        pkgs.runCommand "heron-language-server" { meta.mainProgram = "heron-language-server"; }
-          ''
-            install -Dm755 ${language-server-build}/.lake/build/bin/heron-language-server $out/bin/heron-language-server
-            install -Dm644 ${language-server-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
-          '';
+      heron = pkgs.runCommand "heron" { meta.mainProgram = "heron"; } ''
+        install -Dm755 ${heron-build}/.lake/build/bin/heron $out/bin/heron
+        install -Dm644 ${heron-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
+      '';
     in
     {
       packages.${system} = {
-        inherit heron-language-server;
-        heron-scan = heronScanInProject;
-        default = heronScanInProject;
+        inherit heron;
+        default = heron;
       };
 
       homeModules.default =
@@ -125,7 +104,10 @@
             lib.mkEnableOption "a second Lean language server with Heron's hints and quick fixes for every Lake project";
 
           config = lib.mkIf config.programs.heron.enable {
-            services.toolchain.langs.lean.servers.heron.package = heron-language-server;
+            services.toolchain.langs.lean.servers.heron = {
+              package = heron;
+              args = [ "serve" ];
+            };
           };
         };
 
@@ -136,10 +118,11 @@
       // import ./EndToEndTests {
         inherit
           pkgs
-          lint-driver
-          heron-language-server
+          lake2nix
+          heron-build
+          heron
+          lakeDeps
           ;
-        leanToolchain = pkgs.lean.lean-all;
         heronSource = ./.;
         runsEditorProbes = pkgs.lib.versionAtLeast (pkgs.lib.removePrefix "v" toolchainTag) "4.31.0";
       };

@@ -172,7 +172,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
 the same `findActions` → `Replacement.toTextEdits` path the code-action provider uses. Each check
 is still gated by `isEnabled`; with `all := true` the manual **refactors** (`testRunnerRegistry`
 entries that aren't checks) are added too. Shared by the build sink (below) and the standalone
-`heron-scan` driver. -/
+`heron scan` subcommand. -/
 meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax) :
     CommandElabM (Array FixRecord) := do
   let fileMap ← getFileMap

@@ -1,3 +1,4 @@
+import Cli
 import FixReporting.HeronPluginLocation
 import Lean.Data.Lsp.Communication
 import Std.Data.HashMap
@@ -7,7 +8,7 @@ open System FixReporting Lean JsonRpc
 def heronRepository : String := "https://github.com/wvhulle/heron"
 
 def stayIdle (reason : String) : IO α :=
-  throw <| IO.userError s!"heron-language-server: idle, {reason}"
+  throw <| IO.userError s!"heron serve: idle, {reason}"
 
 def parseLeanVersion (versionOutput : String) : Option String :=
   match versionOutput.splitOn "(version " with
@@ -63,7 +64,7 @@ def releaseBranchFor (version : String) (branchList : String) : String :=
 
 def cloneBranch (branch : String) (checkout : FilePath) : IO Unit := do
   if ← checkout.pathExists then IO.FS.removeDirAll checkout
-  IO.eprintln s!"heron-language-server: fetching Heron branch {branch}"
+  IO.eprintln s!"heron serve: fetching Heron branch {branch}"
   unless ← runReportingToStderr "git"
       #["clone", "--quiet", "--depth", "1", "--branch", branch, heronRepository, checkout.toString] do
     stayIdle s!"cloning branch {branch} of {heronRepository} failed"
@@ -75,7 +76,7 @@ def buildPluginInCheckout (version branch : String) (checkout : FilePath) : IO S
   unless toolchainTargetsVersion toolchain version do
     IO.FS.removeDirAll checkout
     stayIdle s!"Heron has no branch lean/v{version}, and main targets {toolchain}"
-  IO.eprintln s!"heron-language-server: building the Heron plugin for Lean {version} in {checkout}"
+  IO.eprintln s!"heron serve: building the Heron plugin for Lean {version} in {checkout}"
   let some plugin ← queryPluginPath checkout environmentOfOtherToolchain
     | stayIdle s!"building the Heron plugin in {checkout} failed"
   return plugin
@@ -203,7 +204,16 @@ partial def serveNothing (client output : IO.FS.Stream) : IO UInt32 := do
   | .notification "exit" _ => return 0
   | _ => serveNothing client output
 
-def main (serveArgs : List String) : IO UInt32 := do
+def runServe (parsed : Cli.Parsed) : IO UInt32 := do
   match ← pluginForProject with
-  | some plugin => serveHeronOnly plugin serveArgs
+  | some plugin => serveHeronOnly plugin (parsed.variableArgsAs! String).toList
   | none => serveNothing (← IO.getStdin) (← IO.getStdout)
+
+def serveCmd : Cli.Cmd := `[Cli|
+  serve VIA runServe;
+  "Run a second Lean language server that shows only Heron's hints and quick fixes, \
+   for projects that do not load the Heron plugin themselves."
+
+  ARGS:
+    ...leanServerArgs : String; "Arguments passed on to the Lean server; put them after --."
+]

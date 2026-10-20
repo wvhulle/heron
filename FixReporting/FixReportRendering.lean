@@ -1,4 +1,5 @@
 import Lean
+import Cli
 import Heron.Fix
 
 /-! Shared output for the fix reporters: the `Report` type and the cargo-clippy-style / JSON
@@ -166,6 +167,11 @@ def decideColor (color : Option Bool) (plain : Bool) : IO Bool := do
   | none =>
     let noColor := (← IO.getEnv "NO_COLOR").isSome
     return !plain && !noColor && (← (← IO.getStdout).isTty)
+
+def requestedColor (parsed : Cli.Parsed) : Option Bool :=
+  if parsed.hasFlag "color" then some true
+  else if parsed.hasFlag "no-color" then some false
+  else none
 
 /-- The `file://` URI for a report's on-disk path (absolute if it resolves), or empty for
 stdin. The lone IO needed by the human renderer, isolated here. -/

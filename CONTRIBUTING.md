@@ -4,7 +4,7 @@
 
 Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
 [`Heron/Refactor/`](./Heron/Refactor). A rule is one file `<Rule>.lean` with a match struct, a
-one-sentence `description` (`heron-scan rules` prints it), `detect`, `message`, `replacements`
+one-sentence `description` (`heron rules` prints it), `detect`, `message`, `replacements`
 and `sources`, plus the tests `<Rule>/Detects.lean` and `<Rule>/Ignores.lean`. The file ends
 with `register_check <Match>` or `register_refactor <Match>`. Registration refuses a rule whose
 `kinds` is empty, whose `kinds` or `within` name something that is not a syntax node kind, or
@@ -48,7 +48,7 @@ already parsed and elaborated, and never go back to the source text. Concretely:
    section, the Lean standard library or Mathlib style guide, an hlint hint or a Clippy lint.
    Leave `sources` out until you have found one.
 6. **Run it on real code before merging**: inside a built checkout of a sizeable project at the
-   toolchain's tag, `heron-scan --rule <name> <dir>`, and read every hit.
+   toolchain's tag, `heron scan --rule <name> <dir>`, and read every hit.
 
 ### What the self-lints reject
 
@@ -113,7 +113,7 @@ It builds four checks; run one with `nix build -L .#checks.x86_64-linux.<name>`:
 | `per-file-import` | a consumer that imports Heron in one file: the build and the editor |
 
 [`EndToEndTests/ScenarioCheck.lean`](./EndToEndTests/ScenarioCheck.lean) runs both consumer checks
-with `lean --run`; its editor probes talk LSP to `lake serve` and `heron-language-server`. On Lean
+with `lean --run`; its editor probes talk LSP to `lake serve` and `heron serve`. On Lean
 4.29 and 4.30 the probes are skipped, because those language servers read `/etc/localtime`, which
 the Nix build environment does not have.
 

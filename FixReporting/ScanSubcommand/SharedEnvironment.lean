@@ -1,7 +1,7 @@
 import Lean
 import Heron
 import FixReporting.FixReportRendering
-import FixReporting.StandaloneScan.Elaboration
+import FixReporting.ScanSubcommand.Elaboration
 
 /-! **Shared-environment engine.** Import the dependency closure ONCE, then detect every target file
 against that shared imported env — instead of re-importing per file. Incremental cache (by source
@@ -100,7 +100,7 @@ def lintMods (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Nat)
       else misses := misses.push m
     | none => misses := misses.push m
   if misses.isEmpty then
-    IO.eprintln s!"heron-scan: {mods.size} file(s) unchanged — all served from cache"
+    IO.eprintln s!"heron scan: {mods.size} file(s) unchanged — all served from cache"
     return hits
   let mut impSet : Std.HashSet Name := ∅
   for m in misses do
@@ -110,7 +110,7 @@ def lintMods (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Nat)
   for n in impSet.toArray do
     let built ← (do let p ← Lean.findOLean n; p.pathExists) <|> pure false
     if built then importNames := importNames.push { module := n }
-  IO.eprintln s!"heron-scan: {hits.size} cached; importing {importNames.size} dependency module(s) to lint {misses.size} file(s) (≤{max 1 conc}-way)…"
+  IO.eprintln s!"heron scan: {hits.size} cached; importing {importNames.size} dependency module(s) to lint {misses.size} file(s) (≤{max 1 conc}-way)…"
   let env ← importModules importNames baseOpts (loadExts := true)
   let lintOne : Mod → IO Report := fun m => do
     try
@@ -122,7 +122,7 @@ def lintMods (all useCache : Bool) (checks : Array Heron.RuleEntry) (conc : Nat)
         (((collectLoop all false checks #[]).run { inputCtx := ictx }).run fst)
       return { path := some m.file, label := m.file, fileMap := ictx.fileMap, fixes }
     catch e =>
-      IO.eprintln s!"heron-scan: {m.name}: {e.toString}"
+      IO.eprintln s!"heron scan: {m.name}: {e.toString}"
       return { path := some m.file, label := m.file, fileMap := (mkInputContext m.src m.file).fileMap, fixes := #[] }
   let fresh ← parMap conc misses lintOne
   if useCache then

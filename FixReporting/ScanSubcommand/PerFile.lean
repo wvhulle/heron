@@ -1,7 +1,7 @@
 import Lean
 import Heron
 import FixReporting.FixReportRendering
-import FixReporting.StandaloneScan.Elaboration
+import FixReporting.ScanSubcommand.Elaboration
 
 /-! **Per-file engine.** Import each file's own full environment (`processHeader`) and detect.
 Simplest and most faithful per file (and backs stdin), but re-imports the whole environment
