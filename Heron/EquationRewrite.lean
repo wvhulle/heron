@@ -37,7 +37,7 @@ private meta def detectEquationSide (equation : Name) (rightToLeft : Bool) (node
 @[reducible] meta def rewriteByEquation (spec : EquationRewrite) : Check EquationRewriteMatch where
   name := spec.name
   description := spec.description
-  kinds := #[``Parser.Term.app, ``Parser.Term.pipeProj]
+  kinds := #[``Parser.Term.app, ``Parser.Term.pipeProj, ``Parser.Term.proj]
   consumesSubtree := true
   detect := detectEquationSide spec.equation spec.rightToLeft
   message := fun _ => spec.message
