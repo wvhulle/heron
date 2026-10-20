@@ -24,6 +24,7 @@ public import Heron.Check.StringConcatenationToInterpolation
 public import Heron.Check.SingleUseBindToNestedAction
 public import Heron.Check.QualifiedConstructorToLeadingDot
 public import Heron.Check.MatchOnParametersToPatternMatchingDefinition
+public import Heron.Check.ListMapMapToSingleMap
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
