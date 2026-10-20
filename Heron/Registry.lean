@@ -35,6 +35,11 @@ public import Heron.Check.OptionMapMapToSingleMap
 public import Heron.Check.IdApplicationToArgument
 public import Heron.Check.ListFlattenOfMapToFlatMap
 public import Heron.Check.BoolNotNotToBool
+public import Heron.Check.ListFoldrOfMapToFoldr
+public import Heron.Check.FunctorMapMapToSingleMap
+public import Heron.Check.FunctorIdMapToArgument
+public import Heron.Check.PureBindToApplication
+public import Heron.Check.BindPureToArgument
 -- Refactors
 public import Heron.Refactor.FlipIf
 public import Heron.Refactor.Inline
