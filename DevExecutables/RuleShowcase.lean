@@ -1,4 +1,5 @@
 import Heron
+import DevExecutables.RuleProfiling
 -- The three modules below are imported but nothing from them is referenced —
 -- they should each be flagged as unused.
 import Lean.Data.Json.Parser

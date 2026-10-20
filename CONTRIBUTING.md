@@ -120,7 +120,8 @@ the Nix build environment does not have.
 ## Developer tools
 
 Open [`DevExecutables/RuleShowcase.lean`](./DevExecutables/RuleShowcase.lean) in your editor to
-see every rule fire at once.
+see every rule fire at once. It imports `DevExecutables.RuleProfiling`, which adds the option
+`heron.profile`; with it set, `#heronProfile` prints how long each enabled check took so far.
 
 ## Inspecting Lean syntax trees
 

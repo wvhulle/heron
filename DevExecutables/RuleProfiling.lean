@@ -1,6 +1,8 @@
 module
 
 public meta import Lean.Elab.Command
+public meta import Heron.Check
+meta import Lean.Linter.Basic
 
 public section
 
@@ -29,13 +31,9 @@ meta def renderTable (columns : Array Column) (rows : Array (Array String)) : St
 
 /-- Accumulated per-rule profiling data. -/
 meta structure RuleProfile where
-  detectNs : Nat := 0
-  fixNs : Nat := 0
+  elapsedNs : Nat := 0
   matchCount : Nat := 0
   callCount : Nat := 0
-
-meta def RuleProfile.totalNs (p : RuleProfile) : Nat :=
-  p.detectNs + p.fixNs
 
 /-- Format nanoseconds as a millisecond string with 3 decimal places. -/
 meta def fmtNanosAsMs (ns : Nat) : String :=
@@ -48,11 +46,10 @@ meta def fmtNanosAsMs (ns : Nat) : String :=
 
 /-- Convert a `RuleProfile` to a table row. -/
 meta def RuleProfile.toRow (name : String) (p : RuleProfile) : Array String :=
-  #[name, fmtNanosAsMs p.detectNs, fmtNanosAsMs p.fixNs,
-    fmtNanosAsMs p.totalNs, toString p.matchCount, toString p.callCount]
+  #[name, fmtNanosAsMs p.elapsedNs, toString p.matchCount, toString p.callCount]
 
 private meta def profileColumns : Array Column :=
-  #[⟨"Rule", '─'⟩, ⟨"Detect", '─'⟩, ⟨"Fix", '─'⟩, ⟨"Total", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
+  #[⟨"Rule", '─'⟩, ⟨"Time", '─'⟩, ⟨"Matches", '─'⟩, ⟨"Calls", '─'⟩]
 
 /-- Option to enable per-rule profiling accumulation (without trace output). -/
 private meta def profilingOption : Lean.Option Bool :=
@@ -64,22 +61,32 @@ meta initialize
       descr := "Accumulate per-rule profiling data for #heronProfile."
       name := `heron }
 
-meta def isProfilingEnabled (opts : Options) : Bool :=
-  profilingOption.get opts
-
 /-- Global accumulator for per-rule timing, gated behind `heron.profile`. -/
 meta initialize profilingAccumulator : IO.Ref (Std.HashMap Name RuleProfile) ←
   IO.mkRef {}
 
 /-- Record profiling data for a single rule invocation. -/
-meta def recordProfile (name : Name) (detectNs fixNs : Nat) (matchCount : Nat) : BaseIO Unit :=
+private meta def recordProfile (name : Name) (elapsedNs matchCount : Nat) : BaseIO Unit :=
   profilingAccumulator.modify fun map =>
     let prev := map.getD name {}
     map.insert name { prev with
-      detectNs := prev.detectNs + detectNs
-      fixNs := prev.fixNs + fixNs
+      elapsedNs := prev.elapsedNs + elapsedNs
       matchCount := prev.matchCount + matchCount
       callCount := prev.callCount + 1 }
+
+private meta def ruleProfilingLinter : Linter where
+  name := `heronProfile
+  run := withSetOptionIn fun stx => do
+    let opts ← getOptions
+    unless profilingOption.get opts do return
+    if Heron.isReelaboratingGuardSet opts then return
+    for entry in ← heronRuleRegistry.get do
+      if entry.isEnabled opts then
+        let start ← IO.monoNanosNow
+        let findings ← entry.findActions stx
+        recordProfile entry.name ((← IO.monoNanosNow) - start) findings.size
+
+meta initialize lintersRef.modify (·.push ruleProfilingLinter)
 
 syntax (name := heronProfileCmd) "#heronProfile" : command
 
@@ -91,7 +98,7 @@ meta def elabHeronProfile : CommandElab
       logInfoAt stx "No profiling data collected. Enable with: set_option heron.profile true"
       return
     let entries := map.fold (init := #[]) fun acc name profile => acc.push (name, profile)
-    let sorted := entries.qsort fun a b => a.2.totalNs > b.2.totalNs
+    let sorted := entries.qsort fun a b => a.2.elapsedNs > b.2.elapsedNs
     let rows := sorted.map fun (name, p) => p.toRow (toString name)
     logInfoAt stx ("Heron profile:" ++ Format.line ++ renderTable profileColumns rows)
     profilingAccumulator.set {}

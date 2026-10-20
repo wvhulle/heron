@@ -150,14 +150,10 @@ meta initialize heronRuleRegistry : IO.Ref (Array RuleEntry) ← IO.mkRef #[]
 private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
   let matchesRef ← IO.mkRef (#[] : Array α)
   let name := Rule.name (α := α)
-  let profiling := Heron.isProfilingEnabled (← getOptions)
-  let walkStart ← IO.monoNanosNow
   return {
     visitor := ← Rule.collectingVisitor matchesRef
     emit := do
-      let collected ← matchesRef.get
-      let detectEnd ← IO.monoNanosNow
-      for m in collected do
+      for m in ← matchesRef.get do
         let repls ← Rule.replacementsFor m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
@@ -169,9 +165,6 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
         let extraLabels ← Rule.labels (α := α) m
         let allLabels := repls.map (·.toLabel) ++ extraLabels
         emitLabelHints name primaryRange? replacementRanges allLabels
-      let emitEnd ← IO.monoNanosNow
-      if profiling then
-        Heron.recordProfile name (detectEnd - walkStart) (emitEnd - detectEnd) collected.size
   }
 
 

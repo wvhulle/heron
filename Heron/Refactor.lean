@@ -26,24 +26,13 @@ meta def Refactor.toCodeActionProvider [Refactor α] : CodeActionProvider :=
   fun params snap => do
     let doc ← readDoc
     let text := doc.meta.text
-    let name := Rule.name (α := α)
-    let detectAndReplace : CommandElabM (Array (MessageData × Array Replacement × Array Lsp.TextEdit)) :=
-      withTraceNode `heron.profile
-          (fun res => return match res with
-            | .ok _ => m!"{name}: done"
-            | .error e => m!"{name}: error {e.toMessageData}")
-          (tag := toString name) do
-        withTraceNode `heron.profile.detect
-            (fun res => return match res with
-              | .ok r => m!"{name} detect: {r.size} match(es)"
-              | .error e => m!"{name} detect: error {e.toMessageData}")
-            (tag := s!"{name}.detect") do
-          let detected ← Rule.detectAll (α := α) snap.stx
-          detected.mapM fun m => do
-            let repls ← Rule.replacementsFor m
-            let fileMap ← getFileMap
-            let textEdits ← repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
-            return (Rule.message (α := α) m, repls, textEdits)
+    let detectAndReplace : CommandElabM (Array (MessageData × Array Replacement × Array Lsp.TextEdit)) := do
+      let detected ← Rule.detectAll (α := α) snap.stx
+      detected.mapM fun m => do
+        let repls ← Rule.replacementsFor m
+        let fileMap ← getFileMap
+        let textEdits ← repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
+        return (Rule.message (α := α) m, repls, textEdits)
     let results ← runCommandElabM snap detectAndReplace
     let kind := Refactor.codeActionKind (α := α)
     results.filterMapM fun (msg, repls, textEdits) => do
