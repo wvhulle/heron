@@ -256,7 +256,7 @@ private meta def Check.findActions [Check α] (stx : Syntax) : CommandElabM (Arr
              emphasized := Check.emphasize (α := α) m, replacements := ← Rule.replacementsFor m }
 
 /-- Register a `Check` instance: linter option, registry entry, and test runner. -/
-meta def Check.register [Check α] : IO Unit := do
+@[nospecialize] meta def Check.register [Check α] : IO Unit := do
   let name := Rule.name (α := α)
   if (← heronRuleRegistry.get).any (·.name == name) then
     throw <| IO.userError s!"Heron: two checks are registered under the name `{name}`"
