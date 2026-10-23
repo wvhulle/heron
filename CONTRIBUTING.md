@@ -177,6 +177,28 @@ with `lean --run`; its editor probes talk LSP to `lake serve`. On Lean
 4.29 and 4.30 the probes are skipped, because those language servers read `/etc/localtime`, which
 the Nix build environment does not have.
 
+## Release branches
+
+There is one branch per supported Lean toolchain (see
+[Supported Lean versions](./README.md#supported-lean-versions)). They share one base,
+`lean/v4.31.0`, and differ as little as possible:
+
+```
+lean/v4.31.0 ─┬─ pin 4.29.1 · pin 4.30.0 · lean-fork/v4.31.0
+              └─ from Lean 4.32 ─┬─ pin 4.32.0 … pin 4.34.1
+                                 └─ from Lean 4.35 ── pin 4.35.0 ── Weir frontend (main, lean/v4.35.0)
+```
+
+- A change that works on every toolchain goes into the base, and the branches are rebased onto it.
+- A workaround for a Lean API change is one commit at the first minor that needs it, such as
+  `from Lean 4.32`, and every newer branch builds on it.
+- A branch adds only its pin: `lean-toolchain`, the matching `require Cli … @ "vX.Y.0"` and
+  `lake-manifest.json`. Manifests for releases lean4-nix does not package live in
+  `Lean4NixManifests/` in the base.
+- `main` is the frontend: its `heron serve` is a Weir proxy, and its flake bundles the plugin of
+  every older branch from `flake.lock`. After the release branches change and are pushed,
+  re-lock those inputs on `main` and push `main` and `lean/v4.35.0`.
+
 ## Developer tools
 
 Open [`RuleDevelopment/RuleShowcase.lean`](./RuleDevelopment/RuleShowcase.lean) in your editor to
