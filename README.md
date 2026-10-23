@@ -48,6 +48,34 @@ package «your_pkg» where
   lintDriverArgs := #["lint"]
 ```
 
+## Language server
+
+`heron serve` runs next to your normal Lean server in any Lake project, without project changes,
+and shows only Heron's hints, quick fixes and refactors. Install it with home-manager:
+
+```nix
+home-manager.users.<you> = {
+  imports = [ heron.homeModules.default ];
+  programs.heron.enable = true;
+};
+```
+
+or add it to your editor yourself, for example in Helix's `languages.toml`:
+
+```toml
+[language-server.heron]
+command = "heron"            # from `nix profile install github:wvhulle/heron`
+args = ["serve"]
+
+[[language]]
+name = "lean"
+language-servers = ["lean4_lsp", "heron"]
+```
+
+The Nix package includes the plugin for every stock Lean version below, prebuilt in
+`wvhulle.cachix.org`, and never builds at run time. A binary built from source builds the plugin
+for another Lean version on first use and reports the build as editor progress. See [No project changes](docs/NoProjectChanges.md).
+
 ## Rules
 
 Heron has two kinds of rules. **Checks** run on every command once `linter.heron` is on; each
