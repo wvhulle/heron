@@ -7,66 +7,39 @@
   inputs = {
     lean4-nix.url = "github:lenianiva/lean4-nix";
     nixpkgs.follows = "lean4-nix/nixpkgs";
+    weir.url = "git+https://codeberg.org/wvhulle/weir";
+    heron-lean-v4-29-1.url = "github:wvhulle/heron?ref=lean/v4.29.1";
+    heron-lean-v4-30-0.url = "github:wvhulle/heron?ref=lean/v4.30.0";
+    heron-lean-v4-31-0.url = "github:wvhulle/heron?ref=lean/v4.31.0";
+    heron-lean-v4-32-0.url = "github:wvhulle/heron?ref=lean/v4.32.0";
+    heron-lean-v4-32-2.url = "github:wvhulle/heron?ref=lean/v4.32.2";
+    heron-lean-v4-33-0.url = "github:wvhulle/heron?ref=lean/v4.33.0";
+    heron-lean-v4-33-1.url = "github:wvhulle/heron?ref=lean/v4.33.1";
+    heron-lean-v4-34-0.url = "github:wvhulle/heron?ref=lean/v4.34.0";
+    heron-lean-v4-34-1.url = "github:wvhulle/heron?ref=lean/v4.34.1";
   };
 
   outputs =
     {
       nixpkgs,
       lean4-nix,
+      weir,
       ...
-    }:
+    }@inputs:
     let
       system = "x86_64-linux";
 
-      toolchainTag = builtins.head (
-        builtins.match "[[:space:]]*leanprover/lean4:([^[:space:]]+)[[:space:]]*" (
-          builtins.readFile ./lean-toolchain
-        )
-      );
-
-      vendoredManifestOverlay =
-        manifest: final: prev:
-        (manifest.overlay final prev)
-        // {
-          lean = (final.callPackage "${lean4-nix}/lib/toolchain.nix" { }).fetchBinaryLean manifest;
-        };
-
-      leanOverlay =
-        if lean4-nix.tags ? ${toolchainTag} then
-          lean4-nix.readToolchainFile ./lean-toolchain
-        else
-          vendoredManifestOverlay (import ./Lean4NixManifests/${toolchainTag}.nix lean4-nix);
-
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ leanOverlay ];
-      };
-
-      lake2nix = pkgs.callPackage lean4-nix.lake { };
-
-      lakeDeps = lake2nix.buildDeps { src = ./.; };
-
-      buildLakeTargets =
-        {
-          name,
-          targets,
-          lakeArtifacts ? null,
-          afterBuild ? "",
-        }:
-        lake2nix.mkPackage (
-          {
-            inherit name lakeDeps;
-            src = ./.;
-            installArtifacts = true;
-            buildPhase = ''
-              runHook preBuild
-              lake build ${targets}
-              ${afterBuild}
-              runHook postBuild
-            '';
-          }
-          // pkgs.lib.optionalAttrs (lakeArtifacts != null) { inherit lakeArtifacts; }
-        );
+      inherit
+        (weir.lib.leanProject {
+          src = ./.;
+          inherit nixpkgs lean4-nix system;
+        })
+        toolchainTag
+        pkgs
+        lake2nix
+        lakeDeps
+        buildLakeTargets
+        ;
 
       library = buildLakeTargets {
         name = "heron-library";
@@ -86,15 +59,33 @@
         afterBuild = "lake exe heron-self-lint";
       };
 
-      heron = pkgs.runCommand "heron" { meta.mainProgram = "heron"; } ''
-        install -Dm755 ${heron-build}/.lake/build/bin/heron $out/bin/heron
-        install -Dm644 ${heron-build}/.lake/build/lib/libheron_Heron.so $out/lib/libheron_Heron.so
-      '';
+      heron = weir.lib.bundleReleasePlugins pkgs {
+        name = "heron";
+        lakeBuild = heron-build;
+        pluginFileName = "libheron_Heron.so";
+        releases = with inputs; [
+          heron-lean-v4-29-1
+          heron-lean-v4-30-0
+          heron-lean-v4-31-0
+          heron-lean-v4-32-0
+          heron-lean-v4-32-2
+          heron-lean-v4-33-0
+          heron-lean-v4-33-1
+          heron-lean-v4-34-0
+          heron-lean-v4-34-1
+        ];
+      };
     in
     {
       packages.${system} = {
         inherit heron;
         default = heron;
+      };
+
+      homeModules.default = weir.lib.homeModule {
+        name = "heron";
+        package = heron;
+        description = "a second Lean language server with Heron's hints and quick fixes for every Lake project";
       };
 
       checks.${system} = {
