@@ -3,7 +3,6 @@
   lake2nix,
   heronSource,
   heron-build,
-  heron,
   lakeDeps,
   runsEditorProbes,
 }:
@@ -40,8 +39,6 @@ in
     checkArgs = [
       "--expected-fixes"
       "${heronSource}/EndToEndTests/expected-fixes.json"
-      "--heron"
-      (pkgs.lib.getExe heron)
     ];
   };
 

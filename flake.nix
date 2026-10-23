@@ -97,20 +97,6 @@
         default = heron;
       };
 
-      homeModules.default =
-        { config, lib, ... }:
-        {
-          options.programs.heron.enable =
-            lib.mkEnableOption "a second Lean language server with Heron's hints and quick fixes for every Lake project";
-
-          config = lib.mkIf config.programs.heron.enable {
-            services.toolchain.langs.lean.servers.heron = {
-              package = heron;
-              args = [ "serve" ];
-            };
-          };
-        };
-
       checks.${system} = {
         rules = library;
         inherit developer-tools;
@@ -120,7 +106,6 @@
           pkgs
           lake2nix
           heron-build
-          heron
           lakeDeps
           ;
         heronSource = ./.;

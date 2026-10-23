@@ -173,7 +173,7 @@ It builds four checks; run one with `nix build -L .#checks.x86_64-linux.<name>`:
 | `per-file-import` | a consumer that imports Heron in one file: the build and the editor |
 
 [`EndToEndTests/ScenarioCheck.lean`](./EndToEndTests/ScenarioCheck.lean) runs both consumer checks
-with `lean --run`; its editor probes talk LSP to `lake serve` and `heron serve`. On Lean
+with `lean --run`; its editor probes talk LSP to `lake serve`. On Lean
 4.29 and 4.30 the probes are skipped, because those language servers read `/etc/localtime`, which
 the Nix build environment does not have.
 

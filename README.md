@@ -34,7 +34,7 @@ section of _Functional Programming in Lean_, and names the option that turns it 
 | --- | --- | --- |
 | [Lakefile setup](docs/LakefileSetup.md) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
 | [Per-file import](docs/PerFileImport.md) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
-| [No project changes](docs/NoProjectChanges.md) | nothing | editor hints and quick fixes through `heron serve`; reports and fixes through `heron scan` |
+| [No project changes](docs/NoProjectChanges.md) | nothing | reports and fixes through `heron scan` |
 
 Most projects want the lakefile setup:
 

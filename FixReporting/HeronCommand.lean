@@ -1,7 +1,6 @@
 import FixReporting.LintSubcommand
 import FixReporting.ScanSubcommand
 import FixReporting.RulesSubcommand
-import FixReporting.ServeSubcommand
 
 open Cli
 
@@ -16,8 +15,7 @@ unsafe def heronCmd : Cmd := `[Cli|
   SUBCOMMANDS:
     lintCmd;
     scanCmd;
-    rulesCmd;
-    serveCmd
+    rulesCmd
 ]
 
 unsafe def main (args : List String) : IO UInt32 :=
