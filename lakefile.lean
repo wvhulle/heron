@@ -12,6 +12,8 @@ package heron where
 
 require Cli from git "https://github.com/leanprover/lean4-cli" @ "v4.35.0"
 
+require weir from git "https://codeberg.org/wvhulle/weir" @ "main"
+
 @[default_target] lean_lib Heron where
   globs := #[`Heron.*]
   defaultFacets := #[`lean_lib.shared]
