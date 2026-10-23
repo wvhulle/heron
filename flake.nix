@@ -106,6 +106,7 @@
           pkgs
           lake2nix
           heron-build
+          heron
           lakeDeps
           ;
         heronSource = ./.;
