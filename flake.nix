@@ -82,12 +82,6 @@
         default = heron;
       };
 
-      homeModules.default = weir.lib.homeModule {
-        name = "heron";
-        package = heron;
-        description = "a second Lean language server with Heron's hints and quick fixes for every Lake project";
-      };
-
       checks.${system} = {
         rules = library;
         inherit developer-tools;

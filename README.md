@@ -51,20 +51,12 @@ package «your_pkg» where
 ## Language server
 
 `heron serve` runs next to your normal Lean server in any Lake project, without project changes,
-and shows only Heron's hints, quick fixes and refactors. Install it with home-manager:
-
-```nix
-home-manager.users.<you> = {
-  imports = [ heron.homeModules.default ];
-  programs.heron.enable = true;
-};
-```
-
-or add it to your editor yourself, for example in Helix's `languages.toml`:
+and shows only Heron's hints, quick fixes and refactors. Add it to your editor as a second Lean
+server, for example in Helix's `languages.toml`:
 
 ```toml
 [language-server.heron]
-command = "heron"            # from `nix profile install github:wvhulle/heron`
+command = "heron"            # or, from a flake: "${heron.packages.x86_64-linux.heron}/bin/heron"
 args = ["serve"]
 
 [[language]]
