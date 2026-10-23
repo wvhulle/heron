@@ -10,19 +10,7 @@ starts its own `lake serve` with Heron loaded as a plugin and passes on only Her
 quick fixes and refactors, so your normal Lean server stays untouched. Each open file is
 elaborated twice, once per server, which costs extra CPU and memory on large projects.
 
-With home-manager and the `services.toolchain.langs` module of
-[hm-dev-tools](https://codeberg.org/wvhulle/hm-dev-tools), import this flake's module and enable
-it. It adds a `heron` server to the Lean language:
-
-```nix
-home-manager.users.<you> = {
-  imports = [ heron.homeModules.default ];
-  programs.heron.enable = true;
-};
-```
-
-With other editor setups, add `heron serve` as an extra Lean language server, for example in
-Helix:
+Add `heron serve` as an extra Lean language server, for example in Helix:
 
 ```toml
 # languages.toml

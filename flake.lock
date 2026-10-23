@@ -917,11 +917,11 @@
     },
     "weir": {
       "locked": {
-        "lastModified": 1792751544,
-        "narHash": "sha256-lMnuJTsjc1dshC9ZTaFj5tPUTgJrvvtSZYmcgmRbQnY=",
+        "lastModified": 1792752431,
+        "narHash": "sha256-OMbH+NKp6lzYChvPiG2rpzuBHBawIucKFy5nmi12Y1A=",
         "ref": "refs/heads/main",
-        "rev": "3f7d4a71944e15f6dc78fa81c700709802239a7c",
-        "revCount": 6,
+        "rev": "7a3404b02d2bfdbb50b4aa0b0d60cb75102fde05",
+        "revCount": 7,
         "type": "git",
         "url": "https://codeberg.org/wvhulle/weir"
       },
