@@ -71,11 +71,12 @@ in `leanOptions`.
 ## Supported Lean versions
 
 Heron runs inside the Lean compiler, so it must be built with exactly your project's Lean
-version. Use the ref that matches your `lean-toolchain`:
+version. Use the ref that matches your `lean-toolchain`. `main` always points at the same commit
+as the branch of the newest Lean release:
 
 | Your `lean-toolchain` | Heron ref |
 | --- | --- |
-| `leanprover/lean4:v4.35.0` | `main` |
+| `leanprover/lean4:v4.35.0` | `lean/v4.35.0` or `main` |
 | `leanprover/lean4:v4.34.1` | `lean/v4.34.1` |
 | `leanprover/lean4:v4.34.0` | `lean/v4.34.0` |
 | `leanprover/lean4:v4.33.1` | `lean/v4.33.1` |
