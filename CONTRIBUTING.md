@@ -40,13 +40,13 @@ spelling is found, operators and dot chains included:
 List.map f (List.map g xs)   -- becomes List.map (f ∘ g) xs
 (xs.map g).map f             -- becomes List.map (f ∘ g) xs
 xs.map g |>.map f            -- becomes List.map (f ∘ g) xs
-f <$> g <$> o                -- Option.map_map: becomes Option.map (f ∘ g) o
 !!b                          -- Bool.not_not: becomes b
 ```
 
-Only subterms whose head is the equation's head constant, or a class method such as
-`Functor.map` that unfolds to it, are unified, so the cost stays close to one comparison per
-subterm.
+Only subterms whose head is the equation's head constant are unified, so the cost stays close to
+one comparison per subterm, and each spelling belongs to one rule: `Option.map f (Option.map g o)`
+to `Option.map_map`, while `f <$> g <$> o`, whose head is the class method `Functor.map`, belongs to
+the Functor law (`Functor.map_map`).
 
 The fix prints the right-hand side with the matched source pieces (`f`, `g`, `xs`) in place of
 the equation's variables. A piece with no source of its own, such as a coerced argument, is

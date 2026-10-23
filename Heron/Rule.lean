@@ -429,11 +429,6 @@ private meta def equationSideHead? (equation : Name) (rightToLeft : Bool) : Meta
   let some (matched, _) := matchedAndPrintedSides statement rightToLeft | return none
   return matched.getAppFn.constName?
 
-private meta def headsLike (head : Name) (target : Expr) : MetaM Bool := do
-  if target.getAppFn.isConstOf head then return true
-  let some unfolded ← unfoldProjInst? target | return false
-  return unfolded.getAppFn.isConstOf head
-
 private meta def sourceNodeAt (command piece : Syntax) : Syntax := Id.run do
   let some range := piece.getRange? | return piece
   return (command.find? fun node =>
@@ -457,10 +452,8 @@ meta def rewritesByEquationIn (command : Syntax) (equation : Name) (rightToLeft 
   let termKinds := ((Parser.parserExtension.getState env).categories.find? `term).map (·.kinds)
   let isTermNode (node : Syntax) :=
     node.isIdent || (!node.isOfKind ``Parser.Term.do && termKinds.any (·.contains node.getKind))
-  let mayHeadLike (target : Expr) := match target.getAppFn.constName? with
-    | some name => name == head || env.isProjectionFn name
-    | none => false
-  let targets := (oneInfoPerRange (infos.filter (mayHeadLike ·.2.expr)))
+  let headed (ci : ContextInfo) (ti : TermInfo) := (instantiateMVarsCore ci.mctx ti.expr).1.getAppFn.isConstOf head
+  let targets := (oneInfoPerRange (infos.filter fun (ci, ti) => headed ci ti))
     |>.qsort fun (_, wider) (_, narrower) => rangeSize wider.stx > rangeSize narrower.stx
   let mut rewrites : Array (Syntax × Syntax) := #[]
   for (ci, ti) in targets do
@@ -469,7 +462,6 @@ meta def rewritesByEquationIn (command : Syntax) (equation : Name) (rightToLeft 
     unless isTermNode node do continue
     let pieceCandidates := infos.filter fun (_, inner) => liesWithin node inner.stx && !sameRange inner.stx node
     let attempt : TermElabM (Option Syntax) := withRef node do
-      unless ← headsLike head (← instantiateMVars ti.expr) do return none
       let some found ← matchEquationSide equation rightToLeft pieceCandidates ti.expr | return none
       let pieces := found.pieces.map (sourceNodeAt command)
       let some printed ← delaboratedEquationSide equation rightToLeft pieces | return none
