@@ -9,6 +9,7 @@ steps:
         experimental-features = nix-command flakes
         accept-flake-config = true
         sandbox = false
+        max-jobs = 1
       CACHIX_AUTH_TOKEN:
         from_secret: cachix_auth_token
     commands:
