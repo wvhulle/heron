@@ -72,6 +72,7 @@ class Rule (α : Type) where
   consumesSubtree : Bool := false
   within : Array SyntaxNodeKind := #[]
   sources : Array Source := #[]
+  requiredRewrite : α → Option (Syntax × Syntax) := fun _ => none
 
 inductive RuleKind where
   | check

@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Rule
+public meta import Heron.Monad
 public meta import Heron.Fix
 public meta import Lean.PrettyPrinter
 meta import Lean.Meta.TryThis
@@ -203,7 +204,7 @@ meta def Replacement.toTextEdits (r : Replacement) (fileMap : FileMap) : CoreM (
 /-- Build a type-erased test runner for a `Rule` instance. -/
 meta def buildTestRunner [Rule α] : TestRunner := fun stx => do
   let fileMap ← getFileMap
-  let results ← Rule.detectAll (α := α) stx
+  let results ← keepMatchesWhoseRewriteElaborates (← Rule.detectAll (α := α) stx)
   let edits ← results.flatMapM fun m => do
     let repls ← Rule.replacementsFor m
     repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)

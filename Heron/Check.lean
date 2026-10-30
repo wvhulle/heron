@@ -149,7 +149,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
   return {
     visitor := ← Rule.collectingVisitor matchesRef
     emit := do
-      (← matchesRef.get).mapM fun m => do
+      (← keepMatchesWhoseRewriteElaborates (← matchesRef.get)).mapM fun m => do
         let repls ← Rule.replacementsFor m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
@@ -259,7 +259,7 @@ meta initialize lintersRef.modify (·.push heronMasterLinter)
 displayable title and computed replacements. This is the read-only twin of
 `Check.makeHandler`'s emit phase, used by the code-action provider. -/
 private meta def Check.findActions [Check α] (stx : Syntax) : CommandElabM (Array Finding) := do
-  let detected ← Rule.detectAll (α := α) stx
+  let detected ← keepMatchesWhoseRewriteElaborates (← Rule.detectAll (α := α) stx)
   detected.mapM fun m => do
     return { message := Rule.message (α := α) m, explanation := Check.explanation (α := α) m,
              emphasized := Check.emphasize (α := α) m, replacements := ← Rule.replacementsFor m }

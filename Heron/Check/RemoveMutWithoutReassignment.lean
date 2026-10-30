@@ -10,6 +10,7 @@ private structure RemoveMutWithoutReassignmentMatch where
   doLetStx : Syntax
   ident : TSyntax `ident
   valStx : TSyntax `term
+  immutableLetElement : TSyntax `doElem := ⟨.missing⟩
 
 private meta def immutableLet (m : RemoveMutWithoutReassignmentMatch) : CommandElabM (TSyntax `doElem) :=
   `(doElem| let $m.ident := $m.valStx)
@@ -18,8 +19,7 @@ private meta def detectUnnecessaryMut (stx : Syntax) :
     CommandElabM (Array RemoveMutWithoutReassignmentMatch) := do
   let `(doElem| let mut $ident:ident := $valStx) := stx | return #[]
   let m := { doLetStx := stx, ident, valStx }
-  unless ← rewriteElaborates stx (← immutableLet m) do return #[]
-  return #[m]
+  return #[{ m with immutableLetElement := ← immutableLet m }]
 
 private meta instance : Check RemoveMutWithoutReassignmentMatch where
   name := `removeMutWithoutReassignment
@@ -28,17 +28,17 @@ private meta instance : Check RemoveMutWithoutReassignmentMatch where
   severity := .warning
   category := .simplification
   detect := detectUnnecessaryMut
+  requiredRewrite := fun m => some (m.doLetStx, m.immutableLetElement)
   message := fun _ => m!"Remove unnecessary `mut`"
   emphasize := fun m => m.doLetStx
   sources := #[.functionalProgrammingInLean "`let mut`" "Monad-Transformers/More-do-Features/#let-mut"]
   tags := #[.unnecessary]
   explanation := fun _ => m!"This variable is declared `mut` but never reassigned. Use `let` instead of `let mut` to signal immutability."
   replacements := some fun m => do
-    let repl ← immutableLet m
     return #[{
       emphasizedSyntax := m.doLetStx
       oldSyntax := m.doLetStx
-      newSyntax := repl
+      newSyntax := m.immutableLetElement
       prettyPrint := PrettyPrinter.ppCategory `doElem
       inlineViolationLabel := m!"unused mut"
     }]

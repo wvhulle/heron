@@ -31,7 +31,6 @@ private meta def wrapsInAnotherMonad (nestedMonad : Name) (e : Expr) : MetaM Boo
 private meta def detectInSignature (node : Syntax) : CommandElabM (Array NestedMonadToTransformerMatch) := do
   let some (nestedMonad, transformerType) ← nestedMonadAndTransformer? node | return #[]
   let some true ← runMetaMForSyntax node (wrapsInAnotherMonad nestedMonad) | return #[]
-  unless ← rewriteElaborates node transformerType do return #[]
   return #[{ stx := node, nestedMonad, transformerType }]
 
 private meta instance : Check NestedMonadToTransformerMatch where
@@ -42,6 +41,7 @@ private meta instance : Check NestedMonadToTransformerMatch where
   severity := .information
   category := .style
   detect := detectInSignature
+  requiredRewrite := fun m => some (m.stx, m.transformerType)
   message := fun m => m!"Consider `{m.transformerType}` instead of nesting `{m.nestedMonad}` in another monad"
   emphasize := fun m => m.stx
   sources := #[

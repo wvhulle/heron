@@ -9,6 +9,7 @@ open Lean Elab Command Meta Parser Heron
 private structure QualifiedConstructorToLeadingDotMatch where
   ident : Ident
   constructorField : Name
+  dottedConstructor : Term
 
 private structure ConstructorReference where
   field : Name
@@ -33,8 +34,8 @@ private meta def detectQualifiedConstructor (site : Syntax) :
   let references := (← runMetaMForEachExactTermInfo ident constructorReference?).filterMap id
   let some reference := references[0]? | return #[]
   unless references.all (·.expectedTypeNamesItsInductive) do return #[]
-  unless ← rewriteElaborates ident (← dottedConstructor reference.field) do return #[]
-  return #[{ ident, constructorField := reference.field }]
+  return #[{ ident, constructorField := reference.field,
+             dottedConstructor := ← dottedConstructor reference.field }]
 
 private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   name := `qualifiedConstructorToLeadingDot
@@ -43,6 +44,7 @@ private meta instance : Check QualifiedConstructorToLeadingDotMatch where
   severity := .information
   category := .style
   detect := detectQualifiedConstructor
+  requiredRewrite := fun m => some (m.ident, m.dottedConstructor)
   message := fun m => m!"Use `.{m.constructorField}` instead of the fully qualified constructor"
   emphasize := fun m => m.ident
   sources := #[.functionalProgrammingInLean "Leading dot notation"
@@ -57,7 +59,7 @@ private meta instance : Check QualifiedConstructorToLeadingDotMatch where
     return #[{
       emphasizedSyntax := m.ident
       oldSyntax := m.ident
-      newSyntax := ← dottedConstructor m.constructorField
+      newSyntax := m.dottedConstructor
       inlineViolationLabel := m!"leading dot"
     }]
 

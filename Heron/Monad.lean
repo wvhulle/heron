@@ -93,6 +93,33 @@ meta def rewriteElaborates (target replacement : Syntax) : CommandElabM Bool := 
   let some cmd ← enclosingCommand? target | return false
   elaboratesWithoutErrorsInProbeNamespace (replaceSourceNode cmd target replacement)
 
+meta def replaceSourceNodes (cmd : Syntax) (rewrites : Array (Syntax × Syntax)) : Syntax :=
+  Id.run <| cmd.replaceM fun node =>
+    pure ((rewrites.find? fun (target, _) => isSameSourceNode node target).map (·.2))
+
+private meta def rewritesElaborateTogether (rewrites : Array (Syntax × Syntax)) : CommandElabM Bool := do
+  let some (firstTarget, _) := rewrites[0]? | return true
+  let some cmd ← enclosingCommand? firstTarget | return false
+  unless rewrites.all fun (target, _) => liesWithin cmd target do return false
+  elaboratesWithoutErrorsInProbeNamespace (replaceSourceNodes cmd rewrites)
+
+meta def keepMatchesWhoseRewriteElaborates [Rule α] (found : Array α) : CommandElabM (Array α) := do
+  let rewrites := found.map (Rule.requiredRewrite (α := α))
+  let candidateIndices := (Array.range found.size).filter fun index => rewrites[index]!.isSome
+  if candidateIndices.isEmpty then return found
+  let targetOf (index : Nat) := (rewrites[index]!.map (·.1)).getD .missing
+  let isNested (index : Nat) := candidateIndices.any fun other =>
+    other != index && !isSameSourceNode (targetOf other) (targetOf index)
+      && liesWithin (targetOf other) (targetOf index)
+  let (nestedIndices, outermostIndices) := candidateIndices.partition isNested
+  let outermostRewrites := outermostIndices.filterMap (rewrites[·]!)
+  let acceptedOutermost ← if ← rewritesElaborateTogether outermostRewrites then pure outermostIndices
+    else outermostIndices.filterM fun index => rewritesElaborateTogether #[rewrites[index]!.get!]
+  let acceptedNested ← nestedIndices.filterM fun index => rewritesElaborateTogether #[rewrites[index]!.get!]
+  let accepted := acceptedOutermost ++ acceptedNested
+  return (Array.range found.size).filterMap fun index =>
+    if rewrites[index]!.isNone || accepted.contains index then found[index]? else none
+
 /-- Check if the outer part of a fully-applied expression — everything except
 the last argument — has a `Monad` instance. Used by transformer-detection rules
 to confirm `f a₁ … aₙ (Wrapped α)` has `f a₁ … aₙ` actually being a monad. -/

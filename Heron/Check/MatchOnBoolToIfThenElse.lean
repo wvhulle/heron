@@ -12,6 +12,7 @@ private structure MatchOnBoolToIfThenElseMatch where
   discr : TSyntax `term
   trueRhs : TSyntax `term
   falseRhs : TSyntax `term
+  ifThenElseTerm : TSyntax `term := ⟨.missing⟩
 
 private meta def boolMatch? : Syntax → Option MatchOnBoolToIfThenElseMatch
   | stx@`(match%$matchKw $discr:term with
@@ -30,8 +31,7 @@ private meta def ifThenElse (m : MatchOnBoolToIfThenElseMatch) : CommandElabM (T
 private meta def detectBoolMatchWhoseIfRewriteElaborates (node : Syntax) :
     CommandElabM (Array MatchOnBoolToIfThenElseMatch) := do
   let some m := boolMatch? node | return #[]
-  unless ← rewriteElaborates m.matchStx (← ifThenElse m) do return #[]
-  return #[m]
+  return #[{ m with ifThenElseTerm := ← ifThenElse m }]
 
 private meta instance : Check MatchOnBoolToIfThenElseMatch where
   name := `matchOnBoolToIfThenElse
@@ -40,6 +40,7 @@ private meta instance : Check MatchOnBoolToIfThenElseMatch where
   severity := .information
   category := .simplification
   detect := detectBoolMatchWhoseIfRewriteElaborates
+  requiredRewrite := fun m => some (m.matchStx, m.ifThenElseTerm)
   message := fun _ => m!"Use `if ... then ... else ...` instead of matching on `Bool`"
   emphasize := fun m => m.matchKw
   tags := #[.unnecessary]
@@ -52,7 +53,7 @@ private meta instance : Check MatchOnBoolToIfThenElseMatch where
     return #[{
           emphasizedSyntax := m.matchStx
           oldSyntax := m.matchStx
-          newSyntax := ← ifThenElse m
+          newSyntax := m.ifThenElseTerm
           inlineViolationLabel := m!"bool match" }]
 
 register_check MatchOnBoolToIfThenElseMatch
