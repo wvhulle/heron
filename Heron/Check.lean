@@ -121,19 +121,15 @@ private meta def emitLabelHints (ruleName : Name) (primaryRange? : Option Syntax
 /-- A live, per-command handler instance for one rule. The master linter builds
 one of these per enabled rule per command, calls `visit` at every node whose
 kind matches the rule, then calls `emit` once at the end. -/
-structure RuleHandler where
-  visitor : SyntaxVisitor
-  emit : CommandElabM Unit
-
-/-- A type-erased registration. The registry stores `setup` thunks that build a
-fresh `RuleHandler` for each command (each handler owns its own match-collection
-state via `IO.Ref`), plus a `findActions` thunk used by the code-action provider
-to re-detect matches at request time. -/
 structure Finding where
   message : MessageData
   explanation : MessageData
   emphasized : Syntax
   replacements : Array Replacement
+
+structure RuleHandler where
+  visitor : SyntaxVisitor
+  emit : CommandElabM (Array Finding)
 
 structure RuleEntry where
   name : Name
@@ -153,7 +149,7 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
   return {
     visitor := ← Rule.collectingVisitor matchesRef
     emit := do
-      for m in ← matchesRef.get do
+      (← matchesRef.get).mapM fun m => do
         let repls ← Rule.replacementsFor m
         emitCheck (node := Check.emphasize m) (severity := Check.severity (α := α))
             (tags := Check.tags (α := α))
@@ -165,6 +161,8 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
         let extraLabels ← Rule.labels (α := α) m
         let allLabels := repls.map (·.toLabel) ++ extraLabels
         emitLabelHints name primaryRange? replacementRanges allLabels
+        return { message := Rule.message m, explanation := Check.explanation m,
+                 emphasized := Check.emphasize m, replacements := repls }
   }
 
 /-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
@@ -172,25 +170,23 @@ the same `findActions` → `Replacement.toTextEdits` path the code-action provid
 is still gated by `isEnabled`; with `all := true` the manual **refactors** (`testRunnerRegistry`
 entries that aren't checks) are added too. Shared by the build sink (below) and the standalone
 `heron scan` subcommand. -/
-meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax) :
-    CommandElabM (Array FixRecord) := do
+meta def fixRecordsOfFindings (all : Bool) (stx : Syntax)
+    (findingsByEntry : Array (RuleEntry × Array Finding)) : CommandElabM (Array FixRecord) := do
   let fileMap ← getFileMap
-  let opts ← getOptions
   let checkNames := (← heronRuleRegistry.get).map (·.name)
   let messagesBeforeCollection := (← get).messages
   let mut unverifiedRecords : Array FixRecord := #[]
   let mut emphasizedSpans : Array (Option Lsp.Range) := #[]
-  for entry in checks do
-    if entry.isEnabled opts then
-      let links := entry.sources.map (·.toLink)
-      for finding in (← entry.findActions stx) do
-        let title := (← finding.message.toString).trimAscii.toString
-        let explStr := (← finding.explanation.toString).trimAscii.toString
-        let proposedEdits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
-        unverifiedRecords := unverifiedRecords.push
-          { rule := entry.name.toString, message := title, span := default, edits := proposedEdits,
-            explanation := explStr, sources := links }
-        emphasizedSpans := emphasizedSpans.push (finding.emphasized.getRange?.map fileMap.utf8RangeToLspRange)
+  for (entry, findings) in findingsByEntry do
+    let links := entry.sources.map (·.toLink)
+    for finding in findings do
+      let title := (← finding.message.toString).trimAscii.toString
+      let explStr := (← finding.explanation.toString).trimAscii.toString
+      let proposedEdits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
+      unverifiedRecords := unverifiedRecords.push
+        { rule := entry.name.toString, message := title, span := default, edits := proposedEdits,
+          explanation := explStr, sources := links }
+      emphasizedSpans := emphasizedSpans.push (finding.emphasized.getRange?.map fileMap.utf8RangeToLspRange)
   let acceptedFixes ← acceptElaboratingFixes stx (unverifiedRecords.map (·.edits))
   let mut out : Array FixRecord := #[]
   for ((unverifiedRecord, emphasizedSpan?), edits) in (unverifiedRecords.zip emphasizedSpans).zip acceptedFixes do
@@ -205,6 +201,12 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
   modify ({ · with messages := messagesBeforeCollection })
   return out
 
+meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax) :
+    CommandElabM (Array FixRecord) := do
+  let opts ← getOptions
+  let enabledChecks := checks.filter (·.isEnabled opts)
+  fixRecordsOfFindings all stx (← enabledChecks.mapM fun entry => return (entry, ← entry.findActions stx))
+
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
 process-global ref suffices; it is (re)written to the sink as the linter runs. -/
 meta initialize heronFixAccum : Std.Mutex (Array FixRecord) ← Std.Mutex.new #[]
@@ -216,10 +218,11 @@ oleans as a side effect of elaboration — the reporter then just reads it, with
 Runs against the build's live elaboration; the file is rewritten on each command (the first
 truncates any stale content) and stamped with the source hash for freshness checks. This runs only
 inside the linter, i.e. only when `linter.heron` is enabled. -/
-private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
+private meta def writeFixSink (stx : Syntax) (findingsByEntry : Array (RuleEntry × Array Finding)) :
+    CommandElabM Unit := do
   let dir := (← IO.getEnv "HERON_FIX_DIR").getD ".lake/build/heron-fixes"
   let includeRefactors := (← IO.getEnv "HERON_FIX_REFACTORS").isSome
-  let recs ← collectFixRecords (all := includeRefactors) (← heronRuleRegistry.get) stx
+  let recs ← fixRecordsOfFindings includeRefactors stx findingsByEntry
   let mod ← getMainModule
   let sourceHash := (hash (← getFileMap).source).toNat
   heronFixAccum.atomically (m := IO) do
@@ -246,8 +249,9 @@ private meta def heronMasterLinter : Linter where
     if active.isEmpty then return
     let handlers ← active.mapM (·.setup)
     walkVisitors (handlers.map (·.visitor)) stx
-    for h in handlers do h.emit
-    writeFixSink stx
+    let findingsByEntry ← (active.zip handlers).mapM fun (entry, handler) => do
+      return (entry, ← handler.emit)
+    writeFixSink stx findingsByEntry
 
 meta initialize lintersRef.modify (·.push heronMasterLinter)
 
