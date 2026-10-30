@@ -2,7 +2,7 @@
 
 Heron runs inside the Lean compiler. Its rules are Lean code, compiled into a library that Lean
 loads as a plugin or an import, and the `heron` command line tool reports and applies what those
-rules find. [Style](style.md) explains how to write a rule.
+rules find. [Development](development.md) explains how to add a rule.
 
 ## Lake targets
 

@@ -29,8 +29,9 @@ def Weekday.isWeekend : Weekday → Bool
 - [Rules](docs/rules.md): checks and refactors, listing them and turning them off
 - [Architecture](docs/architecture.md): how the targets, rules, server and release branches fit
   together
-- [Style](docs/style.md): how to write rules, and conventions for contributors
-- [Development](docs/development.md): building, testing, CI, release branches and developer tools
+- [Style](docs/style.md): which code patterns rules use and avoid
+- [Development](docs/development.md): the development environment, adding a rule, running the
+  checks and releasing
 
 ## Name
 

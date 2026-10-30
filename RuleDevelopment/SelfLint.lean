@@ -45,5 +45,5 @@ unsafe def main (_ : List String) : IO UInt32 := do
   let total := (reports.map (·.fixes.size)).sum
   if total == 0 then return 0
   (← IO.getStdout).flush
-  IO.eprintln s!"heron-self-lint: {total} finding(s) in rule implementations; see \"Writing a rule\" in docs/style.md"
+  IO.eprintln s!"heron-self-lint: {total} finding(s) in rule implementations; see \"Forbidden APIs\" in docs/style.md"
   return 1
