@@ -18,90 +18,15 @@ def Weekday.isWeekend : Weekday → Bool
   | _ => false
 ```
 
-Hovering the underline explains the rule, links to its source (here the
-[Pattern-matching definitions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions)
-section of _Functional Programming in Lean_) and names the option that turns it off.
-
 ![The `Id.run` check in the editor](./docs/images/editor-popup.png)
-
-## Choose how to use Heron
-
-| Setup | What you change in your project | What you get |
-| --- | --- | --- |
-| [Lakefile setup](docs/setup.md#lakefile-setup) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
-| [Per-file import](docs/setup.md#per-file-import) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
-| [No project changes](docs/setup.md#no-project-changes) | nothing | editor hints and quick fixes through `heron serve`; reports and fixes through `heron scan` |
-
-Most projects want the lakefile setup:
-
-```lean
-require heron from git "https://github.com/wvhulle/heron" @ "main"
-
-package «your_pkg» where
-  leanOptions := #[⟨`linter.heron, true⟩]
-  plugins := #[`@heron/plugin]
-  lintDriver := "heron/heron"
-  lintDriverArgs := #["lint"]
-```
-
-Without project changes, run `heron serve` as a second language server in
-[Helix, Neovim or VS Code](docs/editor.md), and `heron scan` on the command line. Get the `heron`
-binary from Nix or build it on Ubuntu, as described in [Install](docs/install.md):
-
-```sh
-nix run github:wvhulle/heron -- --help
-```
-
-## Rules
-
-Heron has two kinds of rules. **Checks** run on every command once `linter.heron` is on; each
-underlines the code it flags and, for most checks, offers a quick fix. **Refactors** never flag
-anything and appear in the editor's code-action menu when the cursor is on code they can rewrite.
-Every rule names the book section, style guide or other linter it is based on.
-
-`heron rules` prints every rule with its description and sources, from any Lean project:
-
-```sh
-nix run github:wvhulle/heron/main -- rules   # or, in a project that requires Heron:
-lake exe heron rules
-lake exe heron rules --json                  # machine-readable
-```
-
-`heron --help` lists the subcommands, and `heron <subcommand> --help` their flags.
-
-Turn a rule off with `set_option linter.<rule> false` in a file, or ``⟨`linter.<rule>, false⟩``
-in `leanOptions`.
-
-## Supported Lean versions
-
-Heron runs inside the Lean compiler, so it must be built with exactly your project's Lean
-version. Use the ref that matches your `lean-toolchain`. `main` always points at the same commit
-as the branch of the newest Lean release:
-
-| Your `lean-toolchain` | Heron ref |
-| --- | --- |
-| `leanprover/lean4:v4.35.0` | `lean/v4.35.0` or `main` |
-| `leanprover/lean4:v4.34.1` | `lean/v4.34.1` |
-| `leanprover/lean4:v4.34.0` | `lean/v4.34.0` |
-| `leanprover/lean4:v4.33.1` | `lean/v4.33.1` |
-| `leanprover/lean4:v4.33.0` | `lean/v4.33.0` |
-| `leanprover/lean4:v4.32.2` | `lean/v4.32.2` |
-| `leanprover/lean4:v4.32.0` | `lean/v4.32.0` |
-| `leanprover/lean4:v4.31.0` | `lean/v4.31.0` |
-| `leanprover/lean4:v4.30.0` | `lean/v4.30.0` |
-| `leanprover/lean4:v4.29.1` | `lean/v4.29.1` |
-| [wvhulle/lean4](https://github.com/wvhulle/lean4) fork | `lean-fork/v4.31.0` |
-
-The `lean-fork/v4.31.0` branch adds hover popups with the full explanation, related-information
-labels and import-analysis checks, which need the fork. `https://codeberg.org/wvhulle/heron` works
-as well as the GitHub mirror.
 
 ## Documentation
 
-- [Setup](docs/setup.md): the lakefile setup, the per-file import, and using Heron without project
-  changes
-- [Install](docs/install.md): the `heron` binary from Nix or built from source on Ubuntu
+- [Setup](docs/setup.md): add Heron to a Lake project, or use it without project changes, and
+  pick the Heron ref for your Lean version
+- [Install](docs/install.md): the `heron` command, built from source or from Nix
 - [Editor setup](docs/editor.md): `heron serve` in Helix, Neovim and VS Code
+- [Rules](docs/rules.md): checks and refactors, listing them and turning them off
 - [Architecture](docs/architecture.md): how the targets, rules, server and release branches fit
   together
 - [Style](docs/style.md): writing rules, testing and conventions for contributors
