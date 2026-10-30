@@ -177,6 +177,7 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
   let fileMap ← getFileMap
   let opts ← getOptions
   let checkNames := (← heronRuleRegistry.get).map (·.name)
+  let messagesBeforeCollection := (← get).messages
   let mut unverifiedRecords : Array FixRecord := #[]
   let mut emphasizedSpans : Array (Option Lsp.Range) := #[]
   for entry in checks do
@@ -201,6 +202,7 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
       unless checkNames.contains name do
         for edit in (← runner stx).edits do
           out := out.push { rule := name.toString, message := "", span := edit.range, edits := #[edit] }
+  modify ({ · with messages := messagesBeforeCollection })
   return out
 
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single

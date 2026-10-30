@@ -89,7 +89,7 @@ meta initialize ruleCatalog : IO.Ref (Array RuleSummary) ← IO.mkRef #[]
 
 meta def Rule.replacementsFor [Rule α] (m : α) : CommandElabM (Array Replacement) :=
   match Rule.replacements (α := α) with
-  | some replacements => replacements m
+  | some replacements => try replacements m catch _ => pure #[]
   | none => pure #[]
 
 meta def Rule.offersFix [Rule α] : Bool := (Rule.replacements (α := α)).isSome
@@ -178,7 +178,9 @@ meta def Rule.collectingVisitor [Rule α] (found : IO.Ref (Array α)) : CommandE
       if consumes then
         if let some r := node.getRange? then
           if (← consumedRanges.get).any fun c => c.start ≤ r.start ∧ r.stop ≤ c.stop then return
-      let detected ← Rule.detect (α := α) node
+      let detected ← try Rule.detect (α := α) node catch caught => do
+        logWarningAt node m!"Heron rule `{Rule.name (α := α)}` failed here: {caught.toMessageData}"
+        pure #[]
       if detected.isEmpty then return
       found.modify (· ++ detected)
       if consumes then

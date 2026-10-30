@@ -174,8 +174,10 @@ meta def Replacement.toTextEdits (r : Replacement) (fileMap : FileMap) : CoreM (
   let some range := r.oldSyntax.getRange? | return #[]
   let (indent, column) := Tactic.TryThis.getIndentAndColumn fileMap range
   let base := fileMap.source.utf8ByteSize + 1
-  let (marking, output) ←
-    markUntilAllKeptTagged r (copiedFromSource? r.oldSyntax range) base indent column #[]
+  let markedOutput? ← try
+      some <$> markUntilAllKeptTagged r (copiedFromSource? r.oldSyntax range) base indent column #[]
+    catch _ => pure none
+  let some (marking, output) := markedOutput? | return #[]
   let tokenSpan (marker : Nat) := (output.spans[marker]?).map (withoutSurroundingSpacing output.text)
   let keptOutput := (Array.range marking.kept.size).filterMap fun i => tokenSpan (base + 2 * i)
   let printed := (Array.range marking.printedTokens.size).filterMap fun j => tokenSpan (base + 2 * j + 1)

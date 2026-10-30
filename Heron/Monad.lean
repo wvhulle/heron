@@ -84,8 +84,10 @@ private meta def parenthesesIn (stx : Syntax) : Nat :=
 meta def needsParenthesesAt (target : Syntax) (replacement : Term) : CommandElabM Bool := do
   let some cmd ← enclosingCommand? target | return false
   let substituted := replaceSourceNode cmd target replacement
-  let parenthesized ← liftCoreM <| PrettyPrinter.parenthesizeCommand substituted
-  return parenthesesIn parenthesized > parenthesesIn substituted
+  try
+    let parenthesized ← liftCoreM <| PrettyPrinter.parenthesizeCommand substituted
+    return decide (parenthesesIn parenthesized > parenthesesIn substituted)
+  catch _ => return true
 
 meta def rewriteElaborates (target replacement : Syntax) : CommandElabM Bool := do
   let some cmd ← enclosingCommand? target | return false
