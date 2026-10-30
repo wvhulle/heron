@@ -10,8 +10,9 @@ Projects that use the [lakefile setup](setup.md#lakefile-setup) or the
 [per-file import](setup.md#per-file-import) already get Heron through their normal Lean server and
 need none of this.
 
-Every editor below needs the command `heron serve`. [Install](install.md) `heron`, or let the
-editor run it through Nix with `nix run github:wvhulle/heron -- serve`.
+Every editor below runs the command `heron serve`, so [install](install.md) `heron` first. If it
+is not on your editor's `PATH`, replace `heron` by the full path to the binary. With Nix, see
+[With Nix](#with-nix) for the command to use instead.
 
 ## Helix
 
@@ -26,10 +27,6 @@ args = ["serve"]
 name = "lean"
 language-servers = ["lean4_lsp", "heron"]
 ```
-
-Without `heron` on your `PATH`, use `command = "nix"` with
-`args = ["run", "github:wvhulle/heron", "--", "serve"]`. In a Nix-managed configuration, use
-`command = "${heron.packages.x86_64-linux.heron}/bin/heron"`.
 
 ## Neovim
 
@@ -66,16 +63,33 @@ The extension registers one server, so it cannot serve another language at the s
 Code reports `spawn heron ENOENT`, it does not see `heron` on its `PATH`: give the full path to the
 binary, or start VS Code from a shell where `heron` resolves.
 
+## With Nix
+
+This section only applies if you use Nix. Instead of an installed `heron`, an editor can run the
+flake directly with the command `nix` and the arguments `run github:wvhulle/heron -- serve`. In
+Helix:
+
+```toml
+[language-server.heron]
+command = "nix"
+args = ["run", "github:wvhulle/heron", "--", "serve"]
+```
+
+In a Nix-managed editor configuration, use the package from a flake input `heron`:
+`"${heron.packages.x86_64-linux.heron}/bin/heron"`.
+
 ## Progress and idle states
 
 The server runs `lean --version` in the project and loads the plugin built for that Lean version.
-The [Nix package](install.md#nix) ships a plugin for every stock Lean version in the
-[Supported Lean versions](../README.md#supported-lean-versions) table and never builds at run
-time: for any other version it stays idle and lists the versions it bundles. A binary
-[built from source](install.md#ubuntu) instead clones the `lean/v<version>` branch into
+
+A binary [built from source](install.md#from-source) clones the `lean/v<version>` branch into
 `~/.cache/heron/<version>` (or `$HERON_CACHE_DIR`) and builds the plugin there on first use. That
 takes a few minutes, which the editor shows as LSP progress (in Helix, the spinner and
 `[built/total]` message in the statusline); the full build log goes to the language-server log.
+
+The [Nix package](install.md#nix) ships a plugin for every stock Lean version in the
+[Supported Lean versions](setup.md#supported-lean-versions) table and never builds at run time:
+for any other version it stays idle and lists the versions it bundles.
 
 The server also stays idle when Heron has no branch for the project's Lean version or the build
 fails, and shows the reason as an editor message. When the project's `lakefile` already lists
