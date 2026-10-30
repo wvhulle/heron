@@ -18,13 +18,9 @@ def Weekday.isWeekend : Weekday → Bool
   | _ => false
 ```
 
-Hovering the underline explains the rule: when a parameter is named only to be matched on
-immediately, the cases can be written directly after the signature. Move the parameter's type to
-the right of the colon, so the declared type becomes a function type, and replace `:= match … with`
-by the alternatives. The popup links to the rule's source, here the
+Hovering the underline explains the rule, links to its source (here the
 [Pattern-matching definitions](https://lean-lang.org/functional_programming_in_lean/Getting-to-Know-Lean/Additional-Conveniences/#pattern-matching-definitions)
-section of _Functional Programming in Lean_, and names the option that turns it off:
-`set_option linter.matchOnParametersToPatternMatchingDefinition false`.
+section of _Functional Programming in Lean_) and names the option that turns it off.
 
 ![The `Id.run` check in the editor](./docs/images/editor-popup.png)
 
@@ -48,25 +44,13 @@ package «your_pkg» where
   lintDriverArgs := #["lint"]
 ```
 
-## Language server
+Without project changes, run `heron serve` as a second language server in
+[Helix, Neovim or VS Code](docs/editor.md), and `heron scan` on the command line. Get the `heron`
+binary from Nix or build it on Ubuntu, as described in [Install](docs/install.md):
 
-`heron serve` runs next to your normal Lean server in any Lake project, without project changes,
-and shows only Heron's hints, quick fixes and refactors. Add it to your editor as a second Lean
-server, for example in Helix's `languages.toml`:
-
-```toml
-[language-server.heron]
-command = "heron"            # or, from a flake: "${heron.packages.x86_64-linux.heron}/bin/heron"
-args = ["serve"]
-
-[[language]]
-name = "lean"
-language-servers = ["lean4_lsp", "heron"]
+```sh
+nix run github:wvhulle/heron -- --help
 ```
-
-The Nix package includes the plugin for every stock Lean version below, prebuilt in
-`wvhulle.cachix.org`, and never builds at run time. A binary built from source builds the plugin
-for another Lean version on first use and reports the build as editor progress. See [No project changes](docs/setup.md#no-project-changes).
 
 ## Rules
 
@@ -108,14 +92,19 @@ as the branch of the newest Lean release:
 | `leanprover/lean4:v4.29.1` | `lean/v4.29.1` |
 | [wvhulle/lean4](https://github.com/wvhulle/lean4) fork | `lean-fork/v4.31.0` |
 
-The `lean-fork/v4.31.0` branch adds features that need the fork: hover popups with the full
-explanation, related-information labels, and import-analysis checks. The repository is mirrored to
-GitHub, so `https://codeberg.org/wvhulle/heron` works as well.
+The `lean-fork/v4.31.0` branch adds hover popups with the full explanation, related-information
+labels and import-analysis checks, which need the fork. `https://codeberg.org/wvhulle/heron` works
+as well as the GitHub mirror.
 
-## Contributing
+## Documentation
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the repository layout, adding rules, testing and the
-developer tools.
+- [Setup](docs/setup.md): the lakefile setup, the per-file import, and using Heron without project
+  changes
+- [Install](docs/install.md): the `heron` binary from Nix or built from source on Ubuntu
+- [Editor setup](docs/editor.md): `heron serve` in Helix, Neovim and VS Code
+- [Architecture](docs/architecture.md): how the targets, rules, server and release branches fit
+  together
+- [Style](docs/style.md): writing rules, testing and conventions for contributors
 
 ## Name
 
