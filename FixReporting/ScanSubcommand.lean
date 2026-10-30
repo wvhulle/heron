@@ -1,58 +1,126 @@
 import FixReporting.FixReportRendering
 import FixReporting.RulesSubcommand
-import FixReporting.ScanSubcommand.SharedEnvironment
-import FixReporting.ScanSubcommand.PerFile
+import FixReporting.CheckSelection
+import FixReporting.BoundedParallelMap
+import FixReporting.LintSubcommand.BuildFixSink
 
-/-!
-# `heron scan` — self-contained Heron fix reporter
+open Cli FixReporting Lean
 
-Reports Heron's fixes without touching the build: it imports Heron in its own process and
-elaborates the target files. Default engine imports the dependency closure ONCE and detects all
-files against it, with an incremental cache + parallelism (`SharedEnv`). `--per-file` uses the
-simpler per-file engine (and `-` reads stdin). Requires the scope to be built (oleans exist).
+namespace FixReporting
 
-    heron scan Sparkle/Analog          # shared-env: import deps once, lint the subtree
-    heron scan --per-file A.lean B.lean # per-file engine
-    cat snippet.lean | heron scan -     # stdin
-    heron scan --json Sparkle | jq      # machine-readable
-    heron scan --fix Sparkle/Analog     # rewrite in place
--/
+def expandLeanFiles (paths : List String) : IO (Array String) := do
+  let mut leanFiles : Array String := #[]
+  for path in paths do
+    if ← System.FilePath.isDir path then
+      let entersDirectory := fun (directory : System.FilePath) =>
+        pure (match directory.fileName with | some name => !name.startsWith "." | none => true)
+      for file in ← System.FilePath.walkDir path entersDirectory do
+        if file.extension == some "lean" then leanFiles := leanFiles.push file.toString
+    else
+      leanFiles := leanFiles.push path
+  return leanFiles.qsort (· < ·)
 
-open Cli FixReporting
+structure ScanInput where
+  label : String
+  path : Option String
+  source : String
+  leanArguments : Array String
 
-private def readStdin : IO String := do (← IO.getStdin).readToEnd
+structure ScanSettings where
+  leanExecutable : String
+  projectEnvironment : Array (String × Option String)
+  pluginPath : String
+  ruleOptions : Array String
+  includeRefactors : Bool
+  memoryMegabytes : Nat
+  sinkRoot : System.FilePath
 
-def lakeProjectSearchPath : IO System.SearchPath := do
-  if (← IO.getEnv "LEAN_PATH").isSome then return ∅
-  let out ← IO.Process.output { cmd := "lake", args := #["env", "printenv", "LEAN_PATH"] }
-  if out.exitCode != 0 then return ∅
-  return System.SearchPath.parse out.stdout.trimAscii.toString
+def scanRuleOptions (requestedChecks : Array Name) : Array String :=
+  if requestedChecks.isEmpty then #["-Dweak.linter.heron=true"]
+  else requestedChecks.map fun checkName => s!"-Dweak.linter.{checkName}=true"
+
+def readScanSink (sinkDirectory : System.FilePath) : IO (Array Heron.FixRecord) := do
+  unless ← sinkDirectory.pathExists do return #[]
+  let mut fixes := #[]
+  for entry in ← sinkDirectory.readDir do
+    if entry.path.extension != some "json" then continue
+    let .ok sinkJson := Json.parse (← IO.FS.readFile entry.path) | continue
+    fixes := fixes ++ (sinkJson.getObjValAs? (Array Heron.FixRecord) "fixes").toOption.getD #[]
+  return fixes
+
+def projectLeanEnvironment : IO (Except String (Array (String × Option String))) := do
+  let lakeOutput ← IO.Process.output { cmd := "lake", args := #["env"] }
+  unless lakeOutput.exitCode == 0 do
+    return .error s!"lake env failed:\n{lakeOutput.stderr}"
+  return .ok <| (lakeOutput.stdout.splitOn "\n").toArray.filterMap fun line =>
+    match line.splitOn "=" with
+    | name :: valueParts@(_ :: _) => some (name, some ("=".intercalate valueParts))
+    | _ => none
+
+def reportLeanErrors (label : String) (leanOutput : IO.Process.Output) : IO Unit := do
+  unless leanOutput.exitCode == 0 do
+    IO.eprintln s!"heron scan: {label}: lean exited with code {leanOutput.exitCode}"
+    for line in (leanOutput.stdout ++ leanOutput.stderr).splitOn "\n" do
+      if line.contains "error" then IO.eprintln s!"  {line}"
+
+def scanInput (settings : ScanSettings) (indexedInput : Nat × ScanInput) : IO Report := do
+  let (index, input) := indexedInput
+  let sinkDirectory := settings.sinkRoot / toString index
+  let refactorEnvironment := if settings.includeRefactors then #[("HERON_FIX_REFACTORS", some "1")] else #[]
+  let leanOutput ← IO.Process.output {
+    cmd := settings.leanExecutable
+    args := #[s!"--plugin={settings.pluginPath}", s!"--memory={settings.memoryMegabytes}"]
+      ++ settings.ruleOptions ++ input.leanArguments
+    env := settings.projectEnvironment ++ #[("HERON_FIX_DIR", some sinkDirectory.toString)]
+      ++ refactorEnvironment }
+  reportLeanErrors input.label leanOutput
+  return { path := input.path, label := input.label,
+           fileMap := (Parser.mkInputContext input.source input.label).fileMap,
+           fixes := ← readScanSink sinkDirectory }
+
+def stdinScanInput (sinkRoot : System.FilePath) (source : String) : IO ScanInput := do
+  let stdinDirectory := sinkRoot / "stdin"
+  IO.FS.createDirAll stdinDirectory
+  let stdinFile := stdinDirectory / "Stdin.lean"
+  IO.FS.writeFile stdinFile source
+  return { label := "<stdin>", path := none, source,
+           leanArguments := #[s!"--root={stdinDirectory}", stdinFile.toString] }
+
+end FixReporting
 
 unsafe def runScan (parsed : Parsed) : IO UInt32 := do
-  loadRuleInitializers (← lakeProjectSearchPath)
+  loadRuleInitializers
   let requestedChecks := ((parsed.flag? "rule").map (·.as! (Array String))).getD #[] |>.map (·.toName)
-  let checks ← match selectChecks (← Heron.heronRuleRegistry.get) requestedChecks with
-    | .error e => do IO.eprintln s!"heron scan: {e}"; return 1
-    | .ok checks => pure checks
+  if let .error message := selectChecks (← Heron.heronRuleRegistry.get) requestedChecks then
+    IO.eprintln s!"heron scan: {message}"; return 1
   let inputs := parsed.variableArgsAs! String
   let readsStdin := inputs.contains "-"
-  let files ← expandPaths (inputs.filter (· != "-")).toList
+  let files ← expandLeanFiles (inputs.filter (· != "-")).toList
   if files.isEmpty && !readsStdin then
     IO.eprintln "heron scan: no input; pass files, directories or - for stdin"; return 1
-  let all := parsed.hasFlag "all"
-  let mut reports : Array Report := #[]
+  let some pluginPath ← ensurePluginSo | do
+    IO.eprintln "heron scan: could not build or locate the Heron plugin (set HERON_PLUGIN_SO)"
+    return 1
+  let projectEnvironment ← match ← projectLeanEnvironment with
+    | .ok environment => pure environment
+    | .error message => do IO.eprintln s!"heron scan: {message}"; return 1
+  let leanExecutable := (projectEnvironment.findSome? fun (name, value) =>
+    if name == "LEAN" then value else none).getD "lean"
+  let sinkRoot : System.FilePath := ".lake" / "build" / "heron-scan"
+  if ← sinkRoot.pathExists then IO.FS.removeDirAll sinkRoot
+  IO.FS.createDirAll sinkRoot
+  let mut scanInputs ← files.mapM fun (file : String) => do
+    return ({ label := file, path := some file, source := ← IO.FS.readFile file,
+              leanArguments := #[file] } : ScanInput)
   if readsStdin then
-    try reports := reports.push (← lintStdin all checks (← readStdin))
-    catch e => IO.eprintln s!"heron scan: <stdin>: {e.toString}"
-  unless files.isEmpty do
-    if parsed.hasFlag "per-file" then
-      for f in files do
-        try reports := reports.push (← lintPerFile all checks f)
-        catch e => IO.eprintln s!"heron scan: {f}: {e.toString}"
-    else
-      let conc := if parsed.hasFlag "no-parallel" then 1 else 16
-      let useCache := !parsed.hasFlag "no-cache" && requestedChecks.isEmpty
-      reports := reports ++ (← lintShared all useCache checks conc files)
+    scanInputs := scanInputs.push (← stdinScanInput sinkRoot (← (← IO.getStdin).readToEnd))
+  let settings : ScanSettings :=
+    { leanExecutable, projectEnvironment, pluginPath, ruleOptions := scanRuleOptions requestedChecks,
+      includeRefactors := parsed.hasFlag "all",
+      memoryMegabytes := ((parsed.flag? "memory").map (·.as! Nat)).getD 8192, sinkRoot }
+  let jobs := ((parsed.flag? "jobs").map (·.as! Nat)).getD 4
+  let reports ← boundedParallelMap jobs (scanInputs.zipIdx.map fun (input, index) => (index, input))
+    (scanInput settings)
   let json := parsed.hasFlag "json"
   let apply := parsed.hasFlag "apply"
   let pal : Palette := { on := ← decideColor (requestedColor parsed) (json || apply) }
@@ -60,7 +128,7 @@ unsafe def runScan (parsed : Parsed) : IO UInt32 := do
 
 unsafe def scanCmd : Cmd := `[Cli|
   scan VIA runScan;
-  "Elaborate files of a built project in this process and report Heron's fixes, \
+  "Run Lean with the Heron plugin on files of a built project and report Heron's fixes, \
    without changes to the project. Run it in the project's root directory."
 
   FLAGS:
@@ -68,10 +136,9 @@ unsafe def scanCmd : Cmd := `[Cli|
     apply;                   "Print the one input file with every fix applied."
     json;                    "Print the fixes as JSON."
     all;                     "Also run the refactors, which are otherwise only offered as code actions."
-    "per-file";              "Import each file's own environment instead of the shared dependency closure."
-    "no-cache";              "Ignore and do not update the cache of earlier results."
-    "no-parallel";           "Elaborate one file at a time."
-    rule : Array String;     "Run only these checks, comma-separated; bypasses the cache."
+    rule : Array String;     "Run only these checks, comma-separated."
+    jobs : Nat;              "How many files to check at the same time (default 4)."
+    memory : Nat;            "Memory limit of each Lean process in megabytes (default 8192)."
     color;                   "Color the output even when stdout is not a terminal."
     "no-color";              "Never color the output."
 

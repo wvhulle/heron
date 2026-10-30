@@ -1,5 +1,6 @@
 import FixReporting.FixReportRendering
-import FixReporting.ScanSubcommand.SharedEnvironment
+import FixReporting.CheckSelection
+import RuleDevelopment.SelfLintElaboration
 import RuleDevelopment.SelfLint.PositionalSyntaxAccess
 import RuleDevelopment.SelfLint.SyntaxKindOrAtomInspection
 import RuleDevelopment.SelfLint.SyntheticSyntaxConstruction
@@ -16,7 +17,7 @@ exits with status 1 when there are any. Requires the library to be built.
     lake build && lake exe heron-self-lint
 -/
 
-open FixReporting Lean
+open FixReporting RuleDevelopment Lean
 
 def selfLints : Array Name := #[
   `positionalSyntaxAccess, `syntaxKindOrAtomInspection, `syntheticSyntaxConstruction,
@@ -38,7 +39,7 @@ unsafe def main (_ : List String) : IO UInt32 := do
   let checks ← match selectChecks (← Heron.heronRuleRegistry.get) selfLints with
     | .error e => do IO.eprintln s!"heron-self-lint: {e}"; return 1
     | .ok checks => pure checks
-  let reports ← lintShared (all := false) (useCache := false) checks 16 (← ruleFiles)
+  let reports ← lintRuleSourceFiles checks 16 (← ruleFiles)
   let pal : Palette := { on := ← decideColor none false }
   let _ ← emit reports pal (json := false) (apply := false) (fix := false)
   let total := (reports.map (·.fixes.size)).sum

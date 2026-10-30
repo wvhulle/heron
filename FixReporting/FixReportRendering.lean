@@ -3,7 +3,7 @@ import Cli
 import Heron.Fix
 
 /-! Shared output for the fix reporters: the `Report` type and the cargo-clippy-style / JSON
-renderers. Operates on `Heron.FixRecord` so every engine (per-file, shared-env, build-sink)
+renderers. Operates on `Heron.FixRecord` so both reporters (`scan` and `lint`)
 renders identically. -/
 
 open Lean Heron

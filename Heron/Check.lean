@@ -211,7 +211,8 @@ truncates any stale content) and stamped with the source hash for freshness chec
 inside the linter, i.e. only when `linter.heron` is enabled. -/
 private meta def writeFixSink (stx : Syntax) : CommandElabM Unit := do
   let dir := (← IO.getEnv "HERON_FIX_DIR").getD ".lake/build/heron-fixes"
-  let recs ← collectFixRecords (all := false) (← heronRuleRegistry.get) stx
+  let includeRefactors := (← IO.getEnv "HERON_FIX_REFACTORS").isSome
+  let recs ← collectFixRecords (all := includeRefactors) (← heronRuleRegistry.get) stx
   let mod ← getMainModule
   let sourceHash := (hash (← getFileMap).source).toNat
   heronFixAccum.atomically (m := IO) do
