@@ -23,10 +23,10 @@ echo 'def f := fun x => x + 1' | lake exe heron scan -
 ```
 
 It accepts `--json`, `--fix`, `--apply`, `--all`, `--color` and `--no-color`, and reads stdin
-with `-`. `--rule <names>` runs only the named checks, separated by commas. `--jobs <n>` (default
-4) sets how many files are checked at the same time, and `--memory <megabytes>` (default 8192) is
-the memory limit of each Lean process, so a scan of a Mathlib project stays within about
-`jobs × memory`. When two fixes overlap, `--fix` and `--apply` apply the first and skip the other;
+with `-`. `--rule <names>` runs only the named checks, separated by commas. `--jobs <n>` sets how many files
+are checked at the same time; by default it is the number of CPUs, at most one per 2 GB of
+available memory (4 where `/proc` does not tell). `--memory <megabytes>` (default 8192) is the
+memory limit of each Lean process, so one file that runs away is stopped instead of the machine. When two fixes overlap, `--fix` and `--apply` apply the first and skip the other;
 run them again to apply it. `heron rules` lists every check and refactor with its description and
 sources; with `--json` it prints them as a JSON array. A check that flags code without a fix
 is reported like any other finding; in `--json` output such a finding has no `after` field.

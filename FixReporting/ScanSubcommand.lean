@@ -57,6 +57,25 @@ def projectLeanEnvironment : IO (Except String (Array (String × Option String))
     | name :: valueParts@(_ :: _) => some (name, some ("=".intercalate valueParts))
     | _ => none
 
+def availableMemoryMegabytes : IO (Option Nat) := do
+  let meminfo ← (some <$> IO.FS.readFile "/proc/meminfo") <|> pure none
+  let some meminfoText := meminfo | return none
+  let availableLine? := (meminfoText.splitOn "\n").find? (·.startsWith "MemAvailable:")
+  let some availableLine := availableLine? | return none
+  let kilobytes? := ((availableLine.splitOn " ").filter (!·.isEmpty))[1]?.bind (·.toNat?)
+  return kilobytes?.map (· / 1024)
+
+def processorCount : IO (Option Nat) := do
+  let cpuinfo ← (some <$> IO.FS.readFile "/proc/cpuinfo") <|> pure none
+  let some cpuinfoText := cpuinfo | return none
+  let processorLines := (cpuinfoText.splitOn "\n").filter (·.startsWith "processor")
+  return if processorLines.isEmpty then none else some processorLines.length
+
+def defaultScanJobs : IO Nat := do
+  match ← processorCount, ← availableMemoryMegabytes with
+  | some processors, some availableMegabytes => return max 1 (min processors (availableMegabytes / 2048))
+  | _, _ => return 4
+
 def reportLeanErrors (label : String) (leanOutput : IO.Process.Output) : IO Unit := do
   unless leanOutput.exitCode == 0 do
     IO.eprintln s!"heron scan: {label}: lean exited with code {leanOutput.exitCode}"
@@ -118,7 +137,9 @@ unsafe def runScan (parsed : Parsed) : IO UInt32 := do
     { leanExecutable, projectEnvironment, pluginPath, ruleOptions := scanRuleOptions requestedChecks,
       includeRefactors := parsed.hasFlag "all",
       memoryMegabytes := ((parsed.flag? "memory").map (·.as! Nat)).getD 8192, sinkRoot }
-  let jobs := ((parsed.flag? "jobs").map (·.as! Nat)).getD 4
+  let jobs ← match parsed.flag? "jobs" with
+    | some jobsFlag => pure (jobsFlag.as! Nat)
+    | none => defaultScanJobs
   let reports ← boundedParallelMap jobs (scanInputs.zipIdx.map fun (input, index) => (index, input))
     (scanInput settings)
   let json := parsed.hasFlag "json"
@@ -137,7 +158,7 @@ unsafe def scanCmd : Cmd := `[Cli|
     json;                    "Print the fixes as JSON."
     all;                     "Also run the refactors, which are otherwise only offered as code actions."
     rule : Array String;     "Run only these checks, comma-separated."
-    jobs : Nat;              "How many files to check at the same time (default 4)."
+    jobs : Nat;              "How many files to check at the same time (default: CPUs, at most one per 2 GB of available memory)."
     memory : Nat;            "Memory limit of each Lean process in megabytes (default 8192)."
     color;                   "Color the output even when stdout is not a terminal."
     "no-color";              "Never color the output."
