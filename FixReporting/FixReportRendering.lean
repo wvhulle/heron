@@ -136,7 +136,7 @@ def renderFix (pal : Palette) (file fileUri : String) (fm : FileMap)
   let firstLn := max 1 (sp.line - ctx)
   let lastLn := min srcLines.size (ep.line + ctx)
   let g : Gutter := { pal, width := (toString lastLn).length }
-  let sugg := fix.edit.map (Suggestion.of ·.newText)
+  let sugg := (editedSpanText fm fix).map Suggestion.of
   let inlineHelp := (sugg.map (·.inlineHelp pal)).getD ""
   let source := (List.range' firstLn (lastLn + 1 - firstLn)).flatMap fun ln =>
     sourceLine g sp ep (srcLines.getD (ln - 1) "") ln inlineHelp
@@ -149,7 +149,7 @@ def fixToJson (file : String) (fm : FileMap) (fix : FixRecord) : Json :=
   let e := fm.lspPosToUtf8Pos fix.span.end
   let pos := fm.toPosition s
   let before := String.Pos.Raw.extract fm.source s e
-  let after : List (String × Json) := (fix.edit.map fun edit => [("after", toJson edit.newText)]).getD []
+  let after : List (String × Json) := ((editedSpanText fm fix).map fun text => [("after", toJson text)]).getD []
   Json.mkObj <|
     [ ("rule", toJson fix.rule)
     , ("message", toJson fix.message)
@@ -186,13 +186,13 @@ actually changed. -/
 private def applyReports (reports : Array Report) : IO (Array Nat) :=
   reports.filterMapM fun r => do
     let some path := r.path | return none
-    let edits := r.fixes.filterMap (·.edit)
-    if edits.isEmpty then return none
-    let patched := Heron.applyEdits r.fileMap edits
+    let fixEdits := (r.fixes.map (·.edits)).filter (!·.isEmpty)
+    if fixEdits.isEmpty then return none
+    let patched := Heron.applyFixes r.fileMap fixEdits
     if patched == r.fileMap.source then return none
     IO.FS.writeFile path patched
-    IO.eprintln s!"fixed {edits.size} in {path}"
-    return some edits.size
+    IO.eprintln s!"fixed {fixEdits.size} in {path}"
+    return some fixEdits.size
 
 /-- Render `reports` per the chosen mode (`json`/`apply`/`fix`/default human). Returns the exit code. -/
 def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO UInt32 := do
@@ -201,7 +201,7 @@ def emit (reports : Array Report) (pal : Palette) (json apply fix : Bool) : IO U
     unless reports.size == 1 do
       IO.eprintln "heron: --apply needs exactly one matching file; narrow the input or use --fix"
       return 1
-    IO.print (Heron.applyEdits r.fileMap (r.fixes.filterMap (·.edit)))
+    IO.print (Heron.applyFixes r.fileMap (r.fixes.map (·.edits)))
     return 0
   if fix then
     let applied ← applyReports reports

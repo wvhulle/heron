@@ -186,19 +186,16 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
         let title := (← finding.message.toString).trimAscii.toString
         let explStr := (← finding.explanation.toString).trimAscii.toString
         let edits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
-        if edits.isEmpty then
-          let some range := finding.emphasized.getRange? | continue
-          out := out.push { rule := entry.name.toString, message := title,
-                            span := fileMap.utf8RangeToLspRange range, explanation := explStr, sources := links }
-        for edit in edits do
-          out := out.push { rule := entry.name.toString, message := title, span := edit.range,
-                            edit := some edit, explanation := explStr, sources := links }
+        let emphasizedSpan? := finding.emphasized.getRange?.map fileMap.utf8RangeToLspRange
+        let some span := editsSpan fileMap edits <|> emphasizedSpan? | continue
+        out := out.push { rule := entry.name.toString, message := title, span, edits,
+                          explanation := explStr, sources := links }
   if all then
     let runners ← testRunnerRegistry.get
     for (name, runner) in runners.toList do
       unless checkNames.contains name do
         for edit in (← runner stx).edits do
-          out := out.push { rule := name.toString, message := "", span := edit.range, edit := some edit }
+          out := out.push { rule := name.toString, message := "", span := edit.range, edits := #[edit] }
   return out
 
 /-- Per-module accumulator of fix records. One `lean` process builds one module, so a single
