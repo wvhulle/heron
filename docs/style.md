@@ -1,9 +1,12 @@
-# Contributing to Heron
+# Style
+
+How to write rules for Heron and change the repository. [Architecture](architecture.md) shows how
+the parts fit together.
 
 ## Writing a rule
 
-Check rules live in [`Heron/Check/`](./Heron/Check), refactor rules in
-[`Heron/Refactor/`](./Heron/Refactor). A rule is one file `<Rule>.lean` with a match struct, a
+Check rules live in [`Heron/Check/`](../Heron/Check), refactor rules in
+[`Heron/Refactor/`](../Heron/Refactor). A rule is one file `<Rule>.lean` with a match struct, a
 one-sentence `description` (`heron rules` prints it), `detect`, `message`, `replacements`
 and `sources`, plus the tests `<Rule>/Detects.lean` and `<Rule>/Ignores.lean`. The file ends
 with `register_check <Match>` or `register_refactor <Match>`. `kinds` lists syntax node kinds or
@@ -16,7 +19,7 @@ is not a node kind, or that lacks either test file.
 
 A rule that replaces one expression by an equal one, as most hlint hints do, names the equation
 instead of writing `detect` and `replacements`. The whole rule is
-[`ListMapMapToSingleMap.lean`](./Heron/Check/ListMapMapToSingleMap.lean):
+[`ListMapMapToSingleMap.lean`](../Heron/Check/ListMapMapToSingleMap.lean):
 
 ```lean
 private meta def ListMapMapToSingleMap := EquationRewriteMatch
@@ -60,7 +63,7 @@ not fix are synthesized, and a match is refused when one cannot be or when a hyp
 The equation must come from Lean's core library: the rule looks it up in the user's environment,
 and a project that loads Heron as a plugin does not import Heron's own declarations, so a lemma
 proved in Heron would never be found there. When core states the equation the other way round,
-set `rightToLeft`; [`ListFlattenOfMapToFlatMap.lean`](./Heron/Check/ListFlattenOfMapToFlatMap.lean)
+set `rightToLeft`; [`ListFlattenOfMapToFlatMap.lean`](../Heron/Check/ListFlattenOfMapToFlatMap.lean)
 reads `List.flatMap_def` backwards:
 
 ```lean
@@ -163,45 +166,37 @@ CI runs one command, and it is the same locally:
 nix flake check -L --keep-going
 ```
 
-It builds four checks; run one with `nix build -L .#checks.x86_64-linux.<name>`:
-
-| Check | What it verifies |
-| --- | --- |
-| `rules` | the library with all `#assert*` tests above |
-| `developer-tools` | the developer tools and their tests, then `lake exe heron-self-lint` |
-| `lakefile-setup` | a consumer with the lakefile setup: a cold build, Heron's warnings, `lake lint --json` against [`EndToEndTests/expected-fixes.json`](./EndToEndTests/expected-fixes.json), and hints and quick fixes in the editor |
-| `per-file-import` | a consumer that imports Heron in one file: the build and the editor |
-
-[`EndToEndTests/ScenarioCheck.lean`](./EndToEndTests/ScenarioCheck.lean) runs both consumer checks
-with `lean --run`; its editor probes talk LSP to `lake serve`. On Lean
+Run one check with `nix build -L .#checks.x86_64-linux.<name>`; the checks are listed under
+[CI](architecture.md#ci). The `lakefile-setup` check compares `lake lint --json` against
+[`EndToEndTests/expected-fixes.json`](../EndToEndTests/expected-fixes.json), so update that file
+when a rule's fixes change. [`EndToEndTests/ScenarioCheck.lean`](../EndToEndTests/ScenarioCheck.lean)
+runs both consumer checks with `lean --run`; its editor probes talk LSP to `lake serve`. On Lean
 4.29 and 4.30 the probes are skipped, because those language servers read `/etc/localtime`, which
 the Nix build environment does not have.
 
+Check plugin changes with the `lakefile-setup` check, not with a local consumer: a warm consumer
+keeps an old traced `.so` and hides loading failures. The plugin's `lean_lib` must keep the name of
+its root module, `Heron`, because Lean derives the plugin's initializer from the `.so` file stem;
+find the file with `lake query heron/plugin` rather than hardcoding its name.
+
 ## Release branches
 
-There is one branch per supported Lean toolchain (see
-[Supported Lean versions](./README.md#supported-lean-versions)). They share one base,
-`lean/v4.31.0`, and differ as little as possible:
+[Architecture](architecture.md#release-branches) shows the branch layout. To change it:
 
-```
-lean/v4.31.0 ─┬─ pin 4.29.1 · pin 4.30.0 · lean-fork/v4.31.0
-              └─ from Lean 4.32 ─┬─ pin 4.32.0 … pin 4.34.1
-                                 └─ from Lean 4.35 ── pin 4.35.0 ── Weir frontend (main, lean/v4.35.0)
-```
-
-- A change that works on every toolchain goes into the base, and the branches are rebased onto it.
-- A workaround for a Lean API change is one commit at the first minor that needs it, such as
-  `from Lean 4.32`, and every newer branch builds on it.
+- Commit a change that works on every toolchain to the base, `lean/v4.31.0`, and rebase the other
+  branches onto it.
+- Commit a workaround for a Lean API change once, at the first minor that needs it, such as
+  `from Lean 4.32`; every newer branch builds on it.
 - A branch adds only its pin: `lean-toolchain`, the matching `require Cli … @ "vX.Y.0"` and
-  `lake-manifest.json`. Manifests for releases lean4-nix does not package live in
+  `lake-manifest.json`. Manifests for releases lean4-nix does not package go to
   `Lean4NixManifests/` in the base.
-- `main` is the frontend: its `heron serve` is a Weir proxy, and its flake bundles the plugin of
-  every older branch from `flake.lock`. After the release branches change and are pushed,
-  re-lock those inputs on `main` and push `main` and `lean/v4.35.0`.
+- After the release branches change and are pushed, re-lock their inputs on `main`
+  (`nix flake update --refresh heron-lean-v4-…`) and push `main` and `lean/v4.35.0`, which point at
+  the same commit.
 
 ## Developer tools
 
-Open [`RuleDevelopment/RuleShowcase.lean`](./RuleDevelopment/RuleShowcase.lean) in your editor to
+Open [`RuleDevelopment/RuleShowcase.lean`](../RuleDevelopment/RuleShowcase.lean) in your editor to
 see every rule fire at once. It imports `RuleDevelopment.RuleProfiling`, which adds the option
 `heron.profile`; with it set, `#heronProfile` prints how long each enabled check took so far.
 
@@ -224,3 +219,27 @@ The output is JSON. Pipe into `jq` for filtering:
 ```sh
 echo 'def f := set { s with count := 0 }' | lake exe dump-syntax-tree | jq '.children[1].value'
 ```
+
+## Conventions
+
+- **One concern per commit.** Split metadata, CI, docs and code changes, and a toolchain pin from
+  an import fix. Build each branch head before pushing.
+- **Fix by reorganizing.** Before adding a mechanism, check whether moving or narrowing existing
+  code fixes the problem; a fix should end with less code than it started with. No fallbacks that
+  produce text when the real path fails, as they hide formatting defects.
+- **Rule hygiene is a Heron check.** Constraints on how rules are written are checks in
+  `RuleDevelopment/SelfLint/`, matched on the info tree like any other rule, never scans of names
+  or strings. A file is exempted with `set_option linter.<check> false`, and that list only
+  shrinks.
+- **Let the structure carry the meaning.** When a field would duplicate what another already
+  encodes, make the other an `Option` instead of adding a boolean.
+- **No placeholder values.** Leave unknown metadata such as `sources` empty until a real value is
+  found; a placeholder reads as real data.
+- **Resolve names at the boundary.** Turn names given on the command line into the objects they
+  name where they are parsed, for example `--rule` into the registered rule entries, and pass
+  those down instead of names or options.
+- **Plain entry points.** Each subcommand's flags live in its own module. Tooling runs as
+  `lake exe`, test logic is Lean, and the flake only wires things together through lean4-nix and
+  Weir: no shell glue and no symlinks.
+- **No external code in the tree.** Never add other repositories, corpus workspaces or their
+  manifests. Try a rule on a separate checkout of a real project at the tag of Heron's toolchain.
