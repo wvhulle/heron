@@ -1,9 +1,77 @@
-# No project changes
+# Setup
+
+Three ways to use Heron, from most to least integrated. Each needs the Heron ref that matches your
+`lean-toolchain` (see [Supported Lean versions](../README.md#supported-lean-versions)).
+
+## Lakefile setup
+
+Load Heron as a plugin from your project's `lakefile.lean`. Every module is checked, in the editor
+and on `lake build`, without any `import Heron`, and `lake lint` reports all fixes.
+
+In your project's `lakefile.lean`, require Heron and load its plugin:
+
+```lean
+require heron from git "https://github.com/wvhulle/heron" @ "main"
+
+package «your_pkg» where
+  leanOptions := #[⟨`linter.heron, true⟩]
+  plugins := #[`@heron/plugin]
+  lintDriver := "heron/heron"
+  lintDriverArgs := #["lint"]
+```
+
+`lakefile.toml` cannot refer to a dependency's targets. Convert it with
+`lake translate-config lean`, or use the [per-file import](#per-file-import) instead.
+
+### What you get
+
+- **In the editor:** checks underline code and offer a quick fix on the light bulb. Refactors
+  appear in the code-action menu when you select code.
+- **On `lake build`:** every check is reported as a warning.
+- **With `lake lint`:** a cargo/clippy-style report of all fixes. Lake's incremental build is the
+  cache, so only changed modules are re-checked.
+
+```sh
+lake lint                    # report fixes across the workspace's libraries
+lake lint -- Sparkle.Analog  # restrict to lake targets
+lake lint -- --json | jq     # machine-readable
+lake lint -- --fix           # rewrite files in place
+```
+
+`lake lint` runs `heron lint`, which you can also call as `lake exe heron lint`. It builds your
+targets with the plugin, then prints the fixes. It accepts `--json`, `--fix`, `--apply`, `--color`
+and `--no-color`, and `--no-build` to read the last build's results.
+
+Turn single rules off as described under [Rules](../README.md#rules) in the README; `lake exe
+heron rules` lists them.
+
+## Per-file import
+
+Require Heron and enable it only in the files you want checked. This also works with
+`lakefile.toml`, but `lake lint` is not available.
+
+```toml
+[[require]]
+name = "heron"
+git = "https://github.com/wvhulle/heron"
+rev = "main"
+```
+
+Then, in each file:
+
+```lean
+import Heron
+set_option linter.heron true
+```
+
+Those files get Heron's warnings on `lake build` and its quick fixes and refactors in the editor.
+
+## No project changes
 
 Two subcommands of `heron` run Heron on a Lean project that has never heard of it: `heron serve`
 in your editor and `heron scan` on the command line. Neither needs a `require`, plugin or `import`.
 
-## In the editor: `heron serve`
+### In the editor: `heron serve`
 
 `heron serve` is a second Lean language server that runs next to your normal one. It
 starts its own `lake serve` with Heron loaded as a plugin and passes on only Heron's warnings,
@@ -32,7 +100,7 @@ lake build plugin heron
 # editor command: <checkout>/.lake/build/bin/heron serve
 ```
 
-### Lean versions and when the server stays idle
+#### Lean versions and when the server stays idle
 
 The server runs `lean --version` in the project and loads the plugin built for that Lean version.
 The Nix package ships a plugin for every stock Lean version in the README's table and never builds
@@ -53,7 +121,7 @@ serve` that other Lean plugins can reuse.
 
 Like the lakefile setup, the linter writes `.lake/build/heron-fixes/` in each project you open.
 
-## On the command line: `heron scan`
+### On the command line: `heron scan`
 
 Build your project, then run `heron scan` in its root directory, from the Heron ref that matches
 your toolchain. It runs `lake env lean --plugin=<Heron plugin>` on each file, the way `lake build`

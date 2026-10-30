@@ -32,9 +32,9 @@ section of _Functional Programming in Lean_, and names the option that turns it 
 
 | Setup | What you change in your project | What you get |
 | --- | --- | --- |
-| [Lakefile setup](docs/LakefileSetup.md) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
-| [Per-file import](docs/PerFileImport.md) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
-| [No project changes](docs/NoProjectChanges.md) | nothing | editor hints and quick fixes through `heron serve`; reports and fixes through `heron scan` |
+| [Lakefile setup](docs/setup.md#lakefile-setup) | three lines in `lakefile.lean` | editor hints and quick fixes, warnings on `lake build`, `lake lint` reports and fixes |
+| [Per-file import](docs/setup.md#per-file-import) | a `require`, plus `import Heron` in each file to check | editor hints and quick fixes, warnings on `lake build`, for those files |
+| [No project changes](docs/setup.md#no-project-changes) | nothing | editor hints and quick fixes through `heron serve`; reports and fixes through `heron scan` |
 
 Most projects want the lakefile setup:
 
@@ -66,7 +66,7 @@ language-servers = ["lean4_lsp", "heron"]
 
 The Nix package includes the plugin for every stock Lean version below, prebuilt in
 `wvhulle.cachix.org`, and never builds at run time. A binary built from source builds the plugin
-for another Lean version on first use and reports the build as editor progress. See [No project changes](docs/NoProjectChanges.md).
+for another Lean version on first use and reports the build as editor progress. See [No project changes](docs/setup.md#no-project-changes).
 
 ## Rules
 
