@@ -14,3 +14,8 @@ becomes `(command| def offsets (k : Nat) (xs : List Nat) := xs.map (Nat.add k))
 #assertCheck lambdaToEtaReducedFunction in
 def shifted (k : Nat) (xs : List Nat) := xs.map fun n => Nat.add k n
 becomes `(command| def shifted (k : Nat) (xs : List Nat) := xs.map (Nat.add k))
+
+#assertCheckWithoutFix lambdaToEtaReducedFunction in
+theorem pointwiseZero (function : Nat → Nat) (allZero : ∀ input, function input = 0) :
+    (fun input => function input) = fun _ => 0 := by
+  simp only [allZero]

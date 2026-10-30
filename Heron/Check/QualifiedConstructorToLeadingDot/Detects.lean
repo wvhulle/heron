@@ -31,3 +31,19 @@ def parseDigit (c : Char) : Except String Nat :=
   if c.isDigit then Except.ok (c.toNat - '0'.toNat) else Except.error "not a digit"
 becomes `(command| def parseDigit (c : Char) : Except String Nat :=
   if c.isDigit then .ok (c.toNat - '0'.toNat) else .error "not a digit")
+
+inductive SourceColor where
+  | up
+  | down
+
+inductive TargetColor where
+  | up
+  | down
+
+#assertCheckWithoutFix qualifiedConstructorToLeadingDot in
+theorem colorMatchUp {count} {color : Fin count → SourceColor} {index}
+    (colorIsUp : color index = SourceColor.up) :
+    (match color index with
+      | .up => TargetColor.up
+      | .down => TargetColor.down) = TargetColor.up := by
+  rw [colorIsUp]

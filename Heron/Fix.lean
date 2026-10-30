@@ -46,7 +46,7 @@ def applyEdits (text : FileMap) (edits : Array Lsp.TextEdit) : String :=
             startPos)
   patched
 
-private def editsOverlap (text : FileMap) (first second : Lsp.TextEdit) : Bool :=
+def editsOverlap (text : FileMap) (first second : Lsp.TextEdit) : Bool :=
   let firstStart := text.lspPosToUtf8Pos first.range.start
   let firstEnd := text.lspPosToUtf8Pos first.range.end
   let secondStart := text.lspPosToUtf8Pos second.range.start

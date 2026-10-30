@@ -14,3 +14,8 @@ def predecessor : Nat → Option Nat := λ
 becomes `(command| def predecessor : Nat → Option Nat := fun
   | 0 => none
   | n + 1 => some n)
+
+#assertCheckWithoutFix lambdaSymbolToFun in
+def duplicatedPairs : Nat → Nat × Nat :=
+  λ value => { fst := value,
+               snd := value }

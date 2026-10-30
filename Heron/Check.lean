@@ -167,7 +167,6 @@ private meta def Check.makeHandler [Check α] : CommandElabM RuleHandler := do
         emitLabelHints name primaryRange? replacementRanges allLabels
   }
 
-
 /-- Run `checks` against `cmd` and return a `FixRecord` per suggested replacement —
 the same `findActions` → `Replacement.toTextEdits` path the code-action provider uses. Each check
 is still gated by `isEnabled`; with `all := true` the manual **refactors** (`testRunnerRegistry`
@@ -178,18 +177,24 @@ meta def collectFixRecords (all : Bool) (checks : Array RuleEntry) (stx : Syntax
   let fileMap ← getFileMap
   let opts ← getOptions
   let checkNames := (← heronRuleRegistry.get).map (·.name)
-  let mut out : Array FixRecord := #[]
+  let mut unverifiedRecords : Array FixRecord := #[]
+  let mut emphasizedSpans : Array (Option Lsp.Range) := #[]
   for entry in checks do
     if entry.isEnabled opts then
       let links := entry.sources.map (·.toLink)
       for finding in (← entry.findActions stx) do
         let title := (← finding.message.toString).trimAscii.toString
         let explStr := (← finding.explanation.toString).trimAscii.toString
-        let edits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
-        let emphasizedSpan? := finding.emphasized.getRange?.map fileMap.utf8RangeToLspRange
-        let some span := editsSpan fileMap edits <|> emphasizedSpan? | continue
-        out := out.push { rule := entry.name.toString, message := title, span, edits,
-                          explanation := explStr, sources := links }
+        let proposedEdits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
+        unverifiedRecords := unverifiedRecords.push
+          { rule := entry.name.toString, message := title, span := default, edits := proposedEdits,
+            explanation := explStr, sources := links }
+        emphasizedSpans := emphasizedSpans.push (finding.emphasized.getRange?.map fileMap.utf8RangeToLspRange)
+  let acceptedFixes ← acceptElaboratingFixes stx (unverifiedRecords.map (·.edits))
+  let mut out : Array FixRecord := #[]
+  for ((unverifiedRecord, emphasizedSpan?), edits) in (unverifiedRecords.zip emphasizedSpans).zip acceptedFixes do
+    let some span := editsSpan fileMap edits <|> emphasizedSpan? | continue
+    out := out.push { unverifiedRecord with span, edits }
   if all then
     let runners ← testRunnerRegistry.get
     for (name, runner) in runners.toList do
@@ -289,8 +294,8 @@ meta def heronCheckFixProvider : CodeActionProvider := fun params snap => do
     entries.flatMapM fun entry => do
       let detected ← entry.findActions snap.stx
       detected.mapM fun finding => do
-        let edits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
-        return (finding.message, finding.replacements, edits)
+        let proposedEdits ← finding.replacements.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
+        return (finding.message, finding.replacements, ← verifiedFixEdits snap.stx proposedEdits)
   let results ← runCommandElabM snap collect
   let overlaps (r : Replacement) := match r.emphasizedSyntax.getRange? with
     | some range => range.start ≤ endPos && startPos ≤ range.stop

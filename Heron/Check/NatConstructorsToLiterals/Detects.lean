@@ -62,3 +62,10 @@ open Nat in
 def viaOpenNamespace (n : Nat) : Nat := succ n
 becomes `(command| open Nat in
 def viaOpenNamespace (n : Nat) : Nat := n + 1)
+
+#assertCheckWithoutFix natConstructorsToLiterals in
+instance (n : Nat) : Inhabited (Fin (n + 1)) := by
+  induction n with
+  | zero =>
+    exact ⟨0⟩
+  | succ k _ => exact ⟨0⟩

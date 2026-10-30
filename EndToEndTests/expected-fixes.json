@@ -1,14 +1,5 @@
 [
   {
-    "after": "let",
-    "before": "let mut",
-    "col": 3,
-    "file": "Consumer/Basic.lean",
-    "line": 2,
-    "message": "Remove unnecessary `mut`",
-    "rule": "removeMutWithoutReassignment"
-  },
-  {
     "after": " ",
     "before": "; intro ",
     "col": 41,
@@ -16,6 +7,15 @@
     "line": 5,
     "message": "Merge intros",
     "rule": "mergeConsecutiveIntros"
+  },
+  {
+    "after": "let",
+    "before": "let mut",
+    "col": 3,
+    "file": "Consumer/Basic.lean",
+    "line": 2,
+    "message": "Remove unnecessary `mut`",
+    "rule": "removeMutWithoutReassignment"
   },
   {
     "before": "s.toUpper ++ \"!\"",
@@ -35,9 +35,8 @@
     "rule": "wildcardMatchToIfLet"
   },
   {
-    "after": ": Option Nat → Nat",
-    "before": "(o : Option Nat) : Nat := match o with",
-    "col": 21,
+    "before": "match",
+    "col": 47,
     "file": "Consumer/UsesBasic.lean",
     "line": 3,
     "message": "Match on the parameters directly with `def f : A → B | pattern => …`",

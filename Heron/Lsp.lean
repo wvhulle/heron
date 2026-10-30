@@ -1,6 +1,7 @@
 module
 
 public meta import Heron.Rule
+public meta import Heron.Fix
 public meta import Lean.PrettyPrinter
 meta import Lean.Meta.TryThis
 
@@ -205,5 +206,70 @@ meta def buildTestRunner [Rule α] : TestRunner := fun stx => do
     let repls ← Rule.replacementsFor m
     repls.flatMapM (liftCoreM <| ·.toTextEdits fileMap)
   return { matchCount := results.size, edits }
+
+meta def fixedCommandElaborates (command : Syntax) (edits : Array Lsp.TextEdit) : CommandElabM Bool := do
+  let fileMap ← getFileMap
+  let some commandRange := command.getRange? | return false
+  let patchedSource := applyEdits fileMap edits
+  let growth : Int := patchedSource.rawEndPos.byteIdx - fileMap.source.rawEndPos.byteIdx
+  let patchedCommandStop : String.Pos.Raw := ⟨((commandRange.stop.byteIdx : Int) + growth).toNat⟩
+  let scope ← getScope
+  let parserContext : Parser.ParserModuleContext :=
+    { env := ← getEnv, options := scope.opts, currNamespace := scope.currNamespace,
+      openDecls := scope.openDecls }
+  let inputContext := Parser.mkInputContext patchedSource (← getFileName)
+  let (patchedCommand, _, parseMessages) :=
+    Parser.parseCommand inputContext parserContext { pos := commandRange.start } {}
+  if parseMessages.hasErrors then return false
+  unless patchedCommand.getTailPos? == some patchedCommandStop do return false
+  elaboratesWithoutErrorsInProbeNamespace patchedCommand
+
+
+private meta def nonOverlappingFixes (fileMap : FileMap) (proposedFixes : Array (Array Lsp.TextEdit)) :
+    Array (Array Lsp.TextEdit) :=
+  let (selectedFixes, _) := proposedFixes.foldl (init := (#[], #[])) fun (selected, selectedEdits) fixEdits =>
+    let overlapsSelected := fixEdits.any fun edit => selectedEdits.any (editsOverlap fileMap edit)
+    if fixEdits.isEmpty || overlapsSelected then (selected.push #[], selectedEdits)
+    else (selected.push fixEdits, selectedEdits ++ fixEdits)
+  selectedFixes
+
+private meta partial def statementRanges (command : Syntax) : Array Syntax.Range :=
+  let nested := command.getArgs.flatMap statementRanges
+  if command.isOfKind ``Parser.Command.declSig then
+    match command.getRange? with
+    | some range => nested.push range
+    | none => nested
+  else nested
+
+private meta def changesStatement (fileMap : FileMap) (statements : Array Syntax.Range)
+    (fixEdits : Array Lsp.TextEdit) : Bool :=
+  fixEdits.any fun edit =>
+    let editStart := fileMap.lspPosToUtf8Pos edit.range.start
+    let editStop := fileMap.lspPosToUtf8Pos edit.range.end
+    statements.any fun statement => statement.start < editStop && editStart < statement.stop
+
+meta def acceptElaboratingFixes (command : Syntax) (proposedFixes : Array (Array Lsp.TextEdit)) :
+    CommandElabM (Array (Array Lsp.TextEdit)) := do
+  let fileMap ← getFileMap
+  let statements := statementRanges command
+  let proposedFixes := proposedFixes.map fun fixEdits =>
+    if changesStatement fileMap statements fixEdits then #[] else fixEdits
+  let selectedFixes := nonOverlappingFixes fileMap proposedFixes
+  let selectedEdits := selectedFixes.flatten
+  if selectedEdits.isEmpty then return selectedFixes
+  if ← fixedCommandElaborates command selectedEdits then return selectedFixes
+  let mut acceptedEdits : Array Lsp.TextEdit := #[]
+  let mut acceptedFixes : Array (Array Lsp.TextEdit) := #[]
+  for fixEdits in selectedFixes do
+    if !fixEdits.isEmpty && (← fixedCommandElaborates command (acceptedEdits ++ fixEdits)) then
+      acceptedEdits := acceptedEdits ++ fixEdits
+      acceptedFixes := acceptedFixes.push fixEdits
+    else
+      acceptedFixes := acceptedFixes.push #[]
+  return acceptedFixes
+
+meta def verifiedFixEdits (command : Syntax) (edits : Array Lsp.TextEdit) :
+    CommandElabM (Array Lsp.TextEdit) := do
+  return (← acceptElaboratingFixes command #[edits]).getD 0 #[]
 
 end Heron

@@ -99,6 +99,18 @@ syntax (name := assertRefactorCmd)
     elabAssertResult linterName cmd (some expected) stx
   | _ => throwUnsupportedSyntax
 
+syntax (name := assertCheckWithoutFixCmd)
+  "#assertCheckWithoutFix " ident " in " command : command
+
+@[command_elab assertCheckWithoutFixCmd] meta def elabAssertCheckWithoutFix : CommandElab
+  | stx@`(command| #assertCheckWithoutFix $linterName in $cmd) => do
+    let { edits, matchCount } ← runRule cmd linterName.getId
+    if matchCount == 0 then
+      logErrorAt stx m!"{linterName} did not fire on this command"
+    else if !edits.isEmpty && (← fixedCommandElaborates cmd edits) then
+      logErrorAt stx m!"{linterName} offers a fix that elaborates; use `#assertCheck … becomes` instead"
+  | _ => throwUnsupportedSyntax
+
 syntax (name := assertIgnoreCmd)
   "#assertIgnore " ident " in " command : command
 
