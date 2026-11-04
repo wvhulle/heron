@@ -1,21 +1,77 @@
 when:
   - event: [push, pull_request, manual, tag]
 
-steps:
-  - name: flake-check
+variables:
+  - &nix_config
+    NIX_CONFIG: |
+      experimental-features = nix-command flakes
+      accept-flake-config = true
+      sandbox = false
+      max-jobs = 1
+  - &step_after_shared_artifacts
     image: nixos/nix:2.34.9
+    depends_on: [shared-lake-artifacts]
+    when:
+      - status: [success, failure]
+    environment: *nix_config
+
+steps:
+  - name: shared-lake-artifacts
+    image: nixos/nix:2.34.9
+    depends_on: []
+    environment: *nix_config
+    commands:
+      - nix run --quiet .#build-unless-cached -- .#packages.x86_64-linux.shared-lake-artifacts
+
+  - name: developer-tools
+    <<: *step_after_shared_artifacts
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix run --quiet .#build-and-export-paths -- --no-link .#checks.x86_64-linux.developer-tools
+
+  - name: lakefile-setup
+    <<: *step_after_shared_artifacts
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix run --quiet .#build-and-export-paths -- --no-link .#checks.x86_64-linux.lakefile-setup
+
+  - name: per-file-import
+    <<: *step_after_shared_artifacts
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix run --quiet .#build-and-export-paths -- --no-link .#checks.x86_64-linux.per-file-import
+
+  - name: rules
+    <<: *step_after_shared_artifacts
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix run --quiet .#build-and-export-paths -- --no-link .#checks.x86_64-linux.rules
+
+  - name: flake-evaluation
+    <<: *step_after_shared_artifacts
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix eval --quiet --raw .#packages.x86_64-linux.heron.drvPath
+      - nix flake check --quiet --no-build
+
+  - name: ci-task-tests
+    image: nixos/nix:2.34.9
+    depends_on: []
+    when:
+      - status: [success, failure]
+    environment: *nix_config
+    commands:
+      - nix build --quiet --print-build-logs --no-link .#checks.x86_64-linux.ci-task-tests
+
+  - name: upload-build-cache
+    image: nixos/nix:2.34.9
+    depends_on: [developer-tools, lakefile-setup, per-file-import, rules]
+    when:
+      - event: [push, manual, tag]
+        status: [success, failure]
     environment:
-      NIX_CONFIG: |
-        experimental-features = nix-command flakes
-        accept-flake-config = true
-        sandbox = false
-        max-jobs = 1
+      <<: *nix_config
       CACHIX_AUTH_TOKEN:
         from_secret: cachix_auth_token
     commands:
-      - |
-        if [ -n "$${CACHIX_AUTH_TOKEN}" ]; then
-          nix run --inputs-from . nixpkgs#cachix -- watch-exec wvhulle -- nix flake check -L --keep-going
-        else
-          nix flake check -L --keep-going
-        fi
+      - nix run --quiet .#upload-exported-paths

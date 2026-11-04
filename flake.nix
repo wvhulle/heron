@@ -75,14 +75,101 @@
           heron-lean-v4-34-1
         ];
       };
+
+      sharedLakeArtifacts = pkgs.linkFarmFromDrvs "heron-shared-lake-artifacts" (
+        builtins.attrValues lakeDeps
+        ++ [
+          library
+          heron-build
+        ]
+      );
+
+      nuScriptTool =
+        {
+          scriptFile,
+          toolName,
+          runtimeInputs ? [ ],
+          wrapperArgs ? [ ],
+        }:
+        pkgs.runCommand toolName
+          {
+            nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+            meta.mainProgram = toolName;
+          }
+          ''
+            makeWrapper ${pkgs.lib.getExe pkgs.nushell} $out/bin/${toolName} \
+              --add-flags ${scriptFile} \
+              --add-flags ${toolName} \
+              ${
+                pkgs.lib.optionalString (
+                  runtimeInputs != [ ]
+                ) "--prefix PATH : ${pkgs.lib.makeBinPath runtimeInputs}"
+              } \
+              ${pkgs.lib.escapeShellArgs wrapperArgs}
+          '';
+
+      nixBuiltPathsTool = toolArgs: nuScriptTool (toolArgs // { scriptFile = ./ci/nix-built-paths.nu; });
+
+      ciTaskTests = pkgs.runCommand "heron-ci-task-tests" { nativeBuildInputs = [ pkgs.nushell ]; } ''
+        nu ${./ci}/test-ci-tasks.nu
+        touch $out
+      '';
+
+      exportBuiltPathsHook = nixBuiltPathsTool { toolName = "export-built-paths-hook"; };
+
+      exportingBuildTool =
+        toolArgs:
+        nixBuiltPathsTool (
+          toolArgs
+          // {
+            wrapperArgs = [
+              "--set"
+              "EXPORT_HOOK_PROGRAM"
+              (pkgs.lib.getExe exportBuiltPathsHook)
+            ];
+          }
+        );
+
+      flakeAppFromTool = appDescription: toolDerivation: {
+        type = "app";
+        meta.description = appDescription;
+        program = pkgs.lib.getExe toolDerivation;
+      };
     in
     {
       packages.${system} = {
         inherit heron;
         default = heron;
+        shared-lake-artifacts = sharedLakeArtifacts;
+      };
+
+      apps.${system} = {
+        build-and-export-paths =
+          flakeAppFromTool "Build flake outputs and export newly built paths to the CI workspace"
+            (exportingBuildTool {
+              toolName = "build-and-export-paths";
+            });
+        build-unless-cached =
+          flakeAppFromTool
+            "Build a flake output and export it to the CI workspace unless it is already in Cachix"
+            (exportingBuildTool {
+              toolName = "build-unless-cached";
+            });
+        import-exported-paths =
+          flakeAppFromTool "Import paths exported to the CI workspace by an earlier step"
+            (nixBuiltPathsTool {
+              toolName = "import-exported-paths";
+            });
+        upload-exported-paths =
+          flakeAppFromTool "Push paths exported to the CI workspace to the wvhulle Cachix cache"
+            (nixBuiltPathsTool {
+              toolName = "upload-exported-paths";
+              runtimeInputs = [ pkgs.cachix ];
+            });
       };
 
       checks.${system} = {
+        ci-task-tests = ciTaskTests;
         rules = library;
         inherit developer-tools;
       }

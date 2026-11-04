@@ -140,11 +140,19 @@ flowchart LR
   flakeCheck --> developerTools[developer-tools: the tools, their tests and the self-lints]
   flakeCheck --> lakefileSetup[lakefile-setup: a consumer project with the plugin]
   flakeCheck --> perFileImport[per-file-import: a consumer project that imports Heron]
+  flakeCheck --> ciTaskTests[ci-task-tests: the Nushell CI tasks]
   lakefileSetup --> probes[cold build, warnings, lake lint fixes, editor probes]
   perFileImport --> probes
 ```
 
 The rule tests are compile-time assertions, so building the library runs them. The consumer
 checks build a small project from scratch, compare its `lake lint --json` output with the expected
-fixes and probe its language server. Woodpecker on Codeberg runs the same `nix flake check` on
-every branch and fills the Cachix cache; the GitHub repository is a mirror.
+fixes and probe its language server. The `ci-task-tests` check tests the Nushell tasks in `ci/`.
+
+Woodpecker on Codeberg runs the same checks on every branch, one step per check, so a failing check
+does not stop the others. A first step builds the artifacts the checks share, unless they are
+already in Cachix, and exports what it built to the later steps. `nix flake check --no-build`
+evaluates the whole flake in a step of its own. Pushes, manual runs and tags end by uploading the
+newly built paths to Cachix; pull requests run the same steps without the upload. The steps only
+call `nix`: the scripting lives in `ci/nix-built-paths.nu` and is exposed as flake apps. The GitHub
+repository is a mirror.
