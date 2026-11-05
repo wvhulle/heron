@@ -110,6 +110,9 @@ releaseTaskApps
   import-exported-paths = mkApp (nixBuiltPathsTool {
     name = "import-exported-paths";
   });
+  copy-build-output = mkApp (nixBuiltPathsTool {
+    name = "copy-build-output";
+  });
   upload-exported-paths = mkApp (nixBuiltPathsTool {
     name = "upload-exported-paths";
     runtimeInputs = [ pkgs.cachix ];
