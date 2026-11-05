@@ -75,14 +75,8 @@
           heron-lean-v4-34-1
         ];
       };
-    in
-    {
-      packages.${system} = {
-        inherit heron;
-        default = heron;
-      };
 
-      checks.${system} = {
+      heronChecks = {
         rules = library;
         inherit developer-tools;
       }
@@ -96,6 +90,23 @@
           ;
         heronSource = ./.;
         runsEditorProbes = pkgs.lib.versionAtLeast (pkgs.lib.removePrefix "v" toolchainTag) "4.31.0";
+      };
+    in
+    {
+      packages.${system} = {
+        inherit heron;
+        default = heron;
+        all-checks = pkgs.linkFarm "heron-all-checks" heronChecks;
+      };
+
+      checks.${system} = heronChecks;
+
+      apps.${system} = import ./nix/ci-tasks.nix {
+        inherit pkgs;
+        mkApp = drv: {
+          type = "app";
+          program = pkgs.lib.getExe drv;
+        };
       };
 
       devShells.${system} = rec {

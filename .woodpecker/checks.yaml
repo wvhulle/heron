@@ -1,0 +1,48 @@
+when:
+  - event: [push, pull_request, manual, tag]
+
+variables:
+  - &nix_config
+    NIX_CONFIG: |
+      experimental-features = nix-command flakes
+      accept-flake-config = true
+      sandbox = false
+      max-jobs = 1
+
+steps:
+  - name: prepare-heron-library
+    image: nixos/nix:2.34.9
+    environment: *nix_config
+    commands:
+      - nix run --quiet .#build-unless-cached -- .#checks.x86_64-linux.rules
+
+  - name: build-all-checks
+    image: nixos/nix:2.34.9
+    when:
+      - status: [success, failure]
+    environment: *nix_config
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix run --quiet .#build-and-export-paths -- --keep-going .#all-checks
+
+  - name: evaluate-flake-outputs
+    image: nixos/nix:2.34.9
+    when:
+      - status: [success, failure]
+    environment: *nix_config
+    commands:
+      - nix run --quiet .#import-exported-paths
+      - nix eval --quiet --raw .#packages.x86_64-linux.heron.drvPath
+      - nix flake check --quiet --no-build
+
+  - name: upload-builds-to-cachix
+    image: nixos/nix:2.34.9
+    when:
+      - event: [push, manual]
+        status: [success, failure]
+    environment:
+      <<: *nix_config
+      CACHIX_AUTH_TOKEN:
+        from_secret: cachix_auth_token
+    commands:
+      - nix run --quiet .#upload-exported-paths

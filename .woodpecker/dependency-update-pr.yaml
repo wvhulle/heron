@@ -1,0 +1,28 @@
+when:
+  - repo: wvhulle/heron
+    event: cron
+    cron: weekly-dependency-update
+
+clone:
+  - name: clone-with-history
+    image: woodpeckerci/plugin-git
+    settings:
+      depth: 0
+      partial: false
+
+steps:
+  - name: open-dependency-update-pr
+    image: nixos/nix:2.34.9
+    environment:
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        accept-flake-config = true
+        sandbox = false
+      GIT_AUTHOR_NAME: wvhulle-bot
+      GIT_AUTHOR_EMAIL: willemvanhulle@protonmail.com
+      GIT_COMMITTER_NAME: wvhulle-bot
+      GIT_COMMITTER_EMAIL: willemvanhulle@protonmail.com
+      CODEBERG_TOKEN:
+        from_secret: bot_token
+    commands:
+      - nix run --quiet .#open-dependency-update-pr -- --flake-lock
